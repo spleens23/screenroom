@@ -4,3 +4,11 @@ Description: Screenroom can't choose a drive
  ${REASON}
  .
  Nothing has been changed on this computer.
+
+Template: screenroom/setup-failed
+Type: error
+Description: Screenroom setup failed
+ Debian was installed, but setting up Screenroom failed. Last lines of the log
+ (full log: /var/log/screenroom-install.log):
+ .
+ ${LOG}
