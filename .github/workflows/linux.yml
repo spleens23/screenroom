@@ -105,7 +105,7 @@ jobs:
             -drive file=media.img,if=virtio,format=raw \
             -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
             -vga std -display none -monitor unix:mon2.sock,server,nowait -daemonize
-          SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 admin@localhost"
+          SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 screenroom@localhost"
           for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
           $SSH true || { echo "::error::The installed box never came up on ssh"; exit 1; }
           sleep 75   # let the TV session start and the library scan run
