@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screenroom</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="nav">
+  <div class="brand">SCREENROOM</div>
+  <nav>
+    <a href="#" data-view="home" class="active">Home</a>
+    <a href="#" data-view="tv">TV Shows</a>
+    <a href="#" data-view="movies">Movies</a>
+    <a href="#" data-view="4k">4K</a>
+    <a href="#" data-view="hd">HD</a>
+    <a href="#" data-view="sd">SD</a>
+  </nav>
+  <div class="nav-right">
+    <input id="search" type="search" placeholder="Search titles, genres…" autocomplete="off">
+    <button id="settings-btn" title="Settings">⚙</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<div id="scan-status" hidden></div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="close" id="modal-close" aria-label="Close">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="settings" class="modal" hidden>
+  <div class="modal-card narrow" role="dialog" aria-modal="true">
+    <button class="close" id="settings-close" aria-label="Close">✕</button>
+    <div id="settings-body"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

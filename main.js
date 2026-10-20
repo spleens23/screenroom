@@ -1,0 +1,456 @@
+const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
+const { scan, loadCached } = require('./lib/library');
+const { play, findBinary, control, listAudioDevices } = require('./lib/player');
+const remote = require('./lib/remote');
+const transfer = require('./lib/transfer');
+const qrcode = require('qrcode-generator');
+
+// Keep the same data folder whether running from source or as a packaged app,
+// so the library cache, settings and watch history carry over.
+// Crisper text when the page is scaled up for a TV (fractional zoom blurs hinted glyphs on Linux).
+if (process.platform === 'linux') app.commandLine.appendSwitch('font-render-hinting', 'none');
+
+app.setPath('userData', path.join(app.getPath('appData'), 'screenroom'));
+
+// TV mode: fullscreen, scaled up for a TV, remote/gamepad friendly.
+// Turn it on in Settings, or launch with `--tv` / SCREENROOM_TV=1 (what the mini-PC session does).
+const TV_FLAG = process.argv.includes('--tv') || process.env.SCREENROOM_TV === '1';
+
+let win;
+const dataDir = () => app.getPath('userData');
+const cfgFile = () => path.join(dataDir(), 'config.json');
+const progFile = () => path.join(dataDir(), 'progress.json');
+
+const defaults = {
+  dirs: [], passthrough: false, downmix: false, fullscreen: true, tvMode: false,
+  preferredLang: 'eng', subLang: '', audioDevice: '', mpvArgs: '', mpvPath: '', ffprobePath: '', ffmpegPath: '',
+  remote: true, remotePort: 8686, remotePin: '',
+};
+
+function readJson(f, fallback) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return fallback; } }
+function writeJson(f, v) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2)); }
+
+let config = defaults;
+let progress = {}; // id -> { pos, dur, updated, done? }
+let playing = false;
+let library = [];
+let remoteServer = null;
+
+const isTv = () => TV_FLAG || !!config.tvMode;
+
+// ---- window / TV mode ---------------------------------------------------------
+function applyZoom() {
+  if (!win || win.isDestroyed()) return;
+  // On a TV the UI is read from across the room: scale so the page behaves like a ~1600x900 screen.
+  const h = win.getContentSize()[1];
+  win.webContents.setZoomFactor(isTv() ? Math.min(2.6, Math.max(1, h / 900)) : 1);
+}
+
+function applyTv() {
+  if (!win || win.isDestroyed()) return;
+  win.setFullScreen(isTv());
+  win.setMenuBarVisibility(!isTv());
+  applyZoom();
+}
+
+// The screen can change size after we start (a VM resizing its display, a TV waking up and
+// reporting its real resolution). Re-fit the full-screen window so it never covers only part of it.
+let refitTimer = null;
+function refit() {
+  if (!isTv()) return;
+  clearTimeout(refitTimer);
+  refitTimer = setTimeout(() => {
+    if (!win || win.isDestroyed()) return;
+    win.setFullScreen(false);
+    setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      win.setFullScreen(true);
+      setTimeout(() => { applyZoom(); if (!win.isDestroyed()) win.webContents.invalidate(); }, 200);
+    }, 150);
+  }, 250);
+}
+function watchDisplay() {
+  screen.on('display-metrics-changed', refit);
+  screen.on('display-added', refit);
+  screen.on('display-removed', refit);
+  // Safety net: a few seconds after start, make sure the window really matches the screen.
+  for (const ms of [1500, 4000, 9000]) {
+    setTimeout(() => {
+      if (!isTv() || !win || win.isDestroyed()) return;
+      const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
+      if (b.width !== d.width || b.height !== d.height) refit();
+    }, ms);
+  }
+}
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1440, height: 900, minWidth: 900, minHeight: 600,
+    backgroundColor: '#141414',
+    fullscreen: isTv(),
+    autoHideMenuBar: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  if (isTv()) win.setMenuBarVisibility(false);
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.webContents.on('did-finish-load', applyZoom);
+  win.on('resize', applyZoom);
+  watchDisplay();
+}
+
+// ---- library --------------------------------------------------------------------
+function toolPaths() {
+  return {
+    ffprobe: findBinary('ffprobe', config.ffprobePath) || 'ffprobe',
+    ffmpeg: findBinary('ffmpeg', config.ffmpegPath) || 'ffmpeg',
+  };
+}
+
+function snapshot() {
+  return {
+    library, progress, config, tv: isTv(), duplicates: (library.dups || []).length,
+    drives, mediaDir: mediaRoot,
+    platform: process.platform,
+    mpvFound: !!findBinary('mpv', config.mpvPath),
+    ffprobeFound: !!findBinary('ffprobe', config.ffprobePath),
+  };
+}
+
+// ---- USB drives + the folder uploads land in ------------------------------------------------
+let drives = [];
+let mediaRoot = null;
+
+async function ensureMediaDir() {
+  const root = config.mediaDir || transfer.defaultMediaDir();
+  try { await fs.promises.mkdir(root, { recursive: true }); } catch { return null; }
+  const covered = config.dirs.some((d) => root === d || root.startsWith(d + path.sep));
+  if (!covered) { config.dirs = [...config.dirs, root]; writeJson(cfgFile(), config); }
+  mediaRoot = root;
+  return root;
+}
+
+// Drives that are plugged in count as part of the library while they're there.
+function scanDirs() {
+  const extra = drives.map((d) => d.mount).filter((m) => !config.dirs.some((d) => m === d || m.startsWith(d + path.sep)));
+  return [...config.dirs, ...extra];
+}
+
+const sendWin = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
+const driveSig = (list) => list.map((d) => d.mount).sort().join('|');
+
+async function pollDrives() {
+  let next;
+  try { next = await transfer.listDrives(); } catch { return; }
+  const changed = driveSig(next) !== driveSig(drives);
+  const prev = drives;
+  drives = next;
+  if (!changed) return;
+  sendWin('drives-changed', {
+    drives,
+    added: drives.filter((n) => !prev.some((p) => p.mount === n.mount)).map((d) => d.label),
+    removed: prev.filter((p) => !drives.some((n) => n.mount === p.mount)).map((d) => d.label),
+  });
+  if (!playing) doScan().then(() => sendWin('library-updated', snapshot())).catch(() => {});
+}
+
+async function runScan() {
+  const dirs = scanDirs();
+  if (!dirs.length) { library = []; library.dups = []; return library; }
+  const t = toolPaths();
+  library = await scan({
+    dirs, dataDir: dataDir(), ffprobe: t.ffprobe, ffmpeg: t.ffmpeg,
+    onProgress: (p) => win && !win.isDestroyed() && win.webContents.send('scan-progress', p),
+  });
+  return library;
+}
+// Scans run one at a time, so a background rescan never overlaps one you asked for.
+let scanChain = Promise.resolve();
+function doScan() {
+  const p = scanChain.then(runScan);
+  scanChain = p.catch(() => {});
+  return p;
+}
+
+// New files show up on their own: rescan on launch and every half hour (cached, so it's quick).
+function backgroundScan() {
+  if (!config.dirs.length) return;
+  doScan().then(() => { win && !win.isDestroyed() && win.webContents.send('library-updated', snapshot()); }).catch(() => {});
+}
+
+const scriptPath = () => (app.isPackaged
+  ? path.join(process.resourcesPath, 'mpv', 'netflix.lua')
+  : path.join(__dirname, 'mpv', 'netflix.lua'));
+
+// Episodes of one series in watch order (season, then episode, then path).
+function seriesEpisodes(seriesName) {
+  const key = seriesName.toLowerCase();
+  return library
+    .filter((i) => i.tv && i.tv.series.toLowerCase() === key)
+    .sort((a, b) => (a.tv.order - b.tv.order) || a.path.localeCompare(b.path));
+}
+
+// The chosen episode followed by every later one, so playback continues like a streaming service.
+function episodesFrom(item) {
+  const eps = seriesEpisodes(item.tv.series);
+  const at = eps.findIndex((e) => e.id === item.id);
+  return at < 0 ? [item] : eps.slice(at);
+}
+
+// Text the on-screen player shows for each file (title, S1:E2, episode name, synopsis).
+function metaFor(item) {
+  if (item.tv) {
+    return { title: item.tv.series, sub: `S${item.tv.season}:E${item.tv.label}`, name: item.tv.name, desc: item.description || '' };
+  }
+  return { title: item.title, sub: item.year ? String(item.year) : '', name: '', desc: item.description || '' };
+}
+
+// ---- phone remote ---------------------------------------------------------------
+const remotePage = () => (app.isPackaged
+  ? path.join(process.resourcesPath, 'remote', 'index.html')
+  : path.join(__dirname, 'remote', 'index.html'));
+
+// While something is playing the phone's D-pad drives mpv; otherwise it drives the browse screens.
+const PLAYER_KEYS = {
+  up: ['add', 'volume', 5], down: ['add', 'volume', -5],
+  left: ['seek', -10, 'relative+exact'], right: ['seek', 10, 'relative+exact'],
+  ok: ['cycle', 'pause'], back: ['quit'], home: ['quit'],
+};
+const PLAYER_CMDS = {
+  pause: ['cycle', 'pause'], seekback: ['seek', -10, 'relative+exact'], seekfwd: ['seek', 10, 'relative+exact'],
+  next: ['playlist-next', 'force'], stop: ['quit'], volup: ['add', 'volume', 5], voldown: ['add', 'volume', -5],
+  mute: ['cycle', 'mute'], audio: ['cycle', 'audio'], subs: ['cycle', 'sub'], fullscreen: ['cycle', 'fullscreen'],
+};
+
+function remoteLibrary() {
+  const movies = [];
+  const series = new Map();
+  for (const it of library) {
+    if (it.tv) {
+      const key = it.tv.series.toLowerCase();
+      if (!series.has(key)) series.set(key, { key, name: it.tv.series, kind: 'series', seasons: new Set(), episodes: 0 });
+      const s = series.get(key); s.seasons.add(it.tv.season); s.episodes++;
+    } else movies.push({ key: it.id, name: it.title, kind: 'movie', year: it.year });
+  }
+  const shows = [...series.values()].map((s) => ({ ...s, seasons: s.seasons.size }));
+  return [...movies, ...shows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const tell = (msg) => { if (win && !win.isDestroyed()) win.webContents.send('remote', msg); };
+
+const remoteHandlers = {
+  library: remoteLibrary,
+  key: (k) => {
+    if (playing) { const c = PLAYER_KEYS[k]; if (c) control(c); return; }
+    tell({ type: 'key', key: k });
+  },
+  player: (cmd) => { const c = PLAYER_CMDS[cmd]; if (c) control(c); },
+  open: (key) => { if (!playing) tell({ type: 'open', key }); },
+  search: (q) => { if (!playing) tell({ type: 'search', q }); },
+  info: async () => ({
+    mediaDir: mediaRoot, free: await transfer.freeBytes(mediaRoot || os.homedir()),
+    smb: smbUrls(), hostname: os.hostname(), drives: drives.map((d) => d.label),
+  }),
+  rescan: () => scheduleRescan(500),
+  upload: async (rel, req, len) => {
+    if (!mediaRoot) throw Object.assign(new Error('No media folder is set up'), { status: 500 });
+    const r = await transfer.saveUpload({ root: mediaRoot, rel, stream: req, length: len });
+    scheduleRescan(10000); // after the last file in a batch
+    return r;
+  },
+};
+
+let rescanTimer = null;
+function scheduleRescan(ms) {
+  clearTimeout(rescanTimer);
+  rescanTimer = setTimeout(() => { if (!playing) doScan().then(() => sendWin('library-updated', snapshot())).catch(() => {}); }, ms);
+}
+
+function smbUrls() {
+  if (process.platform !== 'linux') return [];
+  return [`smb://${os.hostname()}.local`, ...remote.lanAddresses().map((a) => `smb://${a}`)];
+}
+
+function startRemote() {
+  if (remoteServer) { remoteServer.close(); remoteServer = null; }
+  if (!config.remote) return;
+  if (!config.remotePin) {
+    config.remotePin = String(crypto.randomInt(1000, 10000));
+    writeJson(cfgFile(), config);
+  }
+  remoteServer = remote.start({
+    port: Number(config.remotePort) || 8686,
+    pin: () => config.remotePin,
+    pageFile: remotePage(),
+    handlers: remoteHandlers,
+    log: (m) => console.warn(m),
+  });
+}
+
+function remoteInfo() {
+  const port = Number(config.remotePort) || 8686;
+  const urls = remote.lanAddresses().map((a) => `http://${a}:${port}`);
+  let qr = '';
+  if (config.remote && urls[0]) {
+    try { const q = qrcode(0, 'M'); q.addData(`${urls[0]}/#pin=${config.remotePin}`); q.make(); qr = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch {}
+  }
+  return {
+    enabled: !!config.remote, pin: config.remotePin, urls, qr,
+    smb: smbUrls(), mediaDir: mediaRoot,
+  };
+}
+
+// ---- app ------------------------------------------------------------------------
+// One instance only: launching Screenroom again just brings the existing window forward.
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+
+app.whenReady().then(async () => {
+  config = { ...defaults, ...readJson(cfgFile(), {}) };
+  progress = readJson(progFile(), {});
+  library = await loadCached(dataDir());
+  await ensureMediaDir();
+  drives = await transfer.listDrives().catch(() => []);
+  createWindow();
+  startRemote();
+  win.webContents.once('did-finish-load', () => setTimeout(backgroundScan, 1500));
+  setInterval(backgroundScan, 30 * 60 * 1000);
+  setInterval(pollDrives, 5000);
+
+  ipcMain.handle('state', () => snapshot());
+
+  ipcMain.handle('scan', async () => { await doScan(); return snapshot(); });
+
+  ipcMain.handle('drives', async () => { drives = await transfer.listDrives().catch(() => drives); return drives; });
+
+  let copying = null;
+  ipcMain.handle('drive-copy', async (_e, mount) => {
+    if (copying) return { error: 'A copy is already running' };
+    const d = drives.find((x) => x.mount === mount);
+    if (!d || !mediaRoot) return { error: 'Drive not found' };
+    copying = { stop: false };
+    try {
+      const r = await transfer.copyTree({
+        from: d.mount, to: mediaRoot, cancel: copying,
+        onProgress: (p) => sendWin('copy-progress', { ...p, label: d.label }),
+      });
+      doScan().then(() => sendWin('library-updated', snapshot())).catch(() => {});
+      return r;
+    } catch (e) { return { error: String(e.message || e) }; }
+    finally { copying = null; }
+  });
+  ipcMain.handle('drive-copy-cancel', () => { if (copying) copying.stop = true; return true; });
+
+  ipcMain.handle('drive-eject', async (_e, mount) => {
+    const d = drives.find((x) => x.mount === mount);
+    if (!d) return { ok: false, msg: 'Drive not found' };
+    const r = await transfer.eject(d);
+    await pollDrives();
+    return r;
+  });
+
+  ipcMain.handle('add-dir', async () => {
+    // Start where removable drives are mounted, if we can find it.
+    const me = os.userInfo().username;
+    const defaultPath = [`/media/${me}`, `/run/media/${me}`, '/media', '/mnt', os.homedir()].find((d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } });
+    const r = await dialog.showOpenDialog(win, { defaultPath, properties: ['openDirectory', 'multiSelections'] });
+    if (r.canceled) return snapshot();
+    config.dirs = [...new Set([...config.dirs, ...r.filePaths])];
+    writeJson(cfgFile(), config);
+    await doScan();
+    return snapshot();
+  });
+
+  ipcMain.handle('remove-dir', async (_e, dir) => {
+    config.dirs = config.dirs.filter((d) => d !== dir);
+    writeJson(cfgFile(), config);
+    await doScan();
+    return snapshot();
+  });
+
+  ipcMain.handle('set-config', (_e, patch) => {
+    const before = { ...config };
+    config = { ...config, ...patch };
+    writeJson(cfgFile(), config);
+    if ('tvMode' in patch && patch.tvMode !== before.tvMode) applyTv();
+    if (('remote' in patch && patch.remote !== before.remote) || ('remotePort' in patch && patch.remotePort !== before.remotePort)) startRemote();
+    return snapshot();
+  });
+
+  ipcMain.handle('audio-devices', () => listAudioDevices(findBinary('mpv', config.mpvPath)));
+  ipcMain.handle('remote-info', () => remoteInfo());
+  ipcMain.handle('quit', () => app.quit());
+  ipcMain.handle('power', (_e, action) => new Promise((resolve) => {
+    if (process.platform !== 'linux' || !['poweroff', 'reboot'].includes(action)) return resolve({ ok: false, error: 'Not available here' });
+    execFile('systemctl', [action], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
+  }));
+
+  ipcMain.handle('play', async (_e, { id, audioTrack, fromStart }) => {
+    if (playing) return { ok: false, error: 'Something is already playing.' };
+    const item = library.find((i) => i.id === id);
+    if (!item) return { ok: false, error: 'Item not found' };
+
+    const prev = progress[id];
+    const start = !fromStart && prev && !prev.done && prev.pos ? prev.pos : 0;
+    const queue = item.tv ? episodesFrom(item) : [item];
+    const entries = queue.map((it) => ({ item: it, meta: metaFor(it) }));
+
+    let lastSave = 0;
+    const save = () => { try { writeJson(progFile(), progress); } catch {} lastSave = Date.now(); };
+    const getItem = (pid) => library.find((i) => i.id === pid);
+
+    try {
+      playing = true;
+      await play(entries, { ...config, audioTrack, start, scriptPath: scriptPath() }, {
+        onProgress: (pid, pos, dur) => {
+          if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
+          progress[pid] = { pos, dur, updated: Date.now() };
+          if (Date.now() - lastSave > 30000) save();
+        },
+        onSwitch: (pid, pos, dur, reason) => {
+          const it = getItem(pid);
+          const d = dur || (it && it.duration) || 0;
+          const finished = reason === 'eof' || (reason !== 'error' && d > 0 && (pos / d > 0.94 || (d > 600 && d - pos < 60)));
+          if (finished) progress[pid] = { pos: 0, dur: d, updated: Date.now(), done: true };
+          else if (pos > 5) progress[pid] = { pos, dur: d, updated: Date.now() };
+          save();
+        },
+        onExit: ({ code, log }) => {
+          playing = false;
+          save();
+          if (code !== 0 && code !== null && win) {
+            win.webContents.send('playback-error', `mpv stopped unexpectedly (code ${code}). Details are in ${log}`);
+          }
+          win && win.webContents.send('playback-ended', snapshot());
+          if (win && !win.isDestroyed()) win.focus();
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      playing = false;
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('set-watched', (_e, { ids, watched }) => {
+    for (const id of ids) {
+      const it = library.find((i) => i.id === id);
+      if (!it) continue;
+      if (watched) progress[id] = { pos: 0, dur: it.duration, updated: Date.now(), done: true };
+      else delete progress[id];
+    }
+    writeJson(progFile(), progress);
+    return snapshot();
+  });
+
+  ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
+
+  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+});
+
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

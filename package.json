@@ -1,0 +1,83 @@
+{
+  "name": "screenroom",
+  "version": "0.4.0",
+  "description": "Netflix-style browser for your local MP4 library, with mpv playback (Dolby, DTS, H.264/H.265, up to 4K)",
+  "author": "Screenroom <screenroom@localhost>",
+  "homepage": "https://localhost/screenroom",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "scan": "node scripts/scan.js",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.screenroom.app",
+    "productName": "Screenroom",
+    "copyright": "Copyright © Screenroom",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "remote/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "mpv",
+        "to": "mpv"
+      },
+      {
+        "from": "remote",
+        "to": "remote"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
+      "identity": "-",
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "Screenroom"
+    },
+    "linux": {
+      "category": "AudioVideo",
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "maintainer": "Screenroom <screenroom@localhost>",
+      "synopsis": "Netflix-style local media browser",
+      "desktop": {
+        "entry": {
+          "Name": "Screenroom",
+          "Comment": "Browse and play your local library"
+        }
+      }
+    }
+  },
+  "license": "MIT",
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  }
+}

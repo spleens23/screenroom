@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#141414</color>
+    <style name="Theme.Screenroom" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">#E50914</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <style name="Theme.Screenroom.Player" parent="Theme.Screenroom">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

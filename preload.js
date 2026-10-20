@@ -1,0 +1,27 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  state: () => ipcRenderer.invoke('state'),
+  scan: () => ipcRenderer.invoke('scan'),
+  addDir: () => ipcRenderer.invoke('add-dir'),
+  removeDir: (d) => ipcRenderer.invoke('remove-dir', d),
+  setConfig: (p) => ipcRenderer.invoke('set-config', p),
+  play: (opts) => ipcRenderer.invoke('play', opts),
+  setWatched: (ids, watched) => ipcRenderer.invoke('set-watched', { ids, watched }),
+  reveal: (p) => ipcRenderer.invoke('reveal', p),
+  audioDevices: () => ipcRenderer.invoke('audio-devices'),
+  remoteInfo: () => ipcRenderer.invoke('remote-info'),
+  drives: () => ipcRenderer.invoke('drives'),
+  copyDrive: (mount) => ipcRenderer.invoke('drive-copy', mount),
+  cancelCopy: () => ipcRenderer.invoke('drive-copy-cancel'),
+  ejectDrive: (mount) => ipcRenderer.invoke('drive-eject', mount),
+  onDrivesChanged: (cb) => ipcRenderer.on('drives-changed', (_e, m) => cb(m)),
+  onCopyProgress: (cb) => ipcRenderer.on('copy-progress', (_e, m) => cb(m)),
+  quit: () => ipcRenderer.invoke('quit'),
+  power: (action) => ipcRenderer.invoke('power', action),
+  onScanProgress: (cb) => ipcRenderer.on('scan-progress', (_e, p) => cb(p)),
+  onLibraryUpdated: (cb) => ipcRenderer.on('library-updated', (_e, s) => cb(s)),
+  onRemote: (cb) => ipcRenderer.on('remote', (_e, m) => cb(m)),
+  onPlaybackError: (cb) => ipcRenderer.on('playback-error', (_e, m) => cb(m)),
+  onPlaybackEnded: (cb) => ipcRenderer.on('playback-ended', (_e, s) => cb(s)),
+});

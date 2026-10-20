@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#141414">
+<title>Screenroom Remote</title>
+<style>
+  :root { --bg:#141414; --card:#232323; --card2:#2e2e2e; --fg:#f2f2f2; --muted:#9a9a9a; --accent:#e50914; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 0 16px 40px; max-width: 520px; margin: 0 auto; touch-action: manipulation; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 10px; }
+  .brand { color: var(--accent); font-weight: 800; letter-spacing: 3px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button { flex: 1; padding: 12px; border: 0; border-radius: 10px; background: var(--card); color: var(--muted); font-size: 16px; font-weight: 600; }
+  .tabs button.on { background: #fff; color: #000; }
+  button { font: inherit; color: var(--fg); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px auto 18px; max-width: 340px; }
+  .pad button { aspect-ratio: 1; border: 0; border-radius: 18px; background: var(--card2); font-size: 28px; }
+  .pad button:active, .row button:active, .tr button:active { background: #555; }
+  .pad .ok { background: #fff; color: #000; font-weight: 700; font-size: 20px; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .row button { padding: 14px 0; border: 0; border-radius: 12px; background: var(--card); font-size: 16px; }
+  .tr { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+  .tr button { padding: 16px 0; border: 0; border-radius: 12px; background: var(--card); font-size: 17px; }
+  h3 { margin: 18px 0 8px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  input[type=search], input[type=text], input[type=tel] { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #1d1d1d; color: var(--fg); font-size: 17px; }
+  .list { margin-top: 12px; }
+  .item { display: flex; justify-content: space-between; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 14px; margin-bottom: 8px; border: 0; border-radius: 10px; background: var(--card); font-size: 16px; }
+  .item small { color: var(--muted); }
+  .center { text-align: center; }
+  .msg { color: var(--muted); text-align: center; margin: 24px 0; }
+  .err { color: #ff8a8a; }
+  #pin-screen { padding-top: 12vh; text-align: center; }
+  #pin-screen input { text-align: center; font-size: 32px; letter-spacing: 12px; max-width: 220px; margin: 18px auto; display: block; }
+  #pin-screen button { padding: 14px 32px; border: 0; border-radius: 10px; background: #fff; color: #000; font-size: 17px; font-weight: 700; }
+  .drop { border: 2px dashed #555; border-radius: 14px; padding: 22px 14px; text-align: center; color: var(--muted); margin-bottom: 12px; }
+  .drop.over { border-color: #fff; color: #fff; background: #1d1d1d; }
+  .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .pick label { display: block; padding: 14px 8px; text-align: center; border-radius: 12px; background: #fff; color: #000; font-weight: 700; font-size: 16px; }
+  .pick label.alt { background: var(--card2); color: var(--fg); }
+  .pick input { display: none; }
+  .up { background: var(--card); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
+  .up .nm { display: flex; justify-content: space-between; gap: 8px; }
+  .up .nm span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { height: 5px; background: #3a3a3a; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .up.done .bar i { background: #46d369; }
+  .up.fail .bar i { background: #ff8a8a; }
+  .up .st { color: var(--muted); white-space: nowrap; }
+  .up.fail .st { color: #ff8a8a; }
+  .note { color: var(--muted); font-size: 13px; line-height: 1.45; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="pin-screen" hidden>
+  <div class="brand">SCREENROOM</div>
+  <p class="msg">Enter the PIN shown in Screenroom's Settings</p>
+  <input id="pin" type="tel" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••">
+  <button id="pin-go">Connect</button>
+  <p id="pin-err" class="err"></p>
+</div>
+
+<div id="app" hidden>
+  <header><div class="brand">SCREENROOM</div><div id="status" class="msg" style="margin:0;font-size:13px">connected</div></header>
+  <div class="tabs">
+    <button id="tab-remote" class="on">Remote</button>
+    <button id="tab-lib">Library</button>
+    <button id="tab-add">Add media</button>
+  </div>
+
+  <section id="remote">
+    <div class="pad">
+      <span></span><button data-key="up" aria-label="Up">▲</button><span></span>
+      <button data-key="left" aria-label="Left">◀</button><button class="ok" data-key="ok">OK</button><button data-key="right" aria-label="Right">▶</button>
+      <span></span><button data-key="down" aria-label="Down">▼</button><span></span>
+    </div>
+    <div class="row">
+      <button data-key="back">⮌ Back</button>
+      <button data-key="home">⌂ Home</button>
+      <button data-key="settings">⚙ Settings</button>
+    </div>
+
+    <h3>While playing</h3>
+    <div class="tr">
+      <button data-cmd="seekback">−10s</button>
+      <button data-cmd="pause">⏯</button>
+      <button data-cmd="seekfwd">+10s</button>
+      <button data-cmd="next">⏭</button>
+    </div>
+    <div class="tr">
+      <button data-cmd="voldown">Vol −</button>
+      <button data-cmd="mute">Mute</button>
+      <button data-cmd="volup">Vol +</button>
+      <button data-cmd="stop">■ Stop</button>
+    </div>
+    <div class="tr" style="grid-template-columns:repeat(2,1fr)">
+      <button data-cmd="audio">Audio track</button>
+      <button data-cmd="subs">Subtitles</button>
+    </div>
+
+    <h3>Type a search on the TV</h3>
+    <input id="tv-search" type="search" placeholder="Search…" enterkeyhint="search">
+  </section>
+
+  <section id="add" hidden>
+    <div id="drop" class="drop"><b>Drop videos or a whole folder here</b><br><span class="note">MP4 / M4V files, with subtitles (.srt) and artwork. Keep TV in <i>Show / Season 1 / S01E01 Name.mp4</i>.</span></div>
+    <div class="pick">
+      <label>Choose files<input id="pick-files" type="file" multiple accept=".mp4,.m4v,.srt,.vtt,.ass,.jpg,.jpeg,.png,video/mp4"></label>
+      <label class="alt">Choose a folder<input id="pick-folder" type="file" webkitdirectory multiple></label>
+    </div>
+    <div id="space" class="note"></div>
+    <div id="uploads" style="margin-top:12px"></div>
+    <p id="add-hint" class="note"></p>
+  </section>
+
+  <section id="library" hidden>
+    <input id="filter" type="search" placeholder="Filter your library…">
+    <div id="list" class="list"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  let pin = '';
+  try { pin = localStorage.getItem('pin') || ''; } catch {}
+  // The QR code on the TV carries the PIN in the address (#pin=1234) so there's nothing to type.
+  const hp = /pin=(\d{3,8})/.exec(location.hash);
+  if (hp) { pin = hp[1]; try { history.replaceState(null, '', location.pathname); } catch {} }
+
+  async function api(path, body) {
+    const r = await fetch(path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'x-pin': pin, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (r.status === 401) { showPin('Wrong PIN'); throw new Error('pin'); }
+    return r.json();
+  }
+  const buzz = () => { try { navigator.vibrate && navigator.vibrate(12); } catch {} };
+
+  function showPin(msg) {
+    $('#app').hidden = true; $('#pin-screen').hidden = false;
+    $('#pin-err').textContent = msg || '';
+    try { localStorage.removeItem('pin'); } catch {}
+  }
+  async function connect() {
+    try {
+      await api('/api/ping');
+      try { localStorage.setItem('pin', pin); } catch {}
+      $('#pin-screen').hidden = true; $('#app').hidden = false;
+      loadLibrary();
+    } catch (e) { if (e.message !== 'pin') showPin('Could not reach Screenroom'); }
+  }
+  $('#pin-go').onclick = () => { pin = $('#pin').value.trim(); connect(); };
+  $('#pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#pin-go').click(); });
+
+  document.querySelectorAll('[data-key]').forEach((b) => b.addEventListener('click', () => { buzz(); api('/api/key', { key: b.dataset.key }).catch(() => {}); }));
+  document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => { buzz(); api('/api/player', { cmd: b.dataset.cmd }).catch(() => {}); }));
+
+  let t;
+  $('#tv-search').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => api('/api/search', { q: e.target.value }).catch(() => {}), 350); });
+
+  function showTab(name) {
+    for (const t of ['remote', 'library', 'add']) {
+      $('#' + t).hidden = t !== name;
+      $('#tab-' + (t === 'library' ? 'lib' : t)).className = t === name ? 'on' : '';
+    }
+    if (name === 'add') loadInfo();
+  }
+  $('#tab-remote').onclick = () => showTab('remote');
+  $('#tab-lib').onclick = () => showTab('library');
+  $('#tab-add').onclick = () => showTab('add');
+
+  let lib = [];
+  async function loadLibrary() {
+    try { lib = await api('/api/library'); drawList(); } catch {}
+  }
+  function drawList() {
+    const q = $('#filter').value.trim().toLowerCase();
+    const items = lib.filter((e) => !q || e.name.toLowerCase().includes(q));
+    const list = $('#list');
+    list.replaceChildren();
+    if (!items.length) { list.innerHTML = '<p class="msg">Nothing found</p>'; return; }
+    for (const e of items) {
+      const b = document.createElement('button');
+      b.className = 'item';
+      const l = document.createElement('span'); l.textContent = e.name;
+      const r = document.createElement('small');
+      r.textContent = e.kind === 'series' ? `${e.seasons} season${e.seasons === 1 ? '' : 's'}` : (e.year || 'Movie');
+      b.append(l, r);
+      b.onclick = () => { buzz(); api('/api/open', { key: e.key }).catch(() => {}); r.textContent = 'opened on TV'; setTimeout(() => drawList(), 1200); };
+      list.append(b);
+    }
+  }
+  $('#filter').addEventListener('input', drawList);
+
+
+  // ---- add media -------------------------------------------------------------------------------
+  const ALLOWED = /\.(mp4|m4v|srt|vtt|ass|ssa|jpe?g|png)$/i;
+  const fmt = (n) => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (n >= 10 || i === 0 ? Math.round(n) : n.toFixed(1)) + ' ' + u[i]; };
+  const queue = [];
+  let running = false, sentAny = false;
+
+  async function loadInfo() {
+    try {
+      const i = await api('/api/info');
+      $('#space').textContent = i.free != null ? `${fmt(i.free)} free on the box` : '';
+      $('#add-hint').textContent = i.smb && i.smb.length ? `Prefer drag-and-drop on a computer? Connect to ${i.smb[0]} (Mac: Finder → Go → Connect to Server).` : '';
+    } catch {}
+  }
+
+  function addFiles(list) {
+    const files = [...list].filter((f) => !f.name.startsWith('.'));
+    for (const f of files) {
+      const rel = (f.webkitRelativePath || f._rel || f.name);
+      const row = document.createElement('div'); row.className = 'up';
+      row.innerHTML = '<div class="nm"><span></span><span class="st">waiting</span></div><div class="bar"><i></i></div>';
+      row.firstChild.firstChild.textContent = rel;
+      $('#uploads').prepend(row);
+      if (!ALLOWED.test(f.name)) { row.className = 'up fail'; row.querySelector('.st').textContent = 'not an MP4'; continue; }
+      queue.push({ f, rel, row });
+    }
+    pump();
+  }
+
+  function sendOne(job) {
+    return new Promise((resolve) => {
+      const st = job.row.querySelector('.st'), bar = job.row.querySelector('i');
+      const x = new XMLHttpRequest();
+      x.open('PUT', '/api/upload?path=' + encodeURIComponent(job.rel));
+      x.setRequestHeader('x-pin', pin);
+      x.upload.onprogress = (e) => { if (e.lengthComputable) { bar.style.width = (e.loaded / e.total * 100) + '%'; st.textContent = Math.round(e.loaded / e.total * 100) + '% of ' + fmt(e.total); } };
+      x.onload = () => {
+        let msg = ''; try { msg = JSON.parse(x.responseText); } catch {}
+        if (x.status === 200) { bar.style.width = '100%'; job.row.className = 'up done'; st.textContent = msg.skipped ? 'already there' : 'done'; sentAny = true; }
+        else if (x.status === 401) { showPin('Wrong PIN'); job.row.className = 'up fail'; st.textContent = 'wrong PIN'; }
+        else { job.row.className = 'up fail'; st.textContent = (msg && msg.error) || 'failed'; }
+        resolve();
+      };
+      x.onerror = () => { job.row.className = 'up fail'; st.textContent = 'connection lost'; resolve(); };
+      x.send(job.f);
+    });
+  }
+
+  async function pump() {
+    if (running) return; running = true;
+    // keep the phone awake while sending
+    let lock = null; try { lock = await navigator.wakeLock.request('screen'); } catch {}
+    while (queue.length) await sendOne(queue.shift());
+    try { lock && lock.release(); } catch {}
+    running = false;
+    if (sentAny) { sentAny = false; api('/api/rescan', {}).catch(() => {}); loadInfo(); }
+  }
+
+  $('#pick-files').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+  $('#pick-folder').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+
+  // drag & drop (including whole folders) for computers
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach((n) => drop.addEventListener(n, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((n) => drop.addEventListener(n, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  async function walkEntry(entry, prefix, out) {
+    if (entry.isFile) { await new Promise((r) => entry.file((f) => { f._rel = prefix + f.name; out.push(f); r(); }, r)); }
+    else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise((r) => reader.readEntries(r, () => r([])));
+        if (!batch.length) break;
+        for (const c of batch) await walkEntry(c, prefix + entry.name + '/', out);
+      }
+    }
+  }
+  drop.addEventListener('drop', async (e) => {
+    const items = [...(e.dataTransfer.items || [])].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    if (!items.length) { addFiles(e.dataTransfer.files); return; }
+    const out = [];
+    for (const it of items) await walkEntry(it, '', out);
+    addFiles(out);
+  });
+
+  if (pin) connect(); else showPin('');
+})();
+</script>
+</body>
+</html>

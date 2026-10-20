@@ -1,0 +1,38 @@
+#!/bin/sh
+# Screenroom TV session: what runs when the TV box logs in automatically.
+# Installed to /usr/local/bin/screenroom-session by install-tv.sh.
+
+# Keep the screen on while the box is on (the TV handles its own sleep / power).
+xset s off
+xset -dpms
+xset s noblank
+
+# Smooth, unhinted text at 96 dpi (the app scales itself up for the TV).
+xrdb -merge <<'XRES'
+Xft.dpi: 96
+Xft.antialias: 1
+Xft.hinting: 0
+Xft.rgba: none
+Xft.autohint: 0
+XRES
+
+# A tiny window manager so full-screen windows (Screenroom, then the mpv player) stack properly.
+openbox &
+
+# Mount USB drives and SD cards automatically when they're plugged in (they appear under /media/tv/).
+if command -v udiskie >/dev/null; then
+  udiskie --no-tray --no-notify --automount --no-config >/tmp/screenroom-udiskie.log 2>&1 &
+fi
+
+# Let the TV remote work over HDMI-CEC (does nothing if there's no CEC adapter).
+if [ -x /usr/local/bin/screenroom-cec ]; then
+  /usr/local/bin/screenroom-cec >/tmp/screenroom-cec.log 2>&1 &
+fi
+
+# Run Screenroom in TV mode; if it ever crashes, start it again.
+while true; do
+  screenroom --tv
+  code=$?
+  [ "$code" -eq 0 ] && break      # exited cleanly (Quit in Settings): end the session
+  sleep 2
+done
