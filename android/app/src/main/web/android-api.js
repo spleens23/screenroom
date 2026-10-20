@@ -42,7 +42,7 @@
       it.art = r.art || null;
       it.backdrop = r.backdrop || null;
       return MediaCore.applyTv(it);
-    });
+    }).filter((it) => MediaCore.allowedFor(it, raw.profile)); // kids profiles only see what's rated for them
     const deduped = MediaCore.dedupeEpisodes(items);
     const dups = deduped.dups || [];
     library = deduped.sort((a, b) => a.title.localeCompare(b.title));
@@ -50,6 +50,8 @@
     return { ...raw, library, duplicates: dups.length };
   }
   const state = async () => finish(await call('state'));
+  // Profile calls answer { ok, state? }: turn the raw state into library items like everything else.
+  const withState = (r) => (r && r.state ? { ...r, state: finish(r.state) } : r);
 
   // The phone remote's Library tab is served by the Kotlin web server, so hand it the same list the desktop builds.
   function pushCatalog() {
@@ -133,6 +135,11 @@
     cancelCopy: () => call('cancelCopy'),
     ejectDrive: (mount) => call('ejectDrive', mount),
     openSystemSettings: (which) => call('openSettings', which || 'main'),
+    selectProfile: async (id, pin) => withState(await call('profileSelect', id, pin || '')),
+    showProfilePicker: async () => finish(await call('profilePicker')),
+    saveProfile: async (profile, pin) => withState(await call('profileSave', profile, pin || '')),
+    setProfilePin: async (id, newPin, pin) => withState(await call('profileSetPin', id, newPin, pin || '')),
+    deleteProfile: async (id, pin) => withState(await call('profileDelete', id, pin || '')),
     kioskStatus: () => call('kioskStatus'),
     kioskLock: (pin) => call('kioskLock', pin),
     kioskUnlock: (pin) => call('kioskUnlock', pin),

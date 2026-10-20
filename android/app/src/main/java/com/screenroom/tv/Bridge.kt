@@ -94,12 +94,56 @@ class Bridge(private val activity: MainActivity) {
                 JSONObject().put("ok", false).put("msg", "Pick the drive in Storage settings, then choose Eject.")
             }
             "openSettings" -> { openSettings(a.optString(0, "main")); true }
+            // ---- profiles (same rules as the desktop app) ----
+            "profileSelect" -> {
+                val id = a.optString(0); val pin = a.optString(1, "")
+                when {
+                    PlayerActivity.current != null -> fail("Stop playback first.")
+                    st.profiles.get(id) == null -> fail("Profile not found")
+                    !st.profiles.checkPin(id, pin) -> { Thread.sleep(600); fail("Wrong PIN") }
+                    else -> { st.selectProfile(id); JSONObject().put("ok", true).put("state", st.snapshot()) }
+                }
+            }
+            "profilePicker" -> { if (PlayerActivity.current == null) st.needPick = true; st.snapshot() }
+            "profileSave" -> {
+                val input = a.optJSONObject(0) ?: JSONObject()
+                authorize(input.optString("id"), a.optString(1, "")) ?: withState(st.profiles.upsert(input))
+            }
+            "profileSetPin" -> {
+                val id = a.optString(0)
+                val newPin = if (a.isNull(1)) null else a.optString(1)
+                authorize(id, a.optString(2, "")) ?: withState(st.profiles.setPin(id, newPin))
+            }
+            "profileDelete" -> {
+                val id = a.optString(0)
+                authorize(id, a.optString(1, "")) ?: run {
+                    val r = st.profiles.remove(id)
+                    if (r.optBoolean("ok")) st.afterProfileDeleted(id)
+                    withState(r)
+                }
+            }
             "kioskStatus" -> Kiosk.status(activity)
             "kioskLock" -> Kiosk.lock(activity, a.optString(0, ""))
             "kioskUnlock" -> Kiosk.unlock(activity, a.optString(0, ""))
             "kioskRelease" -> Kiosk.release(activity)
             else -> throw IllegalArgumentException("Unknown call: $m")
         }
+    }
+
+    private fun fail(msg: String): JSONObject = JSONObject().put("ok", false).put("error", msg)
+
+    private fun withState(r: JSONObject): JSONObject = if (r.optBoolean("ok")) r.put("state", App.store.snapshot()) else r
+
+    /** Kids profiles can't change profiles; someone else's PIN-protected profile needs their PIN. Null = allowed. */
+    private fun authorize(id: String?, pin: String): JSONObject? {
+        val st = App.store
+        if (st.currentProfile()?.optBoolean("kids") == true) return fail("Kids profiles can't change profiles.")
+        val target = if (id.isNullOrEmpty()) null else st.profiles.get(id)
+        if (target != null && id != st.currentId && target.has("pinHash") && !st.profiles.checkPin(id!!, pin)) {
+            Thread.sleep(600)
+            return fail("Wrong PIN")
+        }
+        return null
     }
 
     private fun copyDrive(mount: String): JSONObject {

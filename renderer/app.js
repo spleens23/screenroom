@@ -247,6 +247,9 @@
 
   function render() {
     document.body.classList.toggle('tv', !!S.tv);
+    drawProfileButton();
+    if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
+    hidePicker();
     $('#nav').classList.toggle('solid', view !== 'home' || !!query);
     if (!S.library.length) return renderEmpty();
     if (query) return renderGrid(`Results for “${query}”`, catalogOf(matches));
@@ -593,12 +596,188 @@
     return box;
   }
 
+
+  // ---- profiles: "Who's watching?", PIN pad, profile editor --------------------------------------
+  const LEVELS = [
+    [1, 'Little kids', 'G, TV-Y, TV-G'],
+    [2, 'Older kids', 'up to PG, TV-Y7, TV-PG'],
+    [3, 'Teens', 'up to PG-13, TV-14'],
+  ];
+  const LANGS = [['', 'Default'], ['eng', 'English'], ['spa', 'Spanish'], ['fre', 'French'], ['ger', 'German'], ['ita', 'Italian'],
+    ['por', 'Portuguese'], ['jpn', 'Japanese'], ['kor', 'Korean'], ['chi', 'Chinese']];
+  const COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
+
+  function avatar(p, big) {
+    return h('span', { class: 'avatar' + (big ? ' big' : ''), style: `background:${p.color || '#555'}` },
+      (p.name || '?').trim().charAt(0).toUpperCase());
+  }
+
+  // A number pad that works with arrows + OK, digits on a keyboard, or the phone remote's "Type on TV".
+  let pinState = null;
+  function askPin(title, subtitle) {
+    return new Promise((resolve) => {
+      const layer = $('#pinpad') || document.body.appendChild(h('div', { id: 'pinpad', class: 'pinpad', hidden: true }));
+      let value = '';
+      const dots = h('div', { class: 'pin-dots' });
+      const msg = h('div', { class: 'pin-msg' }, subtitle || '');
+      const drawDots = () => dots.replaceChildren(...[0, 1, 2, 3].map((i) => h('span', { class: i < value.length ? 'on' : '' })));
+      const done = (v) => { layer.hidden = true; pinState = null; resolve(v); };
+      const add = (d) => { if (value.length < 4) { value += d; drawDots(); } if (value.length === 4) setTimeout(() => done(value), 120); };
+      const del = () => { value = value.slice(0, -1); drawDots(); };
+      const key = (label, fn, cls) => h('button', { class: 'pin-key' + (cls ? ' ' + cls : ''), onclick: fn }, label);
+      layer.replaceChildren(h('div', { class: 'pin-card' },
+        h('h2', {}, title || 'Enter PIN'), msg, dots,
+        h('div', { class: 'pin-grid' },
+          ...'123456789'.split('').map((d) => key(d, () => add(d))),
+          key('Cancel', () => done(null), 'small'), key('0', () => add('0')), key('⌫', del, 'small'))));
+      drawDots();
+      layer.hidden = false;
+      pinState = { add, del, cancel: () => done(null), typed: (t) => { const d = String(t || '').replace(/\D/g, '').slice(0, 4); value = ''; for (const c of d) add(c); drawDots(); } };
+      const first = layer.querySelector('.pin-key');
+      if (first) first.focus();
+    });
+  }
+
+  async function chooseProfile(p) {
+    let pin = '';
+    if (p.hasPin) {
+      pin = await askPin(`${p.name}'s PIN`, 'Enter the 4-digit PIN');
+      if (pin === null) return;
+    }
+    const r = await api.selectProfile(p.id, pin);
+    if (!r.ok) { flash(r.error || 'Could not switch'); if (p.hasPin) return chooseProfile(p); return; }
+    S = r.state;
+    query = ''; $('#search').value = ''; view = 'home';
+    document.querySelectorAll('#nav nav a').forEach((x) => x.classList.toggle('active', x.dataset.view === 'home'));
+    drawProfileButton();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function renderPicker() {
+    const layer = $('#who') || document.body.appendChild(h('div', { id: 'who', class: 'who' }));
+    layer.hidden = false;
+    layer.replaceChildren(h('div', { class: 'who-inner' },
+      h('div', { class: 'brand who-brand' }, 'SCREENROOM'),
+      h('h1', {}, "Who's watching?"),
+      h('div', { class: 'who-list' }, (S.profiles || []).map((p) =>
+        h('button', { class: 'who-tile', 'data-profile': p.id, onclick: () => chooseProfile(p) },
+          avatar(p, true),
+          h('span', { class: 'who-name' }, p.name),
+          h('span', { class: 'who-tags' }, p.kids ? h('span', { class: 'tag-kids' }, 'Kids') : null, p.hasPin ? h('span', { class: 'tag-lock' }, 'PIN') : null))))));
+    const last = layer.querySelector(`.who-tile[data-profile="${CSS.escape((S.profile && S.profile.id) || '')}"]`) || layer.querySelector('.who-tile');
+    if (last) last.focus();
+  }
+  function hidePicker() { const l = $('#who'); if (l) l.hidden = true; }
+
+  function drawProfileButton() {
+    let b = $('#profile-btn');
+    if (!b) {
+      b = h('button', { id: 'profile-btn', title: 'Switch profile', onclick: async () => { if (!$('#settings').hidden) closeSettings(); S = await api.showProfilePicker(); render(); } });
+      $('#settings-btn').before(b);
+    }
+    const p = S.profile;
+    b.hidden = !p || (S.profiles || []).length < 2;
+    b.replaceChildren(p ? avatar(p) : '');
+  }
+
+  // Settings > Profiles
+  function profilesBlock() {
+    const me = S.profile || {};
+    const box = h('div', { class: 'am-card' });
+    if (me.kids) {
+      box.append(h('p', { class: 'am-hint' }, `You're in ${me.name}'s kids profile.`),
+        h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async () => { closeSettings(); S = await api.showProfilePicker(); render(); } }, 'Switch profile')));
+      return box;
+    }
+    box.append(h('div', { class: 'drives' }, (S.profiles || []).map((p) => h('div', { class: 'drive' },
+      h('div', { class: 'prof-row' }, avatar(p), h('div', { class: 'drive-name' }, p.name + (p.id === me.id ? ' (you)' : ''),
+        h('small', {}, [p.kids ? `Kids · ${LEVELS.find((l) => l[0] === p.maxLevel)[1]}` : 'Grown-up', p.hasPin ? 'PIN' : ''].filter(Boolean).join(' · ')))),
+      h('button', { class: 'btn secondary', onclick: () => editProfile(p) }, 'Edit')))));
+    box.append(h('div', { class: 'btns' },
+      (S.profiles || []).length < 8 ? h('button', { class: 'btn secondary', onclick: () => editProfile(null) }, 'Add profile') : null,
+      (S.profiles || []).length > 1 ? h('button', { class: 'btn secondary', onclick: async () => { closeSettings(); S = await api.showProfilePicker(); render(); } }, 'Switch profile') : null));
+    return box;
+  }
+
+  async function editProfile(p) {
+    // Editing someone else's PIN-protected profile needs their PIN.
+    let authPin = '';
+    if (p && p.hasPin && (!S.profile || p.id !== S.profile.id)) {
+      authPin = await askPin(`${p.name}'s PIN`, 'Enter it to change this profile');
+      if (authPin === null) return;
+    }
+    const d = p ? { ...p } : { name: '', color: COLORS[(S.profiles || []).length % COLORS.length], kids: false, maxLevel: 1, allowUnrated: false, preferredLang: '', subLang: '' };
+    const body = $('#settings-body');
+    const name = h('input', { type: 'text', class: 'pin-input prof-name', maxlength: '24', placeholder: 'Name (or type it on your phone)', value: d.name });
+    const preview = h('div', {});
+    const drawPreview = () => preview.replaceChildren(avatar({ name: name.value || '?', color: d.color }, true));
+    name.addEventListener('input', drawPreview);
+    const swatches = h('div', { class: 'swatches' });
+    const drawSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPreview(); } })));
+    drawSw(); drawPreview();
+    const kids = h('input', { type: 'checkbox', checked: !!d.kids });
+    const level = h('select', { class: 'dev-select' }, LEVELS.map(([v, l, x]) => h('option', { value: String(v), selected: v === (d.maxLevel || 1) }, `${l} (${x})`)));
+    const unrated = h('input', { type: 'checkbox', checked: !!d.allowUnrated });
+    const kidsOpts = h('div', { class: 'kids-opts' },
+      h('label', { class: 'row-set' }, h('span', {}, 'Age', h('small', {}, 'Uses the rating saved in each file.')), level),
+      h('label', { class: 'row-set' }, h('span', {}, 'Show titles without a rating', h('small', {}, 'Off: anything without a rating is hidden.')), unrated));
+    const showKids = () => { kidsOpts.hidden = !kids.checked; };
+    kids.addEventListener('change', showKids); showKids();
+    const audio = h('select', { class: 'dev-select' }, LANGS.map(([v, l]) => h('option', { value: v, selected: v === (d.preferredLang || '') }, l)));
+    const subs = h('select', { class: 'dev-select' }, [['', 'Off'], ...LANGS.slice(1)].map(([v, l]) => h('option', { value: v, selected: v === (d.subLang || '') }, l)));
+
+    const save = async () => {
+      const r = await api.saveProfile({ id: p ? p.id : undefined, name: name.value, color: d.color, kids: kids.checked,
+        maxLevel: Number(level.value), allowUnrated: unrated.checked, preferredLang: audio.value, subLang: subs.value }, authPin);
+      if (!r.ok) { flash(r.error); return; }
+      S = r.state; drawProfileButton(); render(); renderSettings();
+      flash(p ? 'Saved' : `Added ${r.profile.name}`);
+    };
+    const pinBtns = p ? [
+      h('button', { class: 'btn secondary', onclick: async () => {
+        const a = await askPin(p.hasPin ? 'New PIN' : 'Choose a PIN', '4 digits'); if (a === null) return;
+        const b = await askPin('Enter it again', 'To make sure'); if (b === null) return;
+        if (a !== b) { flash("The PINs didn't match"); return; }
+        const r = await api.setProfilePin(p.id, a, authPin); flash(r.ok ? 'PIN saved' : r.error);
+        if (r.ok) { S = r.state; authPin = a; p.hasPin = true; }
+      } }, p.hasPin ? 'Change PIN' : 'Add a PIN'),
+      p.hasPin ? h('button', { class: 'btn secondary', onclick: async () => { const r = await api.setProfilePin(p.id, null, authPin); flash(r.ok ? 'PIN removed' : r.error); if (r.ok) { S = r.state; p.hasPin = false; } } }, 'Remove PIN') : null,
+    ] : [];
+    body.replaceChildren(...[
+      h('h2', {}, p ? `Edit ${p.name}` : 'Add a profile'),
+      h('div', { class: 'prof-edit-head' }, preview, h('div', { class: 'prof-edit-fields' }, name, swatches)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Kids profile', h('small', {}, 'Only shows titles rated for their age.')), kids),
+      kidsOpts,
+      h('label', { class: 'row-set' }, h('span', {}, 'Audio language', h('small', {}, 'Picked first when a movie has several.')), audio),
+      h('label', { class: 'row-set' }, h('span', {}, 'Subtitles', h('small', {}, 'Turned on automatically in this language.')), subs),
+      p ? h('h3', {}, 'PIN') : null,
+      p ? h('p', { class: 'am-hint' }, p.hasPin ? 'This profile needs a PIN to open.' : 'Anyone can open this profile.') : null,
+      p ? h('div', { class: 'btns' }, ...pinBtns.filter(Boolean)) : null,
+      h('div', { class: 'btns prof-actions' },
+        h('button', { class: 'btn primary', onclick: save }, 'Save'),
+        h('button', { class: 'btn secondary', onclick: () => renderSettings() }, 'Cancel'),
+        p && (S.profiles || []).length > 1 ? h('button', { class: 'btn secondary danger', onclick: async () => {
+          if (!confirm(`Delete ${p.name}? Their watch history goes too.`)) return;
+          const r = await api.deleteProfile(p.id, authPin);
+          if (!r.ok) { flash(r.error); return; }
+          S = r.state; drawProfileButton(); render(); if (!S.pickProfile) renderSettings();
+        } }, 'Delete profile') : null),
+    ].filter(Boolean));
+    body.scrollTop = 0;
+    name.focus();
+  }
+
   // ---- settings ----------------------------------------------------------------
   function toggle(label, hint, key) {
     return h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
       h('input', { type: 'checkbox', checked: !!S.config[key], onchange: async (e) => { S = await api.setConfig({ [key]: e.target.checked }); renderSettings(); } }));
   }
   function renderSettings() {
+    if (S.profile && S.profile.kids) {
+      $('#settings-body').replaceChildren(h('h2', {}, 'Settings'), h('h3', {}, 'Profiles'), profilesBlock());
+      return;
+    }
     const deviceSel = h('select', { class: 'dev-select', onchange: async (e) => { S = await api.setConfig({ audioDevice: e.target.value }); } },
       h('option', { value: '' }, 'Automatic'));
     api.audioDevices().then((list) => {
@@ -622,6 +801,8 @@
     const isAndroid = S.platform === 'android';
     $('#settings-body').replaceChildren(...[
       h('h2', {}, 'Settings'),
+      api.saveProfile && S.profile ? h('h3', {}, 'Profiles') : null,
+      api.saveProfile && S.profile ? profilesBlock() : null,
       !S.mpvFound ? h('div', { class: 'warn' }, 'mpv was not found, so playback will not work. Install it with “brew install mpv” (Mac) or “sudo apt install mpv” (Linux).') : null,
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg to scan your library.') : null,
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
@@ -692,7 +873,9 @@
   const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function scopeEls() {
     let els;
-    if (!$('#modal').hidden) els = $('#modal').querySelectorAll(FOCUSABLE);
+    if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
+    else if ($('#who') && !$('#who').hidden) els = $('#who').querySelectorAll(FOCUSABLE);
+    else if (!$('#modal').hidden) els = $('#modal').querySelectorAll(FOCUSABLE);
     else if (!$('#settings').hidden) els = $('#settings').querySelectorAll(FOCUSABLE);
     else els = document.querySelectorAll(`#nav ${FOCUSABLE.split(', ').join(', #nav ')}, #main ${FOCUSABLE.split(', ').join(', #main ')}`);
     return [...new Set(els)].filter(shown);
@@ -738,6 +921,8 @@
   }
   // Returns true if it did something (so a TV remote's Back can leave the app when there's nothing left to close).
   function goBack() {
+    if (pinState) { pinState.cancel(); return true; }
+    if ($('#who') && !$('#who').hidden) return true;
     if (!$('#modal').hidden) { closeModal(); return true; }
     if (!$('#settings').hidden) { closeSettings(); return true; }
     if (document.activeElement === $('#search')) $('#search').blur();
@@ -748,6 +933,8 @@
 
   document.addEventListener('keydown', (e) => {
     const t = e.target;
+    if (pinState && /^[0-9]$/.test(e.key)) { e.preventDefault(); pinState.add(e.key); return; }
+    if (pinState && e.key === 'Backspace') { e.preventDefault(); pinState.del(); return; }
     if (t.tagName === 'INPUT' && t.type === 'search') {
       if (e.key === 'Escape') { t.blur(); e.preventDefault(); }
       else if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); t.blur(); const c = document.querySelector('#main .card, #main .btn'); c && focusEl(c); }
@@ -805,6 +992,8 @@
     } else if (m.type === 'open') {
       if (!$('#settings').hidden) closeSettings();
       openEntry(m.key);
+    } else if (m.type === 'text' && pinState) {
+      pinState.typed(m.text);
     } else if (m.type === 'text') {
       // Typed on the phone: goes into whatever text box is focused on the TV (search, Wi-Fi password, PIN).
       const el = document.activeElement;

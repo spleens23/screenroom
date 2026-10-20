@@ -9,6 +9,8 @@ const { play, findBinary, control, listAudioDevices } = require('./lib/player');
 const remote = require('./lib/remote');
 const transfer = require('./lib/transfer');
 const system = require('./lib/system');
+const { Profiles } = require('./lib/profiles');
+const core = require('./lib/media-core');
 const qrcode = require('qrcode-generator');
 
 // Keep the same data folder whether running from source or as a packaged app,
@@ -25,7 +27,8 @@ const TV_FLAG = process.argv.includes('--tv') || process.env.SCREENROOM_TV === '
 let win;
 const dataDir = () => app.getPath('userData');
 const cfgFile = () => path.join(dataDir(), 'config.json');
-const progFile = () => path.join(dataDir(), 'progress.json');
+// Watch progress belongs to the current profile (see lib/profiles.js).
+const progFile = () => profiles.progressFile(currentId);
 
 const defaults = {
   dirs: [], passthrough: false, downmix: false, fullscreen: true, tvMode: false,
@@ -37,7 +40,11 @@ function readJson(f, fallback) { try { return JSON.parse(fs.readFileSync(f, 'utf
 function writeJson(f, v) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2)); }
 
 let config = defaults;
-let progress = {}; // id -> { pos, dur, updated, done? }
+let progress = {}; // id -> { pos, dur, updated, done? }  (for the current profile)
+let profiles = null;
+let currentId = 'main';
+let needPick = false;   // show "Who's watching?"
+const currentProfile = () => (profiles ? profiles.public(profiles.get(currentId)) : null);
 let playing = false;
 let library = [];
 let remoteServer = null;
@@ -115,7 +122,9 @@ function toolPaths() {
 
 function snapshot() {
   return {
-    library, progress, config, tv: isTv(), duplicates: (library.dups || []).length,
+    // Each profile only receives what it's allowed to see (kids profiles: by rating).
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), duplicates: (library.dups || []).length,
+    profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
     mpvFound: !!findBinary('mpv', config.mpvPath),
@@ -198,7 +207,7 @@ function seriesEpisodes(seriesName) {
 
 // The chosen episode followed by every later one, so playback continues like a streaming service.
 function episodesFrom(item) {
-  const eps = seriesEpisodes(item.tv.series);
+  const eps = seriesEpisodes(item.tv.series).filter((e) => core.allowedFor(e, currentProfile()));
   const at = eps.findIndex((e) => e.id === item.id);
   return at < 0 ? [item] : eps.slice(at);
 }
@@ -231,7 +240,9 @@ const PLAYER_CMDS = {
 function remoteLibrary() {
   const movies = [];
   const series = new Map();
+  const prof = currentProfile();
   for (const it of library) {
+    if (!core.allowedFor(it, prof)) continue;
     if (it.tv) {
       const key = it.tv.series.toLowerCase();
       if (!series.has(key)) series.set(key, { key, name: it.tv.series, kind: 'series', seasons: new Set(), episodes: 0 });
@@ -314,7 +325,10 @@ app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(
 
 app.whenReady().then(async () => {
   config = { ...defaults, ...readJson(cfgFile(), {}) };
-  progress = readJson(progFile(), {});
+  profiles = new Profiles(dataDir());
+  currentId = profiles.last().id;
+  needPick = profiles.needsPicker();
+  progress = profiles.loadProgress(currentId);
   library = await loadCached(dataDir());
   await ensureMediaDir();
   drives = await transfer.listDrives().catch(() => []);
@@ -426,12 +440,14 @@ app.whenReady().then(async () => {
     const entries = queue.map((it) => ({ item: it, meta: metaFor(it) }));
 
     let lastSave = 0;
-    const save = () => { try { writeJson(progFile(), progress); } catch {} lastSave = Date.now(); };
+    const file = progFile();
+    const save = () => { try { writeJson(file, progress); } catch {} lastSave = Date.now(); };
+    const prof = currentProfile() || {};
     const getItem = (pid) => library.find((i) => i.id === pid);
 
     try {
       playing = true;
-      await play(entries, { ...config, audioTrack, start, scriptPath: scriptPath() }, {
+      await play(entries, { ...config, preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };
@@ -474,6 +490,48 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
+
+  // ---- profiles ----------------------------------------------------------------------------------
+  const slow = () => new Promise((r) => setTimeout(r, 600)); // after a wrong PIN
+  const canManage = () => !(currentProfile() || {}).kids;
+  ipcMain.handle('profile-select', async (_e, id, pin) => {
+    if (playing) return { ok: false, error: 'Stop playback first.' };
+    if (!profiles.get(id)) return { ok: false, error: 'Profile not found' };
+    if (!profiles.checkPin(id, pin)) { await slow(); return { ok: false, error: 'Wrong PIN' }; }
+    currentId = id;
+    progress = profiles.loadProgress(id);
+    needPick = false;
+    profiles.setLast(id);
+    return { ok: true, state: snapshot() };
+  });
+  ipcMain.handle('profile-picker', () => { if (!playing) needPick = true; return snapshot(); });
+  // Changing someone else's PIN-protected profile needs their PIN; kids profiles can't manage profiles.
+  const authorize = async (id, pin) => {
+    if (!canManage()) return 'Kids profiles can\'t change profiles.';
+    const target = id && profiles.get(id);
+    if (target && id !== currentId && target.pinHash && !profiles.checkPin(id, pin)) { await slow(); return 'Wrong PIN'; }
+    return null;
+  };
+  ipcMain.handle('profile-save', async (_e, input, pin) => {
+    const err = await authorize(input && input.id, pin);
+    if (err) return { ok: false, error: err };
+    const r = profiles.upsert(input || {});
+    return r.ok ? { ...r, state: snapshot() } : r;
+  });
+  ipcMain.handle('profile-set-pin', async (_e, id, newPin, pin) => {
+    const err = await authorize(id, pin);
+    if (err) return { ok: false, error: err };
+    const r = profiles.setPin(id, newPin);
+    return r.ok ? { ...r, state: snapshot() } : r;
+  });
+  ipcMain.handle('profile-delete', async (_e, id, pin) => {
+    const err = await authorize(id, pin);
+    if (err) return { ok: false, error: err };
+    const r = profiles.remove(id);
+    if (!r.ok) return r;
+    if (id === currentId) { currentId = profiles.last().id; progress = profiles.loadProgress(currentId); needPick = profiles.needsPicker(); }
+    return { ok: true, state: snapshot() };
+  });
 
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });

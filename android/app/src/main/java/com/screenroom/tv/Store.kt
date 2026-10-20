@@ -15,14 +15,36 @@ import java.security.SecureRandom
 class Store(private val ctx: Context) {
     private val dir = ctx.filesDir
     private val cfgFile = File(dir, "config.json")
-    private val progFile = File(dir, "progress.json")
     private val libFile = File(dir, "library.json")
     val artDir = File(dir, "art").apply { mkdirs() }
 
     @Volatile var config: JSONObject = readObj(cfgFile).let { withDefaults(it) }
         private set
-    @Volatile var progress: JSONObject = readObj(progFile)
+    // ---- profiles: progress belongs to whoever is watching -------------------------------------------
+    val profiles = Profiles(dir)
+    @Volatile var currentId: String = profiles.last().optString("id")
         private set
+    /** Show "Who's watching?" (more than one profile, or a PIN). */
+    @Volatile var needPick: Boolean = profiles.needsPicker()
+    @Volatile var progress: JSONObject = readObj(profiles.progressFile(currentId))
+        private set
+
+    fun currentProfile(): JSONObject? = profiles.public(profiles.get(currentId))
+
+    @Synchronized fun selectProfile(id: String) {
+        currentId = id
+        progress = readObj(profiles.progressFile(id))
+        needPick = false
+        profiles.setLast(id)
+    }
+
+    @Synchronized fun afterProfileDeleted(id: String) {
+        if (id == currentId) {
+            currentId = profiles.last().optString("id")
+            progress = readObj(profiles.progressFile(currentId))
+            needPick = profiles.needsPicker()
+        }
+    }
     /** path -> raw scan entry {id, path, mtime, size, probe, art, backdrop} */
     @Volatile var library: JSONObject = readObj(libFile)
         private set
@@ -84,7 +106,7 @@ class Store(private val ctx: Context) {
         val o = JSONObject().put("pos", pos).put("dur", dur).put("updated", System.currentTimeMillis())
         if (done) o.put("done", true)
         progress.put(id, o)
-        writeObj(progFile, progress)
+        writeObj(profiles.progressFile(currentId), progress)
     }
 
     @Synchronized fun setWatched(ids: JSONArray, watched: Boolean) {
@@ -96,7 +118,7 @@ class Store(private val ctx: Context) {
                 progress.put(id, JSONObject().put("pos", 0).put("dur", dur).put("updated", System.currentTimeMillis()).put("done", true))
             } else progress.remove(id)
         }
-        writeObj(progFile, progress)
+        writeObj(profiles.progressFile(currentId), progress)
     }
 
     @Synchronized fun saveLibrary(next: JSONObject) {
@@ -119,6 +141,9 @@ class Store(private val ctx: Context) {
             .put("ffprobeFound", true)
             .put("drives", Drives.toJson(Drives.current))
             .put("mediaDir", mediaDir.absolutePath)
+            .put("profile", currentProfile())
+            .put("profiles", profiles.list())
+            .put("pickProfile", needPick)
         if (!canManageAllFiles()) {
             s.put("storageWarning", "Screenroom can only see video files on drives, not subtitles, and uploads are kept inside the app. " +
                 "Run the setup script once (it grants full file access) to fix this.")

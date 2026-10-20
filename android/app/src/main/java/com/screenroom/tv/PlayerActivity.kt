@@ -126,9 +126,12 @@ class PlayerActivity : Activity() {
         playerView.player = player
 
         val cfg = App.store.config
+        val prof = App.store.currentProfile()
+        val audioLang = prof?.optString("preferredLang")?.takeIf { it.isNotBlank() } ?: cfg.optString("preferredLang")
+        val subLang = prof?.optString("subLang")?.takeIf { it.isNotBlank() } ?: cfg.optString("subLang")
         val params = player.trackSelectionParameters.buildUpon()
-        cfg.optString("preferredLang").takeIf { it.isNotBlank() }?.let { params.setPreferredAudioLanguage(it) }
-        cfg.optString("subLang").takeIf { it.isNotBlank() }?.let { params.setPreferredTextLanguage(it) }
+        audioLang.takeIf { it.isNotBlank() }?.let { params.setPreferredAudioLanguage(it) }
+        subLang.takeIf { it.isNotBlank() }?.let { params.setPreferredTextLanguage(it) }
         player.trackSelectionParameters = params.build()
 
         player.addListener(listener)

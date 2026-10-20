@@ -178,6 +178,7 @@ public final class Mp4Tags {
 
     private static void parseIlst(RandomAccessFile raf, Box ilst, List<String> keys, Result res) throws IOException {
         for (Box item : children(raf, ilst.dataStart, ilst.end)) {
+            if (item.type.equals("----")) { readFreeform(raf, item, res); continue; }
             String name;
             if (item.type.equals("covr")) name = "covr";
             else if (ITEM_NAMES.containsKey(item.type)) name = ITEM_NAMES.get(item.type);
@@ -215,6 +216,28 @@ public final class Mp4Tags {
             value = value.replace("\u0000", "").trim();
             if (!value.isEmpty() && !res.tags.containsKey(name)) res.tags.put(name, value);
         }
+    }
+
+    /** iTunes "----" atoms: mean + name + data, e.g. com.apple.iTunes / iTunEXTC / "mpaa|PG-13|300|". */
+    private static void readFreeform(RandomAccessFile raf, Box item, Result res) throws IOException {
+        String name = null, value = null;
+        for (Box c : children(raf, item.dataStart, item.end)) {
+            long len = c.end - c.dataStart;
+            if (len <= 4 || len > 64 * 1024) continue;
+            raf.seek(c.dataStart);
+            if (c.type.equals("name")) {
+                raf.skipBytes(4);
+                byte[] b = new byte[(int) len - 4];
+                raf.readFully(b);
+                name = new String(b, StandardCharsets.UTF_8).trim();
+            } else if (c.type.equals("data") && len > 8) {
+                raf.skipBytes(8); // type + locale
+                byte[] b = new byte[(int) len - 8];
+                raf.readFully(b);
+                value = new String(b, StandardCharsets.UTF_8).replace("\u0000", "").trim();
+            }
+        }
+        if (name != null && value != null && !name.isEmpty() && !value.isEmpty() && !res.tags.containsKey(name)) res.tags.put(name, value);
     }
 
     private static int typeAsIndex(String type) {

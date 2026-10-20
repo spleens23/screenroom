@@ -79,6 +79,16 @@ Playing a TV episode queues the rest of the series behind it, so it keeps going 
 
 Pausing for a moment shows the title, episode and synopsis, like Netflix's pause screen. Audio tracks are labelled by what they really are (Dolby Digital, Dolby Digital Plus, TrueHD, Atmos, DTS, DTS-HD MA, DTS:X) with their channel layout.
 
+## Profiles
+
+Netflix-style **"Who's watching?"** (shown at start when there's more than one profile, or a PIN). Each profile has its own Continue Watching, resume points and watched ticks, its own audio/subtitle language, and an optional 4-digit PIN. You enter the PIN on an on-screen number pad, with the remote, a keyboard, or the phone remote's "Type on TV".
+
+- **Kids profiles** only see titles whose embedded rating fits their age: little kids (G, TV-Y, TV-G), older kids (up to PG, TV-Y7, TV-PG) or teens (up to PG-13, TV-14). The rating comes from the iTunes `iTunEXTC` tag (e.g. `mpaa|PG|200|`). Unrated titles are hidden unless the profile allows them. Kids profiles can't change profiles or settings.
+- **Managing profiles:** Settings → Profiles: add (up to 8), edit, colour, PIN, delete.
+- **Existing watch history** becomes the first profile ("Main").
+
+Works the same on the Mac/Linux app and the Android TV app.
+
 ## What's new in 0.4
 
 - **Episode naming:** multi-segment episodes (`S01E02a` / `S01E02b`), double episodes (`S01E03-E04`) and macOS `/` names (stored as `:`) are understood and sorted properly. A folder added twice, or the same episode found in two places, no longer shows up twice.

@@ -186,3 +186,46 @@ body.tv { scrollbar-width: none; }
 /* the page's own scrollbar belongs to <html> */
 html:has(> body.tv) { scrollbar-width: none; }
 html:has(> body.tv)::-webkit-scrollbar { display: none; }
+
+/* ---- profiles ---- */
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 6px;
+  color: #fff; font-weight: 800; font-size: 16px; flex: none; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.avatar.big { width: 150px; height: 150px; border-radius: 12px; font-size: 72px; }
+#profile-btn { background: none; border: 0; padding: 2px; margin-right: 6px; border-radius: 8px; cursor: pointer; }
+#profile-btn:focus { outline: 3px solid #fff; }
+.who { position: fixed; inset: 0; z-index: 60; background: #141414; display: flex; align-items: center; justify-content: center; }
+.who[hidden] { display: none; }
+.who-inner { text-align: center; }
+.who-brand { position: fixed; top: 24px; left: 60px; }
+.who h1 { font-size: 52px; font-weight: 500; margin: 0 0 44px; color: #fff; }
+.who-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 34px; max-width: 1200px; }
+.who-tile { background: none; border: 0; color: #8c8c8c; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px; border-radius: 16px; }
+.who-tile .avatar { border: 4px solid transparent; transition: transform .15s; }
+.who-tile:hover .avatar, .who-tile:focus .avatar { border-color: #fff; transform: scale(1.05); }
+.who-tile:hover, .who-tile:focus { color: #fff; outline: none; }
+.who-name { font-size: 22px; }
+.who-tags { display: flex; gap: 6px; min-height: 22px; }
+.tag-kids, .tag-lock { font-size: 13px; padding: 2px 8px; border-radius: 4px; border: 1px solid #666; color: #bbb; }
+.pinpad { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; }
+.pinpad[hidden] { display: none; }
+.pin-card { background: #1d1d1d; border: 1px solid #333; border-radius: 16px; padding: 30px 36px; text-align: center; }
+.pin-card h2 { margin: 0 0 6px; }
+.pin-msg { color: #9a9a9a; margin-bottom: 18px; }
+.pin-dots { display: flex; gap: 16px; justify-content: center; margin-bottom: 22px; }
+.pin-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #aaa; }
+.pin-dots span.on { background: #fff; border-color: #fff; }
+.pin-grid { display: grid; grid-template-columns: repeat(3, 84px); gap: 12px; justify-content: center; }
+.pin-key { height: 64px; border-radius: 10px; border: 0; background: #333; color: #fff; font-size: 28px; font-weight: 600; cursor: pointer; }
+.pin-key.small { font-size: 17px; }
+.pin-key:focus, .pin-key:hover { background: #fff; color: #000; outline: none; }
+.prof-row { display: flex; align-items: center; gap: 14px; }
+.prof-edit-head { display: flex; gap: 22px; align-items: center; margin: 10px 0 18px; }
+.prof-edit-fields { flex: 1; }
+.prof-name { letter-spacing: normal; font-size: 20px; max-width: none; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { width: 36px; height: 36px; border-radius: 8px; border: 3px solid transparent; cursor: pointer; }
+.swatch.on { border-color: #fff; }
+.swatch:focus { outline: 3px solid #fff; outline-offset: 2px; }
+.kids-opts[hidden] { display: none; }
+.prof-actions { margin-top: 24px; }
+.btn.danger { color: #ff8a8a; }
