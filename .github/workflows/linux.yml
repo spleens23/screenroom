@@ -125,12 +125,12 @@ jobs:
             -drive file=os.qcow2,if=virtio,format=qcow2 \
             -drive file=media.img,if=virtio,format=raw \
             -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
-            -vga std -display none -monitor unix:mon2.sock,server,nowait -daemonize
+            -vga std -display none -monitor unix:$PWD/mon2.sock,server,nowait -daemonize
           SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 screenroom@localhost"
           for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
           $SSH true || { echo "::error::The installed box never came up on ssh"; exit 1; }
           sleep 75   # let the TV session start and the library scan run
-          echo "screendump boot.ppm" | socat - UNIX-CONNECT:mon2.sock; sleep 2; convert boot.ppm screens-boot.png || true
+          echo "screendump $PWD/boot.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert boot.ppm screens-boot.png || true
 
           fail=0
           check() { if eval "$2" >/tmp/out 2>&1; then echo "::notice::OK  $1"; else echo "::error::FAIL $1: $(head -c 300 /tmp/out | tr '\n' ' ')"; fail=1; fi; }
@@ -147,7 +147,7 @@ jobs:
           check "power button = shut down"              "$SSH grep -q HandlePowerKey=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf"
           echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
           echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
-          echo "screendump final.ppm" | socat - UNIX-CONNECT:mon2.sock; sleep 2; convert final.ppm screens-final.png || true
+          echo "screendump $PWD/final.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert final.ppm screens-final.png || true
           echo "$fail" > test-result
           [ "$fail" = "0" ]
 
