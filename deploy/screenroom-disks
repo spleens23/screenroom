@@ -31,7 +31,7 @@ root_disk() {
   local src
   src="$(findmnt -n -o SOURCE / 2>/dev/null)"
   src="$(readlink -f "$src" 2>/dev/null || echo "$src")"
-  lsblk -n -s -o NAME,TYPE "$src" 2>/dev/null | awk '$2=="disk"{print $1; exit}'
+  lsblk -n -s -l -o NAME,TYPE "$src" 2>/dev/null | awk '$2=="disk"{print $1; exit}'
 }
 
 JSON="$(lsblk_json)"
@@ -56,6 +56,8 @@ CANDIDATES="$(echo "$JSON" | jq -r --arg root "$ROOT" '
   | select((.tran // "") != "usb")
   | select((.rm == false) or (.rm == "0") or (.rm == 0))
   | select((.name | test("^(loop|zram|sr|ram|fd)")) | not)
+  # never a drive with anything mounted from it (the system drive, swap, ...)
+  | select([.. | objects | ((.mountpoint // empty), ((.mountpoints // [])[] // empty))] | map(select(. != null and . != "")) | length == 0)
   | .name')"
 
 [ -n "$CANDIDATES" ] || { log "no second internal drive found"; exit 0; }
