@@ -85,6 +85,18 @@ Pausing for a moment shows the title, episode and synopsis, like Netflix's pause
 - **Add media the easy way:** USB drives appear in the library the moment they're plugged in (with Copy to library and Eject), the box shares a `Screenroom` folder on your network (`smb://screenroom.local`), and any phone or computer can upload files or whole folders from the remote page (scan the QR code in Settings → Add media).
 - **Crisper menus:** Inter font, unhinted text rendering and font settings for the TV session.
 
+## Dedicated box: automatic installer (ThinkCentre M910q and similar mini PCs)
+
+Every push builds **Screenroom-Installer-<version>.iso** (a Debian 13 installer that sets up Screenroom with no questions) and tests it by installing it in a UEFI virtual machine. Write it to a USB stick, boot the mini PC from it with a network cable plugged in, and it becomes a Screenroom appliance:
+- a boot splash,
+- Screenroom only,
+- Wi-Fi and Bluetooth in Settings,
+- automatic security updates,
+- one-button app updates,
+- a second internal drive used as the library.
+
+See [`deploy/M910Q.md`](deploy/M910Q.md).
+
 ## Android TV / Google TV (onn 4K Pro and others)
 
 `android/` is the Android TV version. It shows the same Netflix-style screens (it reuses `renderer/`, `remote/` and `lib/media-core.js`) and plays through Android's own video player (ExoPlayer/Media3) for hardware 4K, HDR, Dolby Vision and Dolby/DTS passthrough. It includes the phone remote, Wi-Fi uploads, USB drives, and an optional **Lock to Screenroom** mode.

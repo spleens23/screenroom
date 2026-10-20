@@ -4,7 +4,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--fg);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Roboto, "Noto Sans", sans-serif; text-rendering: optimizeLegibility; }
+  font-family: "Inter", "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Roboto, "Noto Sans", sans-serif; text-rendering: optimizeLegibility; }
 body { overflow-x: hidden; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
@@ -177,3 +177,9 @@ body.idle, body.idle * { cursor: none !important; }
 .wifi-join .pin-input { margin: 0; letter-spacing: normal; font-size: 17px; flex: 1; max-width: none; }
 .linkish { background: none; border: 0; color: #6fa8ff; cursor: pointer; font: inherit; padding: 0; }
 .linkish:focus { outline: 2px solid #fff; }
+/* A drawn info icon (a font symbol can be missing on a bare Linux box) */
+.i-info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-right: .45em;
+  border: 2px solid currentColor; border-radius: 50%; font-size: .8em; font-weight: 800; font-style: normal; line-height: 1; vertical-align: -0.1em; }
+/* No scrollbars on the TV */
+body.tv ::-webkit-scrollbar { display: none; }
+body.tv { scrollbar-width: none; }

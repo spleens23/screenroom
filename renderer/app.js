@@ -224,7 +224,7 @@
           h('p', {}, hero.description),
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playEntry(fullEntry(hero.key)) }, playLabel(fullEntry(hero.key))),
-            h('button', { class: 'btn secondary', onclick: () => openEntry(hero.key) }, 'ⓘ More Info')))));
+            h('button', { class: 'btn secondary', onclick: () => openEntry(hero.key) }, h('span', { class: 'i-info' }, 'i'), 'More Info')))));
     }
     frag.push(h('div', { class: 'rows' }, rows.map(([name, list]) =>
       h('section', { class: 'row' }, h('h2', {}, name),
@@ -315,7 +315,7 @@
             h('button', { class: 'btn primary', onclick: () => start(item.id, selectedAudio) }, resumable ? `▶ Resume ${fmtTime(p.pos)}` : '▶ Play'),
             resumable ? h('button', { class: 'btn secondary', onclick: () => start(item.id, selectedAudio, true) }, '↺ From start') : null,
             h('button', { class: 'btn secondary', title: p && p.done ? 'Mark as unwatched' : 'Mark as watched',
-              onclick: async () => { S = await api.setWatched([item.id], !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '＋ Mark watched')))),
+              onclick: async () => { S = await api.setWatched([item.id], !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched')))),
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges([item])),

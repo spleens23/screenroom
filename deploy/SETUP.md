@@ -1,5 +1,7 @@
 # Screenroom TV box: setup guide
 
+> **Easier:** for a dedicated mini PC (like the ThinkCentre M910q), use the automatic installer USB instead. See [M910Q.md](M910Q.md). This page covers installing on an existing Ubuntu/Debian system by hand.
+
 Goal: a small PC behind your TV that boots straight into Screenroom and plays your own files. No subscriptions, no accounts, nothing leaves your network.
 
 Not included: live-TV recording (DVR). Screenroom plays files you already have. If you want to record broadcast TV later, a tuner plus a tool like Tvheadend can save recordings into a folder, and Screenroom will show them like any other video.
