@@ -183,3 +183,6 @@ body.idle, body.idle * { cursor: none !important; }
 /* No scrollbars on the TV */
 body.tv ::-webkit-scrollbar { display: none; }
 body.tv { scrollbar-width: none; }
+/* the page's own scrollbar belongs to <html> */
+html:has(> body.tv) { scrollbar-width: none; }
+html:has(> body.tv)::-webkit-scrollbar { display: none; }
