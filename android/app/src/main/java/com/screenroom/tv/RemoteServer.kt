@@ -67,6 +67,7 @@ class RemoteServer(port: Int) : NanoHTTPD(port) {
                 "/api/player" -> onMain { PlayerActivity.current?.remote(body.optString("cmd")) }
                 "/api/open" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "open").put("key", body.optString("key")))
                 "/api/search" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "search").put("q", body.optString("q")))
+                "/api/text" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "text").put("text", body.optString("text").take(200)))
                 else -> return error(404, "not found")
             }
             return json(200, JSONObject().put("ok", true))

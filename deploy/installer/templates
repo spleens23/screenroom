@@ -1,0 +1,6 @@
+Template: screenroom/no-disk
+Type: error
+Description: Screenroom can't choose a drive
+ ${REASON}
+ .
+ Nothing has been changed on this computer.

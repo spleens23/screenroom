@@ -497,6 +497,102 @@
     return box;
   }
 
+
+  // ---- Linux appliance: Wi-Fi and Bluetooth --------------------------------------------------------
+  function wifiBlock() {
+    const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    const draw = async (networks) => {
+      const st = await api.wifiStatus();
+      box.replaceChildren();
+      if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
+      box.append(h('p', {}, st.wired ? 'Connected by network cable.' : st.wifiConnected ? `Connected to Wi-Fi: ${st.wifiNetwork}` : 'Not connected.'));
+      if (!st.hasWifi) { box.append(h('p', { class: 'am-hint' }, 'This computer has no Wi-Fi adapter.')); return; }
+      box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
+        e.target.textContent = 'Searching…';
+        const r = await api.wifiScan();
+        if (!r.ok) { flash(r.error); draw(); return; }
+        draw(r.networks);
+      } }, networks ? 'Search again' : 'Find Wi-Fi networks')));
+      if (!networks) return;
+      const list = h('div', { class: 'drives' });
+      for (const n of networks.slice(0, 12)) {
+        const row = h('div', { class: 'drive' },
+          h('div', { class: 'drive-name' }, n.ssid, h('small', {}, `${n.current ? 'Connected · ' : ''}${n.secure ? 'Password' : 'Open'} · signal ${n.signal}%`)));
+        const go = async (pw) => {
+          flash(`Connecting to ${n.ssid}…`);
+          const r = await api.wifiConnect(n.ssid, pw);
+          flash(r.ok ? r.message : r.error);
+          if (r.ok) draw();
+        };
+        if (n.secure) {
+          const pw = h('input', { type: 'password', class: 'pin-input', placeholder: 'Wi-Fi password (or type it on your phone)' });
+          row.append(h('div', { class: 'wifi-join' }, pw, h('button', { class: 'btn secondary', onclick: () => go(pw.value) }, 'Join')));
+        } else row.append(h('button', { class: 'btn secondary', onclick: () => go('') }, 'Join'));
+        list.append(row);
+      }
+      box.append(list);
+    };
+    draw().catch(() => {});
+    return box;
+  }
+
+  function bluetoothBlock() {
+    const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    const draw = async (found) => {
+      const st = await api.btStatus();
+      box.replaceChildren();
+      if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
+      if (!st.hasAdapter) { box.append(h('p', { class: 'am-hint' }, 'No Bluetooth adapter found. A USB Bluetooth dongle works too.')); return; }
+      box.append(h('p', { class: 'am-hint' }, 'For Bluetooth remotes and game controllers. USB and 2.4 GHz dongle remotes work without pairing.'));
+      if (st.paired.length) {
+        box.append(h('div', { class: 'drives' }, st.paired.map((d) => h('div', { class: 'drive' },
+          h('div', { class: 'drive-name' }, d.name, h('small', {}, 'Paired')),
+          h('button', { class: 'btn secondary', onclick: async () => { const r = await api.btRemove(d.mac); flash(r.ok ? `Removed ${d.name}` : r.error); draw(); } }, 'Forget')))));
+      }
+      box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
+        e.target.textContent = 'Searching… (put the device in pairing mode)';
+        const r = await api.btScan();
+        draw(r.devices || []);
+      } }, 'Pair a remote or controller')));
+      if (!found) return;
+      if (!found.length) { box.append(h('p', { class: 'am-hint' }, 'Nothing found. Put it in pairing mode (often: hold the pairing/sync button until a light flashes) and search again.')); return; }
+      box.append(h('div', { class: 'drives' }, found.map((d) => h('div', { class: 'drive' },
+        h('div', { class: 'drive-name' }, d.name),
+        h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Pairing…'; const r = await api.btPair(d.mac); flash(r.ok ? `${d.name} is ready` : r.error); draw(); } }, 'Pair')))));
+    };
+    draw().catch(() => {});
+    return box;
+  }
+
+
+  function systemBlock() {
+    const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    let polling = null;
+    const draw = async () => {
+      const a = await api.applianceInfo();
+      box.replaceChildren();
+      const u = a.update;
+      const busy = u && ['checking', 'downloading', 'installing'].includes(u.state) && (Date.now() - Date.parse(u.at)) < 15 * 60 * 1000;
+      box.append(
+        h('p', {}, `Screenroom ${a.version}`),
+        u ? h('p', { class: 'am-hint' }, u.message) : null,
+        h('div', { class: 'btns' }, h('button', { class: 'btn secondary', disabled: busy, onclick: async () => {
+          const r = await api.applianceUpdate();
+          if (!r.ok) flash(r.error || 'Could not start the update');
+          clearInterval(polling); polling = setInterval(() => { if ($('#settings').hidden) clearInterval(polling); else draw(); }, 3000);
+          setTimeout(draw, 800);
+        } }, busy ? 'Updating…' : 'Check for updates')));
+      if (a.maintenance) {
+        const secret = h('span', {}, '••••••••');
+        box.append(h('p', { class: 'am-hint' }, 'Maintenance login for repairs from a computer on your network: ',
+          h('b', {}, `ssh ${a.maintenance.user}@${a.host}`), ' · password ', secret, ' ',
+          h('button', { class: 'linkish', onclick: (e) => { secret.textContent = a.maintenance.password; e.target.remove(); } }, 'Show')));
+      }
+    };
+    draw().catch(() => {});
+    return box;
+  }
+
   // ---- settings ----------------------------------------------------------------
   function toggle(label, hint, key) {
     return h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
@@ -546,6 +642,10 @@
         h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.addDir(); setScanning(false); renderSettings(); render(); } }, 'Add folder…'),
         h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.scan(); setScanning(false); renderSettings(); render(); } }, 'Rescan')),
       S.duplicates ? h('div', { class: 'am-hint' }, `${S.duplicates} duplicate episode file${S.duplicates === 1 ? ' was' : 's were'} hidden (the same episode found twice; the best quality copy is kept).`) : null,
+      S.platform === 'linux' && api.wifiStatus ? h('h3', {}, 'Wi-Fi') : null,
+      S.platform === 'linux' && api.wifiStatus ? wifiBlock() : null,
+      S.platform === 'linux' && api.btStatus ? h('h3', {}, 'Bluetooth') : null,
+      S.platform === 'linux' && api.btStatus ? bluetoothBlock() : null,
       isAndroid ? h('h3', {}, 'This box') : null,
       isAndroid ? h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('main') }, 'System settings'),
@@ -553,6 +653,8 @@
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('network') }, 'Wi-Fi & network')) : null,
       isAndroid && api.kioskStatus ? h('h3', {}, 'Lock to Screenroom') : null,
       isAndroid && api.kioskStatus ? kioskBlock() : null,
+      S.platform === 'linux' && api.applianceInfo ? h('h3', {}, 'System') : null,
+      S.platform === 'linux' && api.applianceInfo ? systemBlock() : null,
       isAndroid ? null : h('h3', {}, 'Power'),
       isAndroid ? null : h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Quit Screenroom'),
@@ -703,6 +805,17 @@
     } else if (m.type === 'open') {
       if (!$('#settings').hidden) closeSettings();
       openEntry(m.key);
+    } else if (m.type === 'text') {
+      // Typed on the phone: goes into whatever text box is focused on the TV (search, Wi-Fi password, PIN).
+      const el = document.activeElement;
+      if (el && el.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(el.type)) {
+        el.value = m.text || '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        query = (m.text || '').trim(); $('#search').value = m.text || '';
+        if (!$('#modal').hidden) closeModal();
+        render();
+      }
     } else if (m.type === 'search') {
       if (!$('#modal').hidden) closeModal();
       query = (m.q || '').trim(); $('#search').value = m.q || '';

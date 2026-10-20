@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Screenroom
+Description=Screenroom boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/screenroom
+ScriptFile=/usr/share/plymouth/themes/screenroom/screenroom.script

@@ -1,0 +1,130 @@
+#!/bin/bash
+# Screenroom: use a second drive inside the computer as the media library.
+#
+# Runs at every boot (screenroom-disks.service), before Screenroom starts. For each internal drive
+# that is NOT the system drive and not USB:
+#   * already has a filesystem (ext4, exFAT, NTFS, ...) -> mounted as the library, files untouched
+#   * completely blank (no partitions, no filesystem signature at all) -> formatted once as ext4
+# A drive that has partitions or any data signature is never formatted. Everything is logged to
+# /var/log/screenroom-disks.log.
+#
+# Testing: SCREENROOM_DISKS_DRYRUN=1 prints what it would do; SCREENROOM_LSBLK_JSON=file fakes lsblk.
+
+set -u
+CONF=/etc/screenroom/screenroom.conf
+TV_USER=tv
+MEDIA_DIR=/srv/media
+[ -f "$CONF" ] && . "$CONF"
+DRY="${SCREENROOM_DISKS_DRYRUN:-0}"
+LOG=/var/log/screenroom-disks.log
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG" 2>/dev/null || echo "$*"; }
+act() { if [ "$DRY" = "1" ]; then echo "WOULD: $*"; else "$@"; fi; }
+
+lsblk_json() {
+  if [ -n "${SCREENROOM_LSBLK_JSON:-}" ]; then cat "$SCREENROOM_LSBLK_JSON"; return; fi
+  lsblk -J -b -o NAME,PATH,TYPE,TRAN,RM,SIZE,FSTYPE,UUID,LABEL,MOUNTPOINT,PKNAME 2>/dev/null
+}
+
+# The disk the running system lives on (never touched).
+root_disk() {
+  if [ -n "${SCREENROOM_ROOT_DISK:-}" ]; then echo "$SCREENROOM_ROOT_DISK"; return; fi
+  local src
+  src="$(findmnt -n -o SOURCE / 2>/dev/null)"
+  src="$(readlink -f "$src" 2>/dev/null || echo "$src")"
+  lsblk -n -s -o NAME,TYPE "$src" 2>/dev/null | awk '$2=="disk"{print $1; exit}'
+}
+
+JSON="$(lsblk_json)"
+[ -n "$JSON" ] || { log "lsblk gave nothing; skipping"; exit 0; }
+ROOT="$(root_disk)"
+log "system drive: ${ROOT:-unknown}"
+[ -n "$ROOT" ] || { log "could not tell which drive the system is on; not touching any drive"; exit 0; }
+
+# Already set up (from an earlier boot)? Then systemd's fstab mount handles it.
+if grep -q "# screenroom-media" /etc/fstab 2>/dev/null && [ "$DRY" != "1" ]; then
+  mountpoint -q "$MEDIA_DIR" || mount "$MEDIA_DIR" 2>/dev/null || true
+  chown "$TV_USER:$TV_USER" "$MEDIA_DIR" 2>/dev/null || true
+  log "media drive already configured"
+  exit 0
+fi
+
+# Candidate internal disks: whole disks, not removable, not USB, not the system disk, not CD/loop/zram.
+CANDIDATES="$(echo "$JSON" | jq -r --arg root "$ROOT" '
+  .blockdevices[]
+  | select(.type == "disk")
+  | select(.name != $root)
+  | select((.tran // "") != "usb")
+  | select((.rm == false) or (.rm == "0") or (.rm == 0))
+  | select((.name | test("^(loop|zram|sr|ram|fd)")) | not)
+  | .name')"
+
+[ -n "$CANDIDATES" ] || { log "no second internal drive found"; exit 0; }
+
+pick_partition() {
+  # Largest partition (or the bare disk) carrying a filesystem we can read.
+  echo "$JSON" | jq -r --arg d "$1" '
+    [ .blockdevices[] | select(.name == $d) | (., (.children // [])[]) ]
+    | map(select((.fstype // "") | test("^(ext4|ext3|ext2|xfs|btrfs|exfat|ntfs|ntfs3|vfat|f2fs)$")))
+    | sort_by(.size | tonumber) | reverse | .[0] // empty
+    | "\(.path) \(.fstype) \(.uuid // "")"'
+}
+
+disk_is_blank() {
+  # Blank = no partitions at all and no filesystem / partition-table signature anywhere wipefs can see.
+  local d="$1" kids sig
+  kids="$(echo "$JSON" | jq -r --arg d "$d" '.blockdevices[] | select(.name == $d) | ((.children // []) | length)')"
+  [ "$kids" = "0" ] || return 1
+  [ -z "$(echo "$JSON" | jq -r --arg d "$d" '.blockdevices[] | select(.name == $d) | .fstype // empty')" ] || return 1
+  if [ "$DRY" = "1" ] && [ -n "${SCREENROOM_LSBLK_JSON:-}" ]; then return 0; fi
+  sig="$(wipefs -n -O TYPE "/dev/$d" 2>/dev/null | tail -n +2)"
+  [ -z "$sig" ]
+}
+
+use_existing() {
+  local path="$1" fs="$2" uuid="$3" target="$MEDIA_DIR" opts
+  # If uploads already live in the media folder on the system drive, don't hide them: mount beside them.
+  if [ "$DRY" != "1" ] && [ -d "$MEDIA_DIR" ] && ! mountpoint -q "$MEDIA_DIR" && [ -n "$(ls -A "$MEDIA_DIR" 2>/dev/null | grep -v '^lost+found$')" ]; then
+    target="$MEDIA_DIR/Internal drive"
+  fi
+  local uid gid
+  uid="$(id -u "$TV_USER" 2>/dev/null || echo 1000)"; gid="$(id -g "$TV_USER" 2>/dev/null || echo 1000)"
+  case "$fs" in
+    exfat|vfat) opts="defaults,nofail,x-systemd.device-timeout=15,uid=$uid,gid=$gid,umask=002" ;;
+    ntfs|ntfs3) fs=ntfs3; opts="defaults,nofail,x-systemd.device-timeout=15,uid=$uid,gid=$gid,umask=002" ;;
+    *) opts="defaults,nofail,x-systemd.device-timeout=15" ;;
+  esac
+  [ -n "$uuid" ] || { log "$path has no UUID; skipping"; return 1; }
+  log "using $path ($fs) as the media drive at $target"
+  act mkdir -p "$target"
+  if [ "$DRY" = "1" ]; then
+    echo "WOULD: add to fstab: UUID=$uuid  $target  $fs  $opts  0  2  # screenroom-media"
+  else
+    printf 'UUID=%s\t%s\t%s\t%s\t0\t2\t# screenroom-media\n' "$uuid" "$(echo "$target" | sed 's/ /\\040/g')" "$fs" "$opts" >> /etc/fstab
+    systemctl daemon-reload 2>/dev/null || true
+    mount "$target" 2>/dev/null || { [ "$fs" = "ntfs3" ] && mount -t ntfs-3g -o "uid=$uid,gid=$gid,umask=002" "UUID=$uuid" "$target"; } || log "mount of $path failed"
+    case "$fs" in ext*|xfs|btrfs|f2fs) chown "$TV_USER:$TV_USER" "$target" 2>/dev/null || true ;; esac
+  fi
+  return 0
+}
+
+for d in $CANDIDATES; do
+  found="$(pick_partition "$d")"
+  if [ -n "$found" ]; then
+    # shellcheck disable=SC2086
+    use_existing $found && exit 0
+    continue
+  fi
+  if disk_is_blank "$d"; then
+    log "/dev/$d is blank: formatting it once as the Screenroom media drive (ext4)"
+    act sh -c "echo 'type=linux' | sfdisk --quiet --label gpt /dev/$d"
+    act udevadm settle
+    part="/dev/${d}1"; case "$d" in nvme*|mmcblk*) part="/dev/${d}p1" ;; esac
+    act mkfs.ext4 -q -F -L ScreenroomMedia -m 0 "$part"
+    act udevadm settle
+    uuid="$( [ "$DRY" = "1" ] && echo NEW-UUID || blkid -s UUID -o value "$part")"
+    use_existing "$part" ext4 "$uuid" && exit 0
+  else
+    log "/dev/$d has partitions or data I can't use; leaving it alone"
+  fi
+done
+exit 0

@@ -1,0 +1,21 @@
+// Screenroom boot splash: the wordmark on a dark background, with a slow pulse.
+Window.SetBackgroundTopColor(0.078, 0.078, 0.078);
+Window.SetBackgroundBottomColor(0.078, 0.078, 0.078);
+
+logo.image = Image("logo.png");
+scale = Math.Min(Window.GetWidth() * 0.42 / logo.image.GetWidth(), 1.6);
+logo.scaled = logo.image.Scale(logo.image.GetWidth() * scale, logo.image.GetHeight() * scale);
+logo.sprite = Sprite(logo.scaled);
+logo.sprite.SetX(Window.GetWidth() / 2 - logo.scaled.GetWidth() / 2);
+logo.sprite.SetY(Window.GetHeight() / 2 - logo.scaled.GetHeight() / 2);
+
+t = 0;
+fun refresh() {
+  t++;
+  logo.sprite.SetOpacity(0.65 + 0.35 * Math.Sin(t / 30));
+}
+Plymouth.SetRefreshFunction(refresh);
+
+// Hide password prompts / messages: there are none on this box.
+fun message(text) {}
+Plymouth.SetMessageFunction(message);

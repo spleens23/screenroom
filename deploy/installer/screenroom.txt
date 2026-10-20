@@ -1,0 +1,8 @@
+
+  SCREENROOM INSTALLER
+
+  Press Enter (or wait 15 seconds) to install Screenroom.
+  This ERASES the computer's main drive.
+
+  To cancel, remove the USB stick and restart the computer.
+

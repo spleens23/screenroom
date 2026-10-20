@@ -8,6 +8,7 @@ const { scan, loadCached } = require('./lib/library');
 const { play, findBinary, control, listAudioDevices } = require('./lib/player');
 const remote = require('./lib/remote');
 const transfer = require('./lib/transfer');
+const system = require('./lib/system');
 const qrcode = require('qrcode-generator');
 
 // Keep the same data folder whether running from source or as a packaged app,
@@ -252,6 +253,7 @@ const remoteHandlers = {
   player: (cmd) => { const c = PLAYER_CMDS[cmd]; if (c) control(c); },
   open: (key) => { if (!playing) tell({ type: 'open', key }); },
   search: (q) => { if (!playing) tell({ type: 'search', q }); },
+  text: (t) => { if (!playing) tell({ type: 'text', text: t }); },
   info: async () => ({
     mediaDir: mediaRoot, free: await transfer.freeBytes(mediaRoot || os.homedir()),
     smb: smbUrls(), hostname: os.hostname(), drives: drives.map((d) => d.label),
@@ -384,6 +386,29 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('audio-devices', () => listAudioDevices(findBinary('mpv', config.mpvPath)));
   ipcMain.handle('remote-info', () => remoteInfo());
+  // Linux appliance: Wi-Fi and Bluetooth (remotes, controllers)
+  const linuxOnly = (fn) => async (...a) => (process.platform === 'linux' ? fn(...a) : { available: false, ok: false, message: 'Only on Linux' });
+  ipcMain.handle('wifi-status', linuxOnly(() => system.wifiStatus()));
+  ipcMain.handle('wifi-scan', linuxOnly(() => system.wifiScan()));
+  ipcMain.handle('wifi-connect', linuxOnly((_e, ssid, pw) => system.wifiConnect(ssid, pw)));
+  ipcMain.handle('bt-status', linuxOnly(() => system.btStatus()));
+  ipcMain.handle('bt-scan', linuxOnly(() => system.btScan()));
+  ipcMain.handle('bt-pair', linuxOnly((_e, mac) => system.btPair(mac)));
+  ipcMain.handle('bt-remove', linuxOnly((_e, mac) => system.btRemove(mac)));
+
+  // Installed by the Screenroom installer as an "appliance": version, updates, maintenance login.
+  ipcMain.handle('appliance-info', () => {
+    const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+    const isAppliance = process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance');
+    const maint = {};
+    for (const line of read('/etc/screenroom/maintenance').split('\n')) { const m = line.match(/^(\w+)=(.*)$/); if (m) maint[m[1]] = m[2]; }
+    let update = null;
+    try { update = JSON.parse(read('/var/lib/screenroom/update-status.json')); } catch {}
+    return { appliance: isAppliance, version: app.getVersion(), host: `${os.hostname()}.local`, maintenance: maint.user ? maint : null, update };
+  });
+  ipcMain.handle('appliance-update', () => new Promise((resolve) => {
+    execFile('systemctl', ['start', '--no-block', 'screenroom-update.service'], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
+  }));
   ipcMain.handle('quit', () => app.quit());
   ipcMain.handle('power', (_e, action) => new Promise((resolve) => {
     if (process.platform !== 'linux' || !['poweroff', 'reboot'].includes(action)) return resolve({ ok: false, error: 'Not available here' });

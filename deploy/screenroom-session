@@ -6,6 +6,8 @@
 xset s off
 xset -dpms
 xset s noblank
+# Dark background straight away (no grey flash before Screenroom draws).
+xsetroot -solid '#141414' 2>/dev/null || true
 
 # Smooth, unhinted text at 96 dpi (the app scales itself up for the TV).
 xrdb -merge <<'XRES'

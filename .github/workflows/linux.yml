@@ -1,0 +1,148 @@
+name: Linux box (app + automatic installer)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      VERSION: 0.5.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # ---- 1. the Screenroom app as a .deb -------------------------------------------------------
+      - name: Build the Linux app (.deb)
+        run: |
+          npm ci
+          npm pkg set version="$VERSION"
+          npx electron-builder --linux deb --x64 -p never
+          ls -la dist/*.deb
+
+      # ---- 2. the automatic installer image ----------------------------------------------------------
+      - name: Tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends xorriso qemu-system-x86 qemu-utils ovmf ffmpeg socat imagemagick
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; echo "KVM available"; else echo "::warning::No KVM: the test install will be slow"; fi
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/screenroom-iso
+          key: debian-netinst-${{ github.run_id }}
+          restore-keys: debian-netinst-
+
+      - name: Build the installer images
+        run: |
+          mkdir -p out
+          DEB="$(ls dist/screenroom_*_amd64.deb)"
+          scripts/build-installer-iso.sh "$DEB" "out/Screenroom-Installer-${VERSION}.iso"
+          ssh-keygen -q -t ed25519 -N '' -f test_key
+          scripts/build-installer-iso.sh "$DEB" installer-test.iso --test-key test_key.pub
+          cp "$DEB" out/
+
+      # ---- 3. install it in a virtual machine (UEFI, like the M910q) ---------------------------------
+      - name: Prepare a virtual M910q (system drive + movie drive)
+        run: |
+          qemu-img create -f qcow2 os.qcow2 24G
+          # A second drive that already has a show on it: it must be kept and used as the library.
+          truncate -s 2G media.img
+          mkfs.ext4 -q -F -L Movies media.img
+          sudo mkdir -p /mnt/media && sudo mount -o loop media.img /mnt/media
+          sudo mkdir -p "/mnt/media/Test Show/Season 1"
+          ffmpeg -v error -f lavfi -i testsrc=size=1280x720:rate=24 -f lavfi -i sine=f=440 -t 20 \
+            -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata title="Hello" -metadata show="Test Show" \
+            -metadata description="A test episode." /tmp/ep.mp4
+          sudo cp /tmp/ep.mp4 "/mnt/media/Test Show/Season 1/S01E01 Hello.mp4"
+          sudo umount /mnt/media
+          cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+
+      - name: Install (unattended)
+        run: |
+          KVM=""; [ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
+          ( while sleep 120; do echo "screendump install.ppm" | socat - UNIX-CONNECT:mon.sock >/dev/null 2>&1 || true; done ) &
+          set +e
+          timeout 100m qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive file=os.qcow2,if=virtio,format=qcow2 \
+            -drive file=media.img,if=virtio,format=raw \
+            -drive file=installer-test.iso,media=cdrom,readonly=on \
+            -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            -vga std -display none -monitor unix:mon.sock,server,nowait -no-reboot
+          code=$?
+          set -e
+          [ -f install.ppm ] && convert install.ppm screens-install-last.png || true
+          if [ "$code" != "0" ]; then echo "::error::The unattended install did not finish (exit $code). See screens-install-last.png"; exit 1; fi
+          echo "Install finished"
+
+      - name: Boot the installed box and check it
+        run: |
+          KVM=""; [ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
+          qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive file=os.qcow2,if=virtio,format=qcow2 \
+            -drive file=media.img,if=virtio,format=raw \
+            -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
+            -vga std -display none -monitor unix:mon2.sock,server,nowait -daemonize
+          SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 admin@localhost"
+          for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
+          $SSH true || { echo "::error::The installed box never came up on ssh"; exit 1; }
+          sleep 75   # let the TV session start and the library scan run
+          echo "screendump boot.ppm" | socat - UNIX-CONNECT:mon2.sock; sleep 2; convert boot.ppm screens-boot.png || true
+
+          fail=0
+          check() { if eval "$2" >/tmp/out 2>&1; then echo "::notice::OK  $1"; else echo "::error::FAIL $1: $(head -c 300 /tmp/out | tr '\n' ' ')"; fail=1; fi; }
+          check "TV session running (lightdm)"          "$SSH systemctl is-active lightdm"
+          check "Screenroom app running"                "$SSH pgrep -f /opt/Screenroom/screenroom"
+          check "boot splash theme is Screenroom"       "$SSH grep -rqs screenroom /etc/alternatives/default.plymouth /etc/plymouth/plymouthd.conf"
+          check "movie drive kept and mounted"           "$SSH findmnt -n -o SOURCE /srv/media | grep -q vdb"
+          check "movie drive still has the show"        "$SSH test -f '\"/srv/media/Test Show/Season 1/S01E01 Hello.mp4\"'"
+          check "Samba share running"                   "$SSH systemctl is-active smbd"
+          check "phone remote page served"              "curl -fsS --max-time 10 http://localhost:8686/ | grep -q Screenroom"
+          PIN="$($SSH sudo jq -r .remotePin /home/tv/.config/screenroom/config.json 2>/dev/null || true)"
+          check "library shows the test show"           "curl -fsS --max-time 10 -H 'x-pin: $PIN' http://localhost:8686/api/library | grep -q 'Test Show'"
+          check "maintenance login created"             "$SSH sudo test -s /etc/screenroom/maintenance"
+          check "power button = shut down"              "$SSH grep -q HandlePowerKey=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf"
+          echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
+          echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
+          echo "screendump final.ppm" | socat - UNIX-CONNECT:mon2.sock; sleep 2; convert final.ppm screens-final.png || true
+          echo "$fail" > test-result
+          [ "$fail" = "0" ]
+
+      - name: Share screenshots from the test (for debugging)
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-screens
+          name: CI screenshots (not for installing)
+          prerelease: true
+          make_latest: false
+          body: Screens from the latest automated test install. Not an installable release.
+          files: screens-*.png
+          fail_on_unmatched_files: false
+
+      # ---- 4. publish --------------------------------------------------------------------------------------
+      - name: Publish the installer and app
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: linux-${{ github.run_number }}
+          name: Screenroom for Linux / M910q (build ${{ github.run_number }})
+          body: |
+            **Screenroom-Installer-${{ env.VERSION }}.iso**: automatic installer for a mini PC (ThinkCentre M910q etc.). Write it to a USB stick, boot from it with a network cable plugged in. It erases the main drive. See deploy/M910Q.md.
+            **screenroom_${{ env.VERSION }}_amd64.deb**: the app on its own (for updates / manual installs).
+            Tested automatically: unattended install in a virtual machine, then boot, app, movie drive and phone remote checks.
+          files: out/*
+          make_latest: false

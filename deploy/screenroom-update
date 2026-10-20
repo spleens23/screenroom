@@ -1,0 +1,46 @@
+#!/bin/bash
+# Screenroom: install the newest Screenroom build from the project's GitHub releases.
+# Started by the "Check for updates" button (screenroom-update.service, allowed for the tv user).
+set -u
+CONF=/etc/screenroom/screenroom.conf
+UPDATE_REPO=spleens23/screenroom
+[ -f "$CONF" ] && . "$CONF"
+STATE_DIR=/var/lib/screenroom
+STATUS="$STATE_DIR/update-status.json"
+mkdir -p "$STATE_DIR"
+
+status() { # state message [version]
+  jq -n --arg s "$1" --arg m "$2" --arg v "${3:-}" --arg t "$(date -Is)" '{state:$s, message:$m, version:$v, at:$t}' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+  chmod 644 "$STATUS"
+  echo "$1: $2"
+}
+
+status checking "Checking for a newer version…"
+ARCH="$(dpkg --print-architecture)"
+JSON="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$UPDATE_REPO/releases?per_page=30")" \
+  || { status error "Couldn't reach GitHub. Check the internet connection."; exit 1; }
+URL="$(echo "$JSON" | jq -r --arg a "$ARCH" '[.[] | select(.draft|not) | .assets[] | select(.name | test("^screenroom_.*_" + $a + "\\.deb$"))] | .[0].browser_download_url // empty')"
+[ -n "$URL" ] || { status error "No Screenroom build for this computer was found on GitHub."; exit 1; }
+FILE="$(basename "$URL")"
+NEWV="$(echo "$FILE" | sed -E 's/^screenroom_(.*)_[^_]+\.deb$/\1/')"
+CURV="$(dpkg-query -W -f='${Version}' screenroom 2>/dev/null || echo 0)"
+if dpkg --compare-versions "$NEWV" le "$CURV"; then
+  status current "Screenroom is up to date ($CURV)." "$CURV"
+  exit 0
+fi
+
+status downloading "Downloading Screenroom $NEWV…" "$NEWV"
+TMP="$(mktemp -d)"
+curl -fsSL --max-time 600 -o "$TMP/$FILE" "$URL" || { status error "Download failed."; rm -rf "$TMP"; exit 1; }
+status installing "Installing Screenroom $NEWV…" "$NEWV"
+if DEBIAN_FRONTEND=noninteractive apt-get install -y "$TMP/$FILE" >/var/log/screenroom-update.log 2>&1; then
+  rm -rf "$TMP"
+  status done "Updated to $NEWV. Restarting Screenroom…" "$NEWV"
+  sleep 2
+  # The TV session restarts the app automatically when it exits.
+  pkill -TERM -f '/opt/Screenroom/screenroom' 2>/dev/null || true
+else
+  rm -rf "$TMP"
+  status error "Install failed (see /var/log/screenroom-update.log)." "$NEWV"
+  exit 1
+fi

@@ -104,6 +104,8 @@
 
     <h3>Type a search on the TV</h3>
     <input id="tv-search" type="search" placeholder="Search…" enterkeyhint="search">
+    <h3>Type on TV</h3>
+    <input id="tv-type" type="text" placeholder="Text for the box on the TV (Wi-Fi password, PIN…)" autocomplete="off" autocapitalize="off" spellcheck="false">
   </section>
 
   <section id="add" hidden>
@@ -162,6 +164,8 @@
   document.querySelectorAll('[data-key]').forEach((b) => b.addEventListener('click', () => { buzz(); api('/api/key', { key: b.dataset.key }).catch(() => {}); }));
   document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => { buzz(); api('/api/player', { cmd: b.dataset.cmd }).catch(() => {}); }));
 
+  let tt;
+  $('#tv-type').addEventListener('input', (e) => { clearTimeout(tt); tt = setTimeout(() => api('/api/text', { text: e.target.value }).catch(() => {}), 250); });
   let t;
   $('#tv-search').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => api('/api/search', { q: e.target.value }).catch(() => {}), 350); });
 

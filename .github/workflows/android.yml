@@ -3,6 +3,7 @@ name: Android TV app
 on:
   push:
     branches: [main]
+    paths: ['android/**', 'renderer/**', 'remote/**', 'lib/media-core.js', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:

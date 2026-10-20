@@ -173,3 +173,7 @@ body.idle, body.idle * { cursor: none !important; }
 #settings .addmedia { grid-template-columns: 1fr; }
 .pin-input { width: 100%; max-width: 320px; padding: 12px 14px; margin: 8px 0 12px; border-radius: 8px; border: 1px solid #555; background: #111; color: #fff; font-size: 20px; letter-spacing: 6px; }
 .pin-input::placeholder { letter-spacing: normal; font-size: 16px; color: #888; }
+.wifi-join { display: flex; gap: 10px; align-items: center; width: 100%; }
+.wifi-join .pin-input { margin: 0; letter-spacing: normal; font-size: 17px; flex: 1; max-width: none; }
+.linkish { background: none; border: 0; color: #6fa8ff; cursor: pointer; font: inherit; padding: 0; }
+.linkish:focus { outline: 2px solid #fff; }
