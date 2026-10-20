@@ -69,9 +69,17 @@ jobs:
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
 
       - name: Install (unattended)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           KVM=""; [ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
-          ( while sleep 120; do echo "screendump install.ppm" | socat - UNIX-CONNECT:mon.sock >/dev/null 2>&1 || true; done ) &
+          gh release view ci-screens >/dev/null 2>&1 || gh release create ci-screens --prerelease --latest=false \
+            --title "CI screenshots (not for installing)" --notes "Screens from the latest automated test install."
+          # A live picture of the virtual TV every 2 minutes, so a stuck install can be seen while it runs.
+          ( while sleep 120; do
+              echo "screendump install.ppm" | socat - UNIX-CONNECT:mon.sock >/dev/null 2>&1 || continue
+              sleep 2; convert install.ppm screens-install-live.png 2>/dev/null && gh release upload ci-screens screens-install-live.png --clobber >/dev/null 2>&1 || true
+            done ) &
           set +e
           timeout 100m qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
