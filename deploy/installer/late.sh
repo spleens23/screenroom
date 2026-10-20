@@ -14,8 +14,8 @@ if [ -f /cdrom/screenroom/test_authorized_keys ]; then
   echo 'screenroom ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/screenroom-test
   chmod 440 /target/etc/sudoers.d/screenroom-test
 fi
-if ! in-target env SCREENROOM_CHROOT=1 SCREENROOM_ADMIN=screenroom bash /opt/screenroom-setup/deploy/install-tv.sh "$DEB" \
-  > /target/var/log/screenroom-install.log 2>&1; then
+# (in-target sends output to the installer's syslog, so redirect inside the new system instead)
+if ! in-target sh -c "SCREENROOM_CHROOT=1 SCREENROOM_ADMIN=screenroom bash /opt/screenroom-setup/deploy/install-tv.sh '$DEB' > /var/log/screenroom-install.log 2>&1"; then
   # Show what went wrong on screen (and keep the full log on the new system).
   . /usr/share/debconf/confmodule
   debconf-loadtemplate screenroom /cdrom/screenroom/installer/templates

@@ -30,6 +30,25 @@ jobs:
           npx electron-builder --linux deb --x64 -p never
           ls -la dist/*.deb
 
+      # Fast check (a few minutes) that the whole setup works on Debian 13, before the slow VM test.
+      - name: Set up Screenroom inside a Debian 13 container
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/w" debian:trixie bash -c '
+            set -e
+            apt-get update -qq && apt-get install -y -qq adduser sudo >/dev/null
+            cd /w/deploy && SCREENROOM_CHROOT=1 bash ./install-tv.sh /w/dist/screenroom_*_amd64.deb
+          ' > container-setup.log 2>&1
+          code=$?
+          set -e
+          tail -n 60 container-setup.log
+          if [ "$code" != "0" ]; then
+            grep -E "^E: |rror|Unable to|not found|no installation candidate|Depends:" container-setup.log | tail -n 25 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done
+            tail -n 8 container-setup.log | while IFS= read -r l; do echo "::error::tail: ${l//%/%25}"; done
+            exit 1
+          fi
+          echo "::notice::Setup works on Debian 13"
+
       # ---- 2. the automatic installer image ----------------------------------------------------------
       - name: Tools
         run: |
