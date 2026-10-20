@@ -48,6 +48,12 @@ IS_DEBIAN=0; [ "${ID:-}" = "debian" ] && IS_DEBIAN=1
 # ---- packages ------------------------------------------------------------------------------------
 say "Installing system packages (this takes a few minutes)"
 echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections || true
+# The installer USB stays listed as a package source after installation; it's gone once the stick is
+# removed, so drop it (otherwise every package update fails).
+[ -f /etc/apt/sources.list ] && sed -i -E 's|^(deb(-src)?\s+cdrom:)|# \1|' /etc/apt/sources.list || true
+for f in /etc/apt/sources.list.d/*.sources; do
+  [ -f "$f" ] && grep -q "cdrom:" "$f" && sed -i -E '/^URIs:\s*cdrom:/,/^$/ s/^/# /' "$f"  || true
+done
 if [ "$IS_DEBIAN" = "1" ] && [ -f /etc/apt/sources.list ] && ! grep -q "non-free-firmware" /etc/apt/sources.list; then
   # Graphics/Wi-Fi firmware for Intel mini PCs lives in Debian's non-free-firmware section.
   sed -i -E 's/^(deb\s+\S+\s+\S+\s+main)(.*)$/\1 contrib non-free non-free-firmware/' /etc/apt/sources.list

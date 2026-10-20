@@ -37,6 +37,8 @@ jobs:
           docker run --rm -v "$PWD:/w" debian:trixie bash -c '
             set -e
             apt-get update -qq && apt-get install -y -qq adduser sudo >/dev/null
+            # like a fresh install from the USB stick: the stick is still listed as a package source
+            echo "deb cdrom:[Debian GNU/Linux 13 _Trixie_ - Official amd64 NETINST]/ trixie main" >> /etc/apt/sources.list
             cd /w/deploy && SCREENROOM_CHROOT=1 bash ./install-tv.sh /w/dist/screenroom_*_amd64.deb
           ' > container-setup.log 2>&1
           code=$?
