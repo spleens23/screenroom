@@ -73,16 +73,18 @@ class Profiles(private val dir: File) {
         val name = input.optString("name").replace(Regex("[\\u0000-\\u001f]"), "").trim().take(24)
         if (name.isEmpty()) return fail("Give the profile a name.")
         val id = input.optString("id").takeIf { it.isNotEmpty() }
-        var p = if (id != null) get(id) ?: return fail("Profile not found") else null
-        if (all().any { it.optString("name").equals(name, ignoreCase = true) && it.optString("id") != p?.optString("id") }) {
+        val existing: JSONObject? = if (id != null) (get(id) ?: return fail("Profile not found")) else null
+        val existingId = existing?.optString("id")
+        if (all().any { it.optString("name").equals(name, ignoreCase = true) && it.optString("id") != existingId }) {
             return fail("There is already a profile with that name.")
         }
-        if (p == null) {
+        val p: JSONObject = existing ?: run {
             if (all().size >= MAX) return fail("Up to $MAX profiles.")
             val used = all().map { it.optString("color") }.toSet()
             val newId = ByteArray(4).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
-            p = JSONObject().put("id", newId).put("color", COLORS.firstOrNull { it !in used } ?: COLORS[0])
-            data.getJSONArray("profiles").put(p)
+            val created = JSONObject().put("id", newId).put("color", COLORS.firstOrNull { it !in used } ?: COLORS[0])
+            data.getJSONArray("profiles").put(created)
+            created
         }
         p.put("name", name)
         input.optString("color").takeIf { it.matches(Regex("^#[0-9a-fA-F]{6}$")) }?.let { p.put("color", it) }
