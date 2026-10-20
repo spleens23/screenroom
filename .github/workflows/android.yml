@@ -10,22 +10,41 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 images come with the Android SDK already installed.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - name: Find the Android SDK
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            echo "::error::No Android SDK on this runner"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > android/local.properties
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          echo "Using SDK at $SDK"
 
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build the APK
         working-directory: android
-        run: ./gradlew --no-daemon --stacktrace assembleRelease
+        run: |
+          set -o pipefail
+          if ! ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log; then
+            # Surface the real errors as annotations (readable without downloading logs).
+            grep -E "^e: |error:|What went wrong|> .*(failed|Could not|not found)|Unresolved reference|Execution failed" build.log \
+              | head -40 | while IFS= read -r line; do echo "::error::${line//%/%25}"; done
+            exit 1
+          fi
 
       - name: Name the APK
         run: |
@@ -43,6 +62,6 @@ jobs:
           tag_name: android-${{ github.run_number }}
           name: Screenroom for Android TV (build ${{ github.run_number }})
           body: |
-            Install on your onn 4K Pro (or any Android TV / Google TV box) — see android/SETUP.md.
+            Install on your onn 4K Pro (or any Android TV / Google TV box). See android/SETUP.md.
           files: out/*.apk
           make_latest: true
