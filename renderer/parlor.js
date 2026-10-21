@@ -27,11 +27,32 @@ window.createParlor = function createParlor(ctx) {
     shuffle: '<svg viewBox="0 0 24 24"><path d="M3 7h4l10 10h4M17 13l4 4-4 4M3 17h4l3-3M14 10l3-3h4M17 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   };
 
+  // A colour of its own for an album without a picture (the same album always gets the same one).
+  const hue = (str) => { let x = 0; for (const c of String(str || '')) x = (x * 31 + c.charCodeAt(0)) >>> 0; return x % 360; };
+  /** A sleeve for an album with no cover picture: its own colour, the title and artist set like a record label. */
+  function generatedSleeve(a, small) {
+    const hh = hue((a && (a.key || a.title)) || '');
+    return h('div', { class: 'cover-gen' + (small ? ' small' : ''), style: `--h:${hh}` },
+      h('div', { class: 'cg-rings' }),
+      small ? null : h('div', { class: 'cg-text' },
+        h('div', { class: 'cg-title' }, (a && a.title) || ''),
+        h('div', { class: 'cg-artist' }, (a && a.artist) || '')));
+  }
+  /** The record itself: grooves, a shine, and the album's cover (or colour) as its centre label. */
+  function vinyl(a, extra) {
+    const label = a && a.art ? h('img', { src: fileUrl(a.art), alt: '', draggable: 'false' }) : h('div', { class: 'vl-gen', style: `--h:${hue((a && (a.key || a.title)) || '')}` });
+    return h('div', { class: 'vinyl ' + (extra || '') }, h('div', { class: 'vinyl-shine' }), h('div', { class: 'vinyl-label' }, label, h('i', { class: 'vinyl-hole' })));
+  }
   function cover(a, size) {
     const box = h('div', { class: `cover ${size || ''}` });
     if (a && a.art) box.append(h('img', { src: fileUrl(a.art), alt: '', loading: 'lazy', draggable: 'false' }));
-    else box.append(h('div', { class: 'cover-blank' }, h('span', {}, '♪')));
+    else box.append(generatedSleeve(a, /tiny/.test(size || '')));
+    box.append(h('div', { class: 'gloss' }));
     return box;
+  }
+  /** Album card artwork: the sleeve, with the record tucked behind it (it slides out when the card is chosen). */
+  function sleeve(a) {
+    return h('div', { class: 'sleeve' }, vinyl(a, 'peek'), cover(a));
   }
 
   async function load() {
@@ -43,7 +64,7 @@ window.createParlor = function createParlor(ctx) {
   // ---- views -------------------------------------------------------------------------------------------
   function albumCard(a) {
     return h('button', { class: 'card pcard', 'data-key': a.key, title: `${a.title} — ${a.artist}`, onclick: () => openAlbum(a.key) },
-      cover(a), h('div', { class: 'pcard-t' }, a.title), h('div', { class: 'pcard-s' }, a.artist));
+      sleeve(a), h('div', { class: 'pcard-t' }, a.title), h('div', { class: 'pcard-s' }, a.artist));
   }
   function playlistCard(pl) {
     const arts = [...new Set(pl.tracks.map((id) => (track(id) || {}).albumKey))].map(album).filter((a) => a && a.art).slice(0, 4);
@@ -199,7 +220,8 @@ window.createParlor = function createParlor(ctx) {
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
             h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '＋ Playlist'),
-            P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: async () => { await api.musicCmd('enqueue', { trackIds: ids, next: true }); ctx.flash('Playing next'); } }, 'Play Next') : null),
+            P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: async () => { await api.musicCmd('enqueue', { trackIds: ids, next: true }); ctx.flash('Playing next'); } }, 'Play Next') : null,
+            P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null),
           P.canManage ? sharePanel(a) : null)),
       h('table', { class: 'songs tracks' }, h('tbody', {}, albumTracks(a).map((t, i) => {
         const cur = P.player && P.player.track && P.player.track.id === t.id;
@@ -274,6 +296,31 @@ window.createParlor = function createParlor(ctx) {
     nameDialog('Rename Playlist', pl.name, 'Save', async (name) => { const r = await api.playlistUpdate(pl.id, { name }); P = r.state; closeOverlay(); render(); });
   }
 
+  // ---- album covers ------------------------------------------------------------------------------------
+  async function findCover(a) {
+    overlay('covers', h('h2', {}, `Cover for ${a.title}`), h('p', { class: 'pnote small' }, 'Looking…'));
+    const r = await api.parlorCoverSearch(a.key);
+    if (!$('#poverlay')) return;
+    if (!r.ok) { closeOverlay(); ctx.flash(r.error); return; }
+    const pick = async (choice, label) => {
+      const res = await api.parlorCoverSet(a.key, choice);
+      if (!res.ok) { ctx.flash(res.error); return; }
+      P = res.state; closeOverlay(); ctx.flash(label || 'Cover updated'); drawAlbum(); render(); drawBar(true);
+    };
+    const tiles = [
+      ...r.results.slice(0, 8).map((x) => h('button', { class: 'cover-pick', title: `${x.album} — ${x.artist} ${x.year}`, onclick: () => pick({ url: x.url }, 'Cover saved') },
+        h('img', { src: x.thumb, alt: '' }), h('span', {}, x.album), h('small', {}, `${x.artist}${x.year ? ' · ' + x.year : ''}`))),
+      ...r.local.slice(0, 6).map((f) => h('button', { class: 'cover-pick', title: f, onclick: () => pick({ path: f }) },
+        h('img', { src: fileUrl(f), alt: '' }), h('span', {}, f.split(/[\\/]/).pop()), h('small', {}, 'in the album folder'))),
+    ];
+    overlay('covers', h('h2', {}, `Cover for ${a.title}`),
+      r.error ? h('p', { class: 'pnote small' }, r.error) : null,
+      tiles.length ? h('div', { class: 'cover-picks' }, tiles) : h('p', { class: 'pnote small' }, 'No covers found for this album.'),
+      h('div', { class: 'btns' },
+        !ctx.isTvBox() ? h('button', { class: 'btn secondary', onclick: () => pick(null) }, 'Choose a picture…') : null,
+        h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
+  }
+
   // ---- playing -----------------------------------------------------------------------------------------
   async function playIds(ids, start, context) {
     const r = await api.musicPlay({ trackIds: ids, start, context });
@@ -283,66 +330,132 @@ window.createParlor = function createParlor(ctx) {
   // Now Playing bar (bottom of the screen, both sides of the app) and the full Now Playing view.
   function cdIcon() { return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="url(#cdg)" stroke="#8a97a8" stroke-width=".8"/><defs><linearGradient id="cdg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f7fb"/><stop offset=".45" stop-color="#b9d3ee"/><stop offset=".55" stop-color="#f1d6ef"/><stop offset="1" stop-color="#dfe8f1"/></linearGradient></defs><circle cx="12" cy="12" r="3.4" fill="#d6dde6" stroke="#8a97a8" stroke-width=".6"/><circle cx="12" cy="12" r="1.3" fill="#3b4652"/></svg>'; }
 
+  // The bar and the full view are built once and then only updated (rebuilding them several times a second
+  // made buttons miss clicks).
+  const pct = (s) => (s.dur ? Math.min(100, (s.pos / s.dur) * 100) : 0);
   const bar = h('div', { id: 'npbar', hidden: true, 'data-navrow': '1' });
+  const B = {
+    art: h('button', { class: 'npb-art', 'data-b': 'art', title: 'Now Playing', onclick: () => openFull() }),
+    prev: h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
+    play: h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') }),
+    next: h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
+    title: h('div', { class: 'lcd-t' }), sub: h('div', { class: 'lcd-s' }),
+    pos: h('span', {}), fill: h('div', {}), left: h('span', {}),
+  };
+  B.lcd = h('button', { class: 'lcd', 'data-b': 'lcd', title: 'Now Playing', onclick: () => openFull() },
+    B.title, B.sub, h('div', { class: 'lcd-p' }, B.pos, h('div', { class: 'lcd-bar' }, B.fill), B.left));
+  bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, B.play, B.next), B.lcd);
   document.body.append(bar);
   let fullOpen = false;
-  function drawBar() {
+  let lastTrack = null, lastPaused = null;
+
+  function drawBar(force) {
     const s = P && P.player;
     const t = s && s.track;
     bar.hidden = !t;
     document.body.classList.toggle('has-npbar', !!t);
-    if (!t) { if (fullOpen) closeFull(); return; }
-    const a = album(t.albumKey) || { art: t.art };
-    const keep = document.activeElement && bar.contains(document.activeElement) ? document.activeElement.dataset.b : null;
-    bar.replaceChildren(
-      h('button', { class: 'npb-art', 'data-b': 'art', title: 'Now Playing', onclick: openFull }, cover(a, 'tiny')),
-      h('div', { class: 'npb-ctrl' },
-        h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
-        h('button', { class: 'npb big', 'data-b': 'play', title: s.paused ? 'Play' : 'Pause', onclick: () => api.musicCmd('toggle') }, svg(s.paused ? ICON.play : ICON.pause)),
-        h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next))),
-      h('button', { class: 'lcd', 'data-b': 'lcd', title: 'Now Playing', onclick: openFull },
-        h('div', { class: 'lcd-t' }, t.title), h('div', { class: 'lcd-s' }, `${t.artist} — ${t.album}`),
-        h('div', { class: 'lcd-p' }, h('span', {}, mmss(s.pos)), h('div', { class: 'lcd-bar' }, h('div', { style: `width:${s.dur ? Math.min(100, (s.pos / s.dur) * 100) : 0}%` })), h('span', {}, '-' + mmss((s.dur || 0) - s.pos)))));
-    if (keep) { const k = bar.querySelector(`[data-b="${keep}"]`); k && k.focus({ preventScroll: true }); }
-    if (fullOpen) drawFull();
+    document.body.classList.toggle('music-paused', !!(s && s.paused));
+    if (!t) { lastTrack = null; if (fullOpen) closeFull(); return; }
+    if (force || !lastTrack || lastTrack !== t.id) {
+      const a = album(t.albumKey) || { art: t.art, title: t.album, artist: t.artist, key: t.albumKey };
+      B.art.replaceChildren(cover(a, 'tiny'));
+      B.title.textContent = t.title; B.sub.textContent = `${t.artist} — ${t.album}`;
+    }
+    if (force || lastPaused !== s.paused) B.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
+    B.pos.textContent = mmss(s.pos); B.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
+    B.fill.style.width = pct(s) + '%';
+    if (fullOpen) drawFull(force || lastTrack !== t.id || lastPaused !== s.paused);
+    lastTrack = t.id; lastPaused = s.paused;
   }
 
+  // ---- the full Now Playing screen: the record on the turntable ----------------------------------------
+  // Left: the sleeve (tilted, glossy) with the record slid out and spinning while it plays.
+  // Right: song, artist, album, progress, big controls and Up Next. After a while without a key press the
+  // controls fade away and the cover fills the screen (any key brings them back) — "big cover" mode.
   const full = h('div', { id: 'npfull', hidden: true });
+  const F = {
+    bg: h('div', { class: 'npf-bg' }),
+    stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: 'Big cover', onclick: () => setBig(!full.classList.contains('big')) }),
+    from: h('div', { class: 'npf-from' }), title: h('h1', {}), artist: h('h2', {}), album: h('h3', {}),
+    pos: h('span', {}), left: h('span', {}), fill: h('div', {}),
+    vol: h('span', { class: 'npf-vol' }), upnext: h('div', { class: 'upnext' }),
+    caption: h('div', { class: 'npf-caption' }),
+  };
+  F.close = h('button', { class: 'np-close', 'data-b': 'close', 'aria-label': 'Close', title: 'Close (Back)', onclick: () => closeFull() }, '✕');
+  F.bigBtn = h('button', { class: 'np-close np-big', 'data-b': 'big', title: 'Big cover', onclick: () => setBig(true) }, '⤢');
+  F.barBtn = h('button', { class: 'npf-bar', 'data-b': 'bar', title: 'Left / right: skip 10 seconds',
+    onclick: (e) => { const s = P.player; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX && s) api.musicCmd('seek', ((e.clientX - r.left) / r.width) * (s.dur || 0)); },
+    onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); wakeFull(); api.musicCmd('seek', P.player.pos + (e.key === 'ArrowLeft' ? -10 : 10)); } } }, F.fill);
+  F.play = h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') });
+  F.ctrl = h('div', { class: 'npf-ctrl', 'data-navrow': '1' },
+    h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
+    F.play,
+    h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
+    h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', P.player.volume - 10) }, '−'),
+    F.vol,
+    h('button', { class: 'npb vol', 'data-b': 'vup', title: 'Louder', onclick: () => api.musicCmd('volume', P.player.volume + 10) }, '+'));
+  full.append(F.bg, h('div', { class: 'npf-top', 'data-navrow': '1' }, F.bigBtn, F.close),
+    h('div', { class: 'npf' }, F.stage,
+      h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
+        h('div', { class: 'npf-prog' }, F.pos, F.barBtn, F.left), F.ctrl, F.upnext)),
+    F.caption);
   document.body.append(full);
-  function openFull() { fullOpen = true; full.hidden = false; drawFull(); const b = full.querySelector('[data-b="play"]'); b && b.focus(); }
-  function closeFull() { fullOpen = false; full.hidden = true; const b = bar.querySelector('[data-b="lcd"]'); b && !bar.hidden && b.focus(); return true; }
-  function drawFull() {
+
+  let idle = null;
+  const BIG_AFTER = 25000;
+  function setBig(on) {
+    full.classList.toggle('big', !!on);
+    if (on) { F.stage.focus({ preventScroll: true }); } else wakeFull();
+  }
+  function wakeFull() {
+    clearTimeout(idle);
+    if (fullOpen) idle = setTimeout(() => { if (fullOpen && !full.contains(document.querySelector('.poverlay'))) setBig(true); }, BIG_AFTER);
+  }
+  // In big-cover mode the first key / click only brings the controls back.
+  full.addEventListener('keydown', (e) => {
+    if (full.classList.contains('big') && !['MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious'].includes(e.key)) {
+      e.preventDefault(); e.stopPropagation(); setBig(false); const b = F.play; b.focus({ preventScroll: true }); return;
+    }
+    wakeFull();
+  }, true);
+  full.addEventListener('mousemove', () => { if (!full.classList.contains('big')) wakeFull(); });
+
+  function openFull() {
+    fullOpen = true; full.hidden = false; full.classList.remove('big');
+    drawFull(true); F.play.focus({ preventScroll: true }); wakeFull();
+  }
+  function closeFull() {
+    fullOpen = false; full.hidden = true; full.classList.remove('big'); clearTimeout(idle);
+    if (!bar.hidden) B.lcd.focus({ preventScroll: true });
+    return true;
+  }
+  function drawFull(rebuild) {
     const s = P && P.player;
     const t = s && s.track;
     if (!t) return closeFull();
-    const a = album(t.albumKey) || { art: t.art, title: t.album };
-    const keep = document.activeElement && full.contains(document.activeElement) ? document.activeElement.dataset.b : null;
-    const ctxName = s.context && s.context.name ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
-    full.replaceChildren(
-      h('button', { class: 'close', 'data-b': 'close', onclick: closeFull, 'aria-label': 'Close' }, '✕'),
-      h('div', { class: 'npf' },
-        cover(a, 'huge reflect'),
-        h('div', { class: 'npf-side' },
-          h('div', { class: 'npf-from' }, ctxName),
-          h('h1', {}, t.title), h('h2', {}, t.artist), h('h3', {}, t.album),
-          h('div', { class: 'npf-prog' },
-            h('span', {}, mmss(s.pos)),
-            h('button', { class: 'npf-bar', 'data-b': 'bar', title: 'Left / right: skip 10 seconds',
-              onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); if (e.clientX) api.musicCmd('seek', ((e.clientX - r.left) / r.width) * (s.dur || 0)); },
-              onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); api.musicCmd('seek', s.pos + (e.key === 'ArrowLeft' ? -10 : 10)); } } },
-              h('div', { style: `width:${s.dur ? Math.min(100, (s.pos / s.dur) * 100) : 0}%` })),
-            h('span', {}, '-' + mmss((s.dur || 0) - s.pos))),
-          h('div', { class: 'npf-ctrl', 'data-navrow': '1' },
-            h('button', { class: 'npb', 'data-b': 'prev', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
-            h('button', { class: 'npb big', 'data-b': 'play', onclick: () => api.musicCmd('toggle') }, svg(s.paused ? ICON.play : ICON.pause)),
-            h('button', { class: 'npb', 'data-b': 'next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
-            h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', s.volume - 10) }, '−'),
-            h('span', { class: 'npf-vol' }, `${s.volume}%`),
-            h('button', { class: 'npb vol', 'data-b': 'vup', title: 'Louder', onclick: () => api.musicCmd('volume', s.volume + 10) }, '+')),
-          s.queue.length > s.index + 1 ? h('div', { class: 'upnext' }, h('div', { class: 'upnext-t' }, 'Up Next'),
-            ...s.queue.slice(s.index + 1, s.index + 8).map((q, i) => h('button', { class: 'upnext-i', 'data-b': 'q' + i, onclick: () => api.musicCmd('jump', s.index + 1 + i) },
-              h('span', {}, q.title), h('small', {}, q.artist)))) : null)));
-    if (keep) { const k = full.querySelector(`[data-b="${keep}"]`); k && k.focus({ preventScroll: true }); }
+    const a = album(t.albumKey) || { art: t.art, title: t.album, artist: t.artist, key: t.albumKey };
+    if (rebuild) {
+      F.bg.style.backgroundImage = a.art ? `url("${fileUrl(a.art)}")` : '';
+      F.bg.style.setProperty('--h', hue(a.key || a.title));
+      F.bg.classList.toggle('gen', !a.art);
+      F.stage.replaceChildren(h('div', { class: 'turntable' }, vinyl(a, 'out'), cover(a, 'huge')));
+      F.from.textContent = s.context && s.context.name
+        ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
+      F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
+      F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
+      F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
+      const nxt = s.queue.slice(s.index + 1, s.index + 6);
+      const keep = document.activeElement && F.upnext.contains(document.activeElement) ? document.activeElement.dataset.b : null;
+      F.upnext.hidden = !nxt.length;
+      F.upnext.replaceChildren(h('div', { class: 'upnext-t' }, 'Up Next'),
+        ...nxt.map((q, i) => h('button', { class: 'upnext-i', 'data-b': 'q' + i, onclick: () => api.musicCmd('jump', s.index + 1 + i) },
+          h('span', {}, q.title), h('small', {}, q.artist))));
+      if (keep) { const k = F.upnext.querySelector(`[data-b="${keep}"]`); (k || F.play).focus({ preventScroll: true }); }
+    }
+    full.classList.toggle('paused', !!s.paused);
+    F.pos.textContent = mmss(s.pos); F.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
+    F.fill.style.width = pct(s) + '%';
+    F.vol.textContent = `${s.volume}%`;
   }
 
   api.onMusicState((s) => {
@@ -355,18 +468,18 @@ window.createParlor = function createParlor(ctx) {
     // a new song started: "Recently Played" has moved on (shown next time the page is drawn)
     if (changed && s.track) api.parlorState().then((x) => { if (P) P.recent = x.recent; }).catch(() => {});
   });
-  api.onParlorUpdated(async () => { P = await api.parlorState(); drawBar(); if (ctx.isOpen()) render(); });
+  api.onParlorUpdated(async () => { P = await api.parlorState(); drawBar(true); if (ctx.isOpen()) render(); });
   load().then(drawBar).catch(() => {});
 
   // ---- what app.js calls -----------------------------------------------------------------------------
   return {
     render,
     go,
-    reload: async () => { P = await api.parlorState(); drawBar(); },
+    reload: async () => { P = await api.parlorState(); drawBar(true); },
     /** Back button: close the top thing; false when there's nothing left (then app.js leaves the Parlor). */
     back() {
       if (closeOverlay()) return true;
-      if (fullOpen) return closeFull();
+      if (fullOpen) { if (full.classList.contains('big')) { setBig(false); F.play.focus({ preventScroll: true }); return true; } return closeFull(); }
       if (view !== 'home') { view = history.pop() || 'home'; if (view.startsWith('playlist:') && !P.playlists.some((p) => 'playlist:' + p.id === view)) view = 'home'; render(); return true; }
       return false;
     },
@@ -404,6 +517,16 @@ window.createParlor = function createParlor(ctx) {
       box.append(h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: async () => { const r = await api.parlorAddDir(); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error); } }, 'Add music folder…'),
         P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Scanning…'; P = await api.parlorRescan(); draw(); } }, 'Rescan music') : null));
+      const noArt = P.albums.filter((a) => !a.art).length;
+      if (noArt && api.parlorCoversAuto) {
+        box.append(h('p', { class: 'am-hint' }, `${noArt} album${noArt === 1 ? ' has' : 's have'} no cover. Screenroom can look them up online (needs an internet connection) and save each as cover.jpg in the album's folder; or pick one on the album's page.`),
+          h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
+            e.target.textContent = 'Looking up covers…';
+            const r = await api.parlorCoversAuto();
+            if (!r.ok) { ctx.flash(r.error); draw(); return; }
+            P = r.state; ctx.flash(`Found ${r.found} of ${r.missing} covers${r.found < r.missing ? ' (the rest can be picked on each album\'s page)' : ''}`); draw(); render();
+          } }, 'Find missing covers')));
+      }
     };
     draw().catch(() => {});
     return box;

@@ -1343,6 +1343,7 @@
       closeModal,
       openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
       wantsKeyboard: () => oskAllowed() && !kbInUse(),
+      isTvBox: () => !!S.appliance,
     });
     const b = $('#parlor-btn');
     b.hidden = false;
