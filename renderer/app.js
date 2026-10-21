@@ -4,6 +4,8 @@
   let S = { library: [], progress: {}, config: {}, mpvFound: true, ffprobeFound: true };
   let view = 'home';
   let query = '';
+  let mode = 'movies'; // 'movies' | 'parlor' (music)
+  let parlorUI = null;
 
   if (navigator.platform.includes('Mac')) document.body.classList.add('mac');
 
@@ -269,6 +271,7 @@
     drawProfileButton();
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
+    if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }
     $('#nav').classList.toggle('solid', view !== 'home' || !!query);
     if (!S.library.length) return renderEmpty();
     if (query) return renderGrid(`Results for “${query}”`, catalogOf(matches));
@@ -297,6 +300,7 @@
   const closeModal = () => {
     const back = open && open.returnKey;
     $('#modal').hidden = true; open = null;
+    if (parlorUI) parlorUI.onModalClosed();
     const el = back && document.querySelector(`.card[data-key="${CSS.escape(back)}"]`);
     if (el) el.focus({ preventScroll: false });
   };
@@ -724,6 +728,7 @@
     if (!r.ok) { flash(r.error || 'Could not switch'); if (p.hasPin) return chooseProfile(p); return; }
     S = r.state;
     query = ''; $('#search').value = ''; view = 'home';
+    if (parlorUI) parlorUI.reload();
     document.querySelectorAll('#nav nav a').forEach((x) => x.classList.toggle('active', x.dataset.view === 'home'));
     drawProfileButton();
     render();
@@ -894,6 +899,8 @@
           : 'Pick your HDMI / optical device for surround or passthrough.')), deviceSel),
       toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote'),
       remoteBox,
+      parlorUI ? h('h3', { id: 'set-parlor' }, 'Parlor (music)') : null,
+      parlorUI ? parlorUI.settingsBlock() : null,
       h('h3', {}, 'Add media'),
       addMediaPanel(),
       h('h3', {}, 'Library folders'),
@@ -956,23 +963,25 @@
   });
   window.addEventListener('scroll', () => $('#nav').classList.toggle('solid', window.scrollY > 40 || view !== 'home' || !!query));
 
-  const FOCUSABLE = 'a[data-view], button:not([disabled]), .card, .ep, .track, input, select';
+  const FOCUSABLE = 'a[data-view], a[data-pview], button:not([disabled]), .card, .ep, .track, .srow, input, select';
   const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function scopeEls() {
     let els;
     if (osk) els = osk.el.querySelectorAll('.osk-key');
     else if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
     else if ($('#who') && !$('#who').hidden) els = $('#who').querySelectorAll(FOCUSABLE);
+    else if (parlorUI && parlorUI.scope()) els = parlorUI.scope().querySelectorAll(FOCUSABLE);
     else if (!$('#modal').hidden) els = $('#modal').querySelectorAll(FOCUSABLE);
     else if (!$('#settings').hidden) els = $('#settings').querySelectorAll(FOCUSABLE);
-    else els = document.querySelectorAll(`#nav ${FOCUSABLE.split(', ').join(', #nav ')}, #main ${FOCUSABLE.split(', ').join(', #main ')}`);
+    else els = document.querySelectorAll(`#nav ${FOCUSABLE.split(', ').join(', #nav ')}, #main ${FOCUSABLE.split(', ').join(', #main ')}, #npbar button`);
     return [...new Set(els)].filter(shown);
   }
   function focusEl(el) {
     navFocus = true; // moving onto a text box with the remote doesn't pop up the keyboard (OK does)
     el.focus({ preventScroll: true });
     navFocus = false;
-    if (!el.closest('#nav')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    // (things in fixed bars / overlays are always on screen: scrolling them "into view" would shift the whole page)
+    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
   function defaultFocus(els) {
     return els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card')) || els[0];
@@ -988,7 +997,11 @@
     const a = cur.getBoundingClientRect();
     const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
     let best = null, bestScore = Infinity;
-    for (const el of els) {
+    // Left/right inside a control strip (the music bar, player buttons) stays in that strip.
+    const grp = cur.closest('[data-navrow]');
+    let pool = els;
+    if (grp && (dir === 'left' || dir === 'right')) { const inG = els.filter((e) => grp.contains(e)); if (inG.length > 1) pool = inG; }
+    for (const el of pool) {
       if (el === cur) continue;
       const r = el.getBoundingClientRect();
       const dx = r.left + r.width / 2 - ax, dy = r.top + r.height / 2 - ay;
@@ -1022,10 +1035,12 @@
     if (osk) { closeOsk(); return true; }
     if (pinState) { pinState.cancel(); return true; }
     if ($('#who') && !$('#who').hidden) return true;
+    if (parlorUI && parlorUI.scope()) { parlorUI.back(); return true; }
     if (!$('#modal').hidden) { closeModal(); return true; }
     if (!$('#settings').hidden) { closeSettings(); return true; }
     if (document.activeElement === $('#search')) $('#search').blur();
     if (query) { query = ''; $('#search').value = ''; render(); return true; }
+    if (mode === 'parlor') { if (!parlorUI.back()) toggleMode(); return true; }
     if (view !== 'home') { setView('home'); return true; }
     return false;
   }
@@ -1180,6 +1195,9 @@
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
     if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); closeModal(); if (!$('#settings').hidden) closeSettings(); setView('home'); return; }
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
+    if (api.musicCmd && (e.key === 'MediaPlayPause' || e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious')) {
+      e.preventDefault(); api.musicCmd(e.key === 'MediaPlayPause' ? 'toggle' : e.key === 'MediaTrackNext' ? 'next' : 'prev'); return;
+    }
     if (e.key === 'F11' && !S.tv && S.platform !== 'android') { e.preventDefault(); api.setConfig({ appFullscreen: !S.config.appFullscreen }).then((s) => { S = s; if (!$('#settings').hidden) renderSettings(); }); return; }
     if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type === 'checkbox') { e.preventDefault(); t.click(); return; }
     if (e.key === 'Enter' && t.tagName === 'SELECT' && S.tv) { e.preventDefault(); cycleSelect(t); return; }
@@ -1224,6 +1242,7 @@
       else if (m.key === 'settings') toggleSettings();
     } else if (m.type === 'open') {
       if (!$('#settings').hidden) closeSettings();
+      if (mode === 'parlor') toggleMode();
       openEntry(m.key);
     } else if (m.type === 'text' && osk) {
       osk.input.value = ''; oskInsert(m.text || '');
@@ -1270,7 +1289,8 @@
   api.onPlaybackError(flash);
   // full screen switched from the window itself (green button / menu): keep Settings in step
   if (api.onConfigChanged) api.onConfigChanged((s) => { S = s; if (!$('#settings').hidden) renderSettings(); });
-  api.onScanProgress((p) => { if (p.total) setScanning(true, `Scanning ${p.done}/${p.total}…`); });
+  api.onScanProgress((p) => { if (p.total) setScanning(true, p.music ? `Scanning music ${p.done}/${p.total}…` : `Scanning ${p.done}/${p.total}…`); });
+  if (api.onParlorUpdated) api.onParlorUpdated(() => setScanning(false));
 
   // Re-draw without losing your place (used when something changes in the background).
   function renderKeepFocus() {
@@ -1297,6 +1317,39 @@
     renderKeepFocus();
     if (keep && !$('#modal').hidden) { open = keep; renderModal(); }
   });
+
+  // ---- Parlor (music) ------------------------------------------------------------------------------
+  function toggleMode() {
+    mode = mode === 'parlor' ? 'movies' : 'parlor';
+    document.body.classList.toggle('parlor', mode === 'parlor');
+    $('#nav .brand').textContent = mode === 'parlor' ? 'PARLOR' : 'SCREENROOM';
+    $('#search').placeholder = mode === 'parlor' ? 'Search music…' : 'Search titles, genres…';
+    const b = $('#parlor-btn');
+    b.title = mode === 'parlor' ? 'Back to films' : 'Parlor (music)';
+    b.innerHTML = mode === 'parlor' ? FILM_ICON : parlorUI.cdIcon();
+    query = ''; $('#search').value = '';
+    if (!$('#modal').hidden) closeModal();
+    render(); window.scrollTo(0, 0);
+    if (document.body.classList.contains('navmode')) { const f = main.querySelector('.btn, .card'); f && focusEl(f); }
+  }
+  const FILM_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.6"/></svg>';
+  if (window.createParlor && api.parlorState) {
+    parlorUI = window.createParlor({
+      h, $, api, flash, focusEl,
+      query: () => query,
+      clearQuery: () => { query = ''; $('#search').value = ''; },
+      isOpen: () => mode === 'parlor',
+      showModal: () => { $('#modal').hidden = false; $('#modal').scrollTop = 0; },
+      closeModal,
+      openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
+      wantsKeyboard: () => oskAllowed() && !kbInUse(),
+    });
+    const b = $('#parlor-btn');
+    b.hidden = false;
+    b.innerHTML = parlorUI.cdIcon();
+    b.addEventListener('click', toggleMode);
+    document.querySelectorAll('#pnav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); parlorUI.go(a.dataset.pview); }));
+  }
 
   (async () => { S = await api.state(); render(); wake(); })();
 })();

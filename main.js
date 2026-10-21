@@ -10,6 +10,7 @@ const remote = require('./lib/remote');
 const transfer = require('./lib/transfer');
 const system = require('./lib/system');
 const audio = require('./lib/audio');
+const { setupParlor } = require('./lib/parlor-ipc');
 const { Profiles } = require('./lib/profiles');
 const core = require('./lib/media-core');
 const qrcode = require('qrcode-generator');
@@ -160,6 +161,7 @@ function snapshot() {
 
 // ---- USB drives + the folder uploads land in ------------------------------------------------
 let drives = [];
+let parlorApi = null;
 let mediaRoot = null;
 
 async function ensureMediaDir() {
@@ -291,7 +293,14 @@ const remoteHandlers = {
     if (playing) { const c = PLAYER_KEYS[k]; if (c) control(c); return; }
     tell({ type: 'key', key: k });
   },
-  player: (cmd) => { const c = PLAYER_CMDS[cmd]; if (c) control(c); },
+  player: (cmd) => {
+    // No film playing: the phone's play/pause, skip and volume buttons work the Parlor's music instead.
+    if (!playing && parlorApi) {
+      const m = { pause: 'toggle', next: 'next', seekfwd: 'next', seekback: 'prev', volup: 'volup', voldown: 'voldown', stop: 'toggle' }[cmd];
+      if (m && parlorApi.command(m)) return;
+    }
+    const c = PLAYER_CMDS[cmd]; if (c) control(c);
+  },
   open: (key) => { if (!playing) tell({ type: 'open', key }); },
   search: (q) => { if (!playing) tell({ type: 'search', q }); },
   text: (t) => { if (!playing) tell({ type: 'text', text: t }); },
@@ -366,7 +375,14 @@ app.whenReady().then(async () => {
   drives = await transfer.listDrives().catch(() => []);
   createWindow();
   startRemote();
-  win.webContents.once('did-finish-load', () => setTimeout(backgroundScan, 1500));
+  // Parlor: each profile's music (see lib/parlor-ipc.js)
+  parlorApi = setupParlor({
+    ipcMain, dialog, getWin: () => win, dataDir, toolPaths, findMpv: () => findBinary('mpv', config.mpvPath),
+    currentProfile, profilesList: () => profiles.list(), isMoviePlaying: () => playing,
+    soundDevice: async () => (await soundFor()).audioDevice || '', mediaRoot: () => mediaRoot, drives: () => drives,
+    exclusiveAudio: isAppliance,
+  });
+  win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
   setInterval(backgroundScan, 30 * 60 * 1000);
   setInterval(pollDrives, 5000);
 
@@ -475,6 +491,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('play', async (_e, { id, audioTrack, fromStart }) => {
     if (playing) return { ok: false, error: 'Something is already playing.' };
+    if (parlorApi) parlorApi.pause(); // music stops for the film
     const item = library.find((i) => i.id === id);
     if (!item) return { ok: false, error: 'Item not found' };
 
@@ -551,6 +568,7 @@ app.whenReady().then(async () => {
     if (playing) return { ok: false, error: 'Stop playback first.' };
     if (!profiles.get(id)) return { ok: false, error: 'Profile not found' };
     if (!profiles.checkPin(id, pin)) { await slow(); return { ok: false, error: 'Wrong PIN' }; }
+    if (id !== currentId && parlorApi) parlorApi.profileChanged();
     currentId = id;
     progress = profiles.loadProgress(id);
     needPick = false;
@@ -582,6 +600,7 @@ app.whenReady().then(async () => {
     if (err) return { ok: false, error: err };
     const r = profiles.remove(id);
     if (!r.ok) return r;
+    if (parlorApi) parlorApi.forget(id);
     if (id === currentId) { currentId = profiles.last().id; progress = profiles.loadProgress(currentId); needPick = profiles.needsPicker(); }
     return { ok: true, state: snapshot() };
   });
@@ -590,3 +609,4 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => { if (parlorApi) parlorApi.quit(); });

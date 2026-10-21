@@ -18,7 +18,15 @@
     <a href="#" data-view="hd">HD</a>
     <a href="#" data-view="sd">SD</a>
   </nav>
+  <nav id="pnav">
+    <a href="#" data-pview="home" class="active">Home</a>
+    <a href="#" data-pview="albums">Albums</a>
+    <a href="#" data-pview="artists">Artists</a>
+    <a href="#" data-pview="songs">Songs</a>
+    <a href="#" data-pview="playlists">Playlists</a>
+  </nav>
   <div class="nav-right">
+    <button id="parlor-btn" title="Parlor (music)" hidden></button>
     <input id="search" type="search" placeholder="Search titles, genres…" autocomplete="off">
     <button id="settings-btn" title="Settings">⚙</button>
   </div>
@@ -43,6 +51,7 @@
 </div>
 
 <script src="../lib/media-core.js"></script>
+<script src="parlor.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

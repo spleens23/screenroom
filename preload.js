@@ -40,4 +40,17 @@ contextBridge.exposeInMainWorld('api', {
   onPlaybackError: (cb) => ipcRenderer.on('playback-error', (_e, m) => cb(m)),
   onPlaybackEnded: (cb) => ipcRenderer.on('playback-ended', (_e, s) => cb(s)),
   onConfigChanged: (cb) => ipcRenderer.on('config-changed', (_e, s) => cb(s)),
+  // Parlor (music)
+  parlorState: () => ipcRenderer.invoke('parlor-state'),
+  parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),
+  parlorAddDir: (dir) => ipcRenderer.invoke('parlor-add-dir', dir || null),
+  parlorRemoveDir: (dir) => ipcRenderer.invoke('parlor-remove-dir', dir),
+  parlorShare: (albumKey, pid, on) => ipcRenderer.invoke('parlor-share', albumKey, pid, on),
+  playlistCreate: (name, trackIds) => ipcRenderer.invoke('playlist-create', name, trackIds),
+  playlistUpdate: (id, patch) => ipcRenderer.invoke('playlist-update', id, patch),
+  playlistDelete: (id) => ipcRenderer.invoke('playlist-delete', id),
+  musicPlay: (req) => ipcRenderer.invoke('music-play', req),
+  musicCmd: (cmd, arg) => ipcRenderer.invoke('music-cmd', cmd, arg),
+  onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
+  onParlorUpdated: (cb) => ipcRenderer.on('parlor-updated', () => cb()),
 });
