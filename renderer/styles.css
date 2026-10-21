@@ -254,3 +254,7 @@ body.osk-open .modal-card { margin-bottom: 48vh; }
 .m-actions .quality select { max-width: 520px; }
 .m-actions .quality select { background: #1f1f1f; color: #fff; border: 1px solid #666; border-radius: 6px; padding: 8px 10px; font-size: 15px; }
 .m-actions .quality select:focus { outline: 2px solid #fff; }
+.ep:hover .ep-desc, .ep:focus .ep-desc, .ep:focus-within .ep-desc { -webkit-line-clamp: unset; display: block; }
+.desc-more { background: none; border: 0; color: #fff; font-weight: 600; padding: 0; margin: -10px 0 18px; cursor: pointer; text-decoration: underline; }
+.m-desc.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.meta .rating { border: 1px solid #888; color: #ddd; padding: 0 6px; border-radius: 3px; font-size: 13px; }

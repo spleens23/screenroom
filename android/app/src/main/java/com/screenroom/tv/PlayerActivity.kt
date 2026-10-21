@@ -133,6 +133,9 @@ class PlayerActivity : Activity() {
         val params = player.trackSelectionParameters.buildUpon()
         audioLang.takeIf { it.isNotBlank() }?.let { params.setPreferredAudioLanguage(it) }
         subLang.takeIf { it.isNotBlank() }?.let { params.setPreferredTextLanguage(it) }
+        // No subtitle language chosen: subtitles stay off even if the file marks a track "default"
+        // (forced subtitles still show).
+        if (subLang.isBlank()) params.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
         // Dolby first when a film has both Dolby and DTS (the TV/soundbar takes Dolby as it is); DTS still works
         // (decoded by Screenroom) and can be picked under Audio & Subtitles.
         params.setPreferredAudioMimeTypes(MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_TRUEHD, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_AC3)
@@ -403,6 +406,7 @@ class PlayerActivity : Activity() {
         actions.add {
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).setPreferredTextLanguage(null).build()
+            rememberSubs("")
         }
         for (g in groups) {
             if (g.type != C.TRACK_TYPE_TEXT) continue
@@ -427,6 +431,17 @@ class PlayerActivity : Activity() {
         // Remember the language so the next episodes pick the same one.
         if (type == C.TRACK_TYPE_AUDIO) b.setPreferredAudioLanguage(f.language) else b.setPreferredTextLanguage(f.language)
         player.trackSelectionParameters = b.build()
+        if (type == C.TRACK_TYPE_TEXT && !f.language.isNullOrBlank()) rememberSubs(try { Locale(f.language!!).isO3Language } catch (_: Throwable) { f.language!! })
+    }
+
+    /** Subtitles turned off ("") or to a language: remembered on the profile for the next film. */
+    private fun rememberSubs(lang: String) {
+        App.io.execute {
+            val st = App.store
+            val p = st.currentProfile() ?: return@execute
+            if (p.optString("subLang") == lang) return@execute
+            try { st.profiles.upsert(JSONObject().put("id", p.optString("id")).put("name", p.optString("name")).put("subLang", lang)) } catch (_: Throwable) {}
+        }
     }
 
     private fun cycle(type: Int) {
@@ -436,6 +451,7 @@ class PlayerActivity : Activity() {
         val cur = options.indexOfFirst { it.first.isTrackSelected(it.second) }
         if (type == C.TRACK_TYPE_TEXT && cur == options.size - 1) {
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+            rememberSubs("")
             toast("Subtitles off")
             return
         }

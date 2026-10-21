@@ -37,12 +37,14 @@
   // ---- turning raw scan entries into library items -----------------------------------------------
   let library = [];
   function finish(raw) {
-    const items = (raw.library || []).map((r) => {
+    const all = (raw.library || []).map((r) => {
       const it = MediaCore.buildItemFromProbe(r.path, { mtimeMs: r.mtime, size: r.size }, r.probe || {}, r.id);
       it.art = r.art || null;
       it.backdrop = r.backdrop || null;
       return MediaCore.applyTv(it);
-    }).filter((it) => MediaCore.allowedFor(it, raw.profile)); // kids profiles only see what's rated for them
+    });
+    MediaCore.fillSeriesRatings(all);
+    const items = all.filter((it) => MediaCore.allowedFor(it, raw.profile)); // kids profiles only see what's rated for them
     const deduped = MediaCore.dedupeEpisodes(items);
     const dups = deduped.dups || [];
     library = deduped.sort((a, b) => a.title.localeCompare(b.title));

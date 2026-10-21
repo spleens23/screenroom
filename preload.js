@@ -39,4 +39,5 @@ contextBridge.exposeInMainWorld('api', {
   onRemote: (cb) => ipcRenderer.on('remote', (_e, m) => cb(m)),
   onPlaybackError: (cb) => ipcRenderer.on('playback-error', (_e, m) => cb(m)),
   onPlaybackEnded: (cb) => ipcRenderer.on('playback-ended', (_e, s) => cb(s)),
+  onConfigChanged: (cb) => ipcRenderer.on('config-changed', (_e, s) => cb(s)),
 });

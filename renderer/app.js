@@ -224,7 +224,11 @@
       if (e.year) bits.push(e.year);
       if (e.item.duration) bits.push(fmtDur(e.item.duration));
     }
-    return bits.map((b) => h('span', {}, b));
+    // the age rating read from the file(s), e.g. "TV-Y7" (what kids profiles go by)
+    const rated = (e.items || []).map((i) => i.rating).filter(Boolean).sort((a, b) => b.level - a.level)[0];
+    const out = bits.map((b) => h('span', {}, b));
+    if (rated) out.push(h('span', { class: 'rating' }, rated.label));
+    return out;
   }
 
   function renderHome() {
@@ -318,6 +322,18 @@
       vid.dv ? 'Dolby Vision' : vid.hdr, best && best.label, `${(v.size / 1e9).toFixed(1)} GB`].filter(Boolean).join(' · ');
   };
 
+  // A long description shows its first few lines and a "More" button (works with the remote: OK toggles it).
+  function descBlock(text) {
+    const p = h('p', { class: 'm-desc' }, text);
+    if (text.length < 280) return p;
+    p.classList.add('clamped');
+    const more = h('button', { class: 'desc-more', onclick: () => {
+      const short = p.classList.toggle('clamped');
+      more.textContent = short ? 'More' : 'Less';
+    } }, 'More');
+    return h('div', {}, p, more);
+  }
+
   function movieDetail(e) {
     const vs = e.versions || [e.item];
     const item = (open.version && vs.find((v) => v.id === open.version)) || e.item;
@@ -349,7 +365,7 @@
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges([item])),
-          h('p', {}, item.description || 'No description.'),
+          descBlock(item.description || 'No description.'),
           item.audio.length ? h('div', { class: 'tracks' }, h('h3', {}, 'Audio'), trackEls) : null),
         h('div', { class: 'side' },
           item.genres.length ? h('div', {}, h('b', {}, 'Genres: '), item.genres.join(', ')) : null,
@@ -403,7 +419,7 @@
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges(e.items)),
-          h('p', {}, e.description || ''),
+          descBlock(e.description || ''),
           h('h3', { class: 'ep-title' }, 'Episodes'), select ? h('div', { class: 'ep-top' }, select) : null,
           h('div', { class: 'eps' }, epRows)),
         h('div', { class: 'side' },
@@ -870,7 +886,8 @@
       isAndroid ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
       isAndroid ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
       isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
-      isAndroid ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
+      isAndroid || S.tv ? null : toggle('Full screen', 'Screenroom and the player use the whole screen. (Also F11, or the green button on a Mac window.)', 'appFullscreen'),
+      isAndroid || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
       isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
@@ -1163,6 +1180,7 @@
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
     if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); closeModal(); if (!$('#settings').hidden) closeSettings(); setView('home'); return; }
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
+    if (e.key === 'F11' && !S.tv && S.platform !== 'android') { e.preventDefault(); api.setConfig({ appFullscreen: !S.config.appFullscreen }).then((s) => { S = s; if (!$('#settings').hidden) renderSettings(); }); return; }
     if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type === 'checkbox') { e.preventDefault(); t.click(); return; }
     if (e.key === 'Enter' && t.tagName === 'SELECT' && S.tv) { e.preventDefault(); cycleSelect(t); return; }
     if (e.key === 'Enter' && t === document.body) { e.preventDefault(); activate(); return; }
@@ -1250,6 +1268,8 @@
     flashTimer = setTimeout(() => { el.hidden = true; }, 9000);
   }
   api.onPlaybackError(flash);
+  // full screen switched from the window itself (green button / menu): keep Settings in step
+  if (api.onConfigChanged) api.onConfigChanged((s) => { S = s; if (!$('#settings').hidden) renderSettings(); });
   api.onScanProgress((p) => { if (p.total) setScanning(true, `Scanning ${p.done}/${p.total}…`); });
 
   // Re-draw without losing your place (used when something changes in the background).

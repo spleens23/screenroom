@@ -303,6 +303,8 @@ local function apply_entry(col, e)
   else
     mp.set_property('sid', e.id)
     S.pref_sub = (e.id == 'no') and 'no' or { lang = e.lang }
+    -- Screenroom remembers this for next time (per profile): off, or this language
+    mp.commandv('script-message', 'nf-sub-choice', (e.id == 'no') and 'no' or (e.lang or ''))
   end
   build_menu_lists()
   -- mpv updates 'selected' asynchronously; reflect the choice immediately

@@ -51,6 +51,8 @@ let library = [];
 let remoteServer = null;
 
 const isTv = () => TV_FLAG || !!config.tvMode;
+// Full screen for the whole app (Settings → Full screen, F11, or the window's green button on a Mac); TV mode always is.
+const wantFull = () => isTv() || !!config.appFullscreen;
 
 // The Linux TV box (set up by the Screenroom installer) uses plain ALSA: pick the speaker/TV/headphone jack ourselves.
 const isAppliance = () => process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance');
@@ -77,7 +79,7 @@ function applyZoom() {
 
 function applyTv() {
   if (!win || win.isDestroyed()) return;
-  win.setFullScreen(isTv());
+  win.setFullScreen(wantFull());
   win.setMenuBarVisibility(!isTv());
   applyZoom();
 }
@@ -116,12 +118,20 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
     backgroundColor: '#141414',
-    fullscreen: isTv(),
+    fullscreen: wantFull(),
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   if (isTv()) win.setMenuBarVisibility(false);
+  // Remember full screen however it was switched (green button, menu, F11), so the app opens that way next time.
+  const syncFull = () => {
+    if (isTv() || !win || win.isDestroyed()) return;
+    const fs_ = win.isFullScreen();
+    if (!!config.appFullscreen !== fs_) { config.appFullscreen = fs_; writeJson(cfgFile(), config); win.webContents.send('config-changed', snapshot()); }
+  };
+  win.on('enter-full-screen', syncFull);
+  win.on('leave-full-screen', syncFull);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', applyZoom);
   win.on('resize', applyZoom);
@@ -415,7 +425,7 @@ app.whenReady().then(async () => {
     const before = { ...config };
     config = { ...config, ...patch };
     writeJson(cfgFile(), config);
-    if ('tvMode' in patch && patch.tvMode !== before.tvMode) applyTv();
+    if (('tvMode' in patch && patch.tvMode !== before.tvMode) || ('appFullscreen' in patch && patch.appFullscreen !== before.appFullscreen)) applyTv();
     if (('remote' in patch && patch.remote !== before.remote) || ('remotePort' in patch && patch.remotePort !== before.remotePort)) startRemote();
     return snapshot();
   });
@@ -482,11 +492,19 @@ app.whenReady().then(async () => {
     try {
       playing = true;
       const sound = await soundFor();
-      await play(entries, { ...config, ...sound, tv: isTv(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
+      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };
           if (Date.now() - lastSave > 30000) save();
+        },
+        // Subtitles turned off (or to a language) in the player: remember it for this profile.
+        onSubChoice: (lang) => {
+          const p = currentProfile();
+          if (!p || lang === undefined) return;
+          const subLang = lang === 'no' ? '' : lang;
+          if (lang !== 'no' && !lang) return; // a track without a language: nothing useful to remember
+          if ((p.subLang || '') !== subLang) { try { profiles.upsert({ id: p.id, name: p.name, subLang }); } catch {} }
         },
         onSwitch: (pid, pos, dur, reason) => {
           const it = getItem(pid);
