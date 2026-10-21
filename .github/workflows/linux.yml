@@ -130,7 +130,7 @@ jobs:
             -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
             -audiodev none,id=snd0 -device ich9-intel-hda -device hda-output,audiodev=snd0 \
             -vga std -display none -monitor unix:$PWD/mon2.sock,server,nowait -daemonize
-          SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 screenroom@localhost"
+          SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -p 2222 screenroom@localhost"
           for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
           $SSH true || { echo "::error::The installed box never came up on ssh"; exit 1; }
           sleep 75   # let the TV session start and the library scan run
@@ -150,10 +150,14 @@ jobs:
           check "maintenance login created"             "$SSH sudo test -s /etc/screenroom/maintenance"
           check "power button = shut down"              "$SSH grep -q HandlePowerKey=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf"
           check "sound outputs switched on (none muted)" "$SSH 'amixer -c 0 scontents' > /tmp/mix; grep -q Playback /tmp/mix && ! grep -q '\[off\]' /tmp/mix"
-          check "Bluetooth sound service running"      "$SSH systemctl is-active bluealsa"
+          # (The test machine has no Bluetooth adapter, so this checks the service is set up and starts.)
+          $SSH "systemctl cat bluealsa.service; systemctl status bluealsa --no-pager -n 15; command -v bluealsa bluealsad" 2>&1 | tail -n 40 | while IFS= read -r l; do echo "::notice::bluealsa: ${l//%/%25}"; done
+          check "Bluetooth sound service set up"       "$SSH 'systemctl is-enabled bluealsa && sudo systemctl start bluealsa && sleep 3 && systemctl is-active bluealsa'"
           # An update (installing a newer app package) also brings the box's own setup up to date.
-          scp -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 2222 dist/screenroom_*_amd64.deb screenroom@localhost:/tmp/sr.deb
-          $SSH "sudo apt-get install -y --reinstall /tmp/sr.deb >/dev/null 2>&1"; sleep 45
+          scp -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -P 2222 out/screenroom_*_amd64.deb screenroom@localhost:/tmp/sr.deb || echo "::error::copying the app package to the test box failed"
+          $SSH "sudo apt-get install -y --reinstall /tmp/sr.deb >/dev/null 2>&1" || echo "::error::reinstalling the app package failed"
+          sleep 45
+          $SSH "sudo tail -n 15 /var/log/screenroom-refresh.log" 2>&1 | while IFS= read -r l; do echo "::notice::refresh: ${l//%/%25}"; done
           check "update refreshes the box setup"       "$SSH grep -q 'box refresh done' /var/log/screenroom-refresh.log"
           echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
           echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
