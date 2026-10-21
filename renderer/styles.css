@@ -229,3 +229,22 @@ html:has(> body.tv)::-webkit-scrollbar { display: none; }
 .kids-opts[hidden] { display: none; }
 .prof-actions { margin-top: 24px; }
 .btn.danger { color: #ff8a8a; }
+
+/* ---- on-screen keyboard (TV box) ---- */
+.osk { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; background: rgba(20,20,20,.97); border-top: 1px solid #333;
+  padding: 14px 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 -10px 40px rgba(0,0,0,.6); }
+.osk-field { width: min(900px, 100%); min-height: 48px; padding: 10px 14px; border-radius: 8px; background: #000; border: 2px solid #555;
+  font-size: 24px; color: #fff; display: flex; align-items: center; overflow: hidden; white-space: pre; }
+.osk-ph { color: #777; font-size: 20px; }
+.osk-caret { display: inline-block; width: 2px; height: 28px; background: #e50914; margin-left: 2px; animation: osk-blink 1s steps(1) infinite; }
+@keyframes osk-blink { 50% { opacity: 0; } }
+.osk-keys { display: flex; flex-direction: column; gap: 6px; width: min(900px, 100%); }
+.osk-row { display: flex; gap: 6px; justify-content: center; }
+.osk-key { flex: 1 1 0; min-width: 0; height: 52px; border: 0; border-radius: 8px; background: #333; color: #fff; font-size: 22px; font-weight: 600; cursor: pointer; }
+.osk-key.wide { flex: 1.4 1 0; font-size: 17px; }
+.osk-key.space { flex: 4 1 0; font-size: 17px; }
+.osk-key.on { background: #666; }
+.osk-key.done { background: #e50914; }
+.osk-key:focus, .osk-key:hover { background: #fff; color: #000; outline: none; }
+body.osk-open .modal-card { margin-bottom: 48vh; }
+.osk-hint { position: fixed; z-index: 85; background: #fff; color: #000; font-size: 14px; font-weight: 600; padding: 4px 10px; border-radius: 6px; pointer-events: none; }

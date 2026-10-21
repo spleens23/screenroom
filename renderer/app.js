@@ -898,7 +898,8 @@
   const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function scopeEls() {
     let els;
-    if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
+    if (osk) els = osk.el.querySelectorAll('.osk-key');
+    else if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
     else if ($('#who') && !$('#who').hidden) els = $('#who').querySelectorAll(FOCUSABLE);
     else if (!$('#modal').hidden) els = $('#modal').querySelectorAll(FOCUSABLE);
     else if (!$('#settings').hidden) els = $('#settings').querySelectorAll(FOCUSABLE);
@@ -906,7 +907,9 @@
     return [...new Set(els)].filter(shown);
   }
   function focusEl(el) {
+    navFocus = true; // moving onto a text box with the remote doesn't pop up the keyboard (OK does)
     el.focus({ preventScroll: true });
+    navFocus = false;
     if (!el.closest('#nav')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
   function defaultFocus(els) {
@@ -941,11 +944,13 @@
   }
   function activate() {
     const el = document.activeElement;
+    if (isTextInput(el) && oskAllowed()) { openOsk(el); return; }
     if (el && el !== document.body && scopeEls().includes(el)) el.click();
     else move('down');
   }
   // Returns true if it did something (so a TV remote's Back can leave the app when there's nothing left to close).
   function goBack() {
+    if (osk) { closeOsk(); return true; }
     if (pinState) { pinState.cancel(); return true; }
     if ($('#who') && !$('#who').hidden) return true;
     if (!$('#modal').hidden) { closeModal(); return true; }
@@ -956,14 +961,145 @@
     return false;
   }
 
+  // ---- on-screen keyboard ----------------------------------------------------------------------------
+  // TV box: pressing OK on a text box (search, Wi-Fi password, profile name...) opens a keyboard you work with
+  // the remote. While a real keyboard is being used, text boxes just take its typing and Enter moves on.
+  // Android has its own keyboard, so this is only for the Linux box.
+  let osk = null;           // { input, el, shift, sym }
+  // A real keyboard counts as "in use" for 5 minutes after it last typed a letter (then the remote's OK
+  // opens the on-screen keyboard again, e.g. after the keyboard is unplugged).
+  let kbTypedAt = 0;
+  const kbInUse = () => Date.now() - kbTypedAt < 5 * 60 * 1000;
+  let navFocus = false;
+  const isTextInput = (el) => !!el && el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type);
+  const oskAllowed = () => !!(S && S.tv) && S.platform !== 'android';
+  const OSK_ROWS = {
+    abc: ['1234567890', 'qwertyuiop', "asdfghjkl'", 'zxcvbnm,.-'],
+    sym: ['1234567890', '!@#$%&*()_', '+=/\\?:;"<>', '[]{}~`^|€£'],
+  };
+
+  function oskInsert(text) {
+    const inp = osk.input;
+    const max = inp.maxLength > 0 ? inp.maxLength : Infinity;
+    if (text === null) inp.value = inp.value.slice(0, -1);
+    else if (text === '') inp.value = '';
+    else inp.value = (inp.value + text).slice(0, max);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    drawOskField();
+  }
+  function drawOskField() {
+    if (!osk) return;
+    const v = osk.input.value;
+    const shownText = osk.input.type === 'password' ? '•'.repeat(Math.max(0, v.length - 1)) + v.slice(-1) : v;
+    osk.field.replaceChildren(
+      v ? h('span', {}, shownText) : h('span', { class: 'osk-ph' }, osk.input.placeholder || 'Type here'),
+      h('span', { class: 'osk-caret' }));
+  }
+  function drawOskKeys(keep) {
+    const rows = osk.sym ? OSK_ROWS.sym : OSK_ROWS.abc;
+    const focused = keep && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.k;
+    const key = (k, label, cls, fn) => h('button', { class: `osk-key ${cls || ''}`, 'data-k': k, tabindex: '-1', onclick: fn }, label);
+    const letter = (ch) => {
+      const c = osk.shift ? ch.toUpperCase() : ch;
+      return key(ch, c, '', () => { oskInsert(c); if (osk.shift === 1) { osk.shift = 0; drawOskKeys(true); } });
+    };
+    osk.keys.replaceChildren(
+      ...rows.map((r) => h('div', { class: 'osk-row' }, [...r].map(letter))),
+      h('div', { class: 'osk-row' },
+        key('shift', osk.shift === 2 ? '⇪' : '⇧', `wide ${osk.shift ? 'on' : ''}`, () => { osk.shift = osk.shift ? 0 : 1; drawOskKeys(true); }),
+        key('sym', osk.sym ? 'abc' : '?123', 'wide', () => { osk.sym = !osk.sym; drawOskKeys(true); }),
+        key('space', 'Space', 'space', () => oskInsert(' ')),
+        key('del', '⌫', 'wide', () => oskInsert(null)),
+        key('clear', 'Clear', 'wide', () => oskInsert('')),
+        key('done', 'Done', 'wide done', () => closeOsk(true))));
+    const again = focused && osk.keys.querySelector(`[data-k="${CSS.escape(focused)}"]`);
+    if (again) again.focus({ preventScroll: true });
+  }
+  function openOsk(input) {
+    if (osk) closeOsk();
+    hideOskHint();
+    const el = h('div', { id: 'osk', class: 'osk' });
+    osk = { input, el, shift: 0, sym: false, field: h('div', { class: 'osk-field' }), keys: h('div', { class: 'osk-keys' }) };
+    el.append(osk.field, osk.keys);
+    document.body.append(el);
+    document.body.classList.add('osk-open');
+    drawOskField(); drawOskKeys();
+    input.scrollIntoView({ block: 'center' });
+    const first = el.querySelector('[data-k="q"]') || el.querySelector('.osk-key');
+    first && first.focus({ preventScroll: true });
+  }
+  // done = true: the "Done" key, which also moves on (search: to the results; Wi-Fi password: to Join).
+  function closeOsk(done) {
+    if (!osk) return;
+    const { input, el } = osk;
+    osk = null;
+    el.remove();
+    document.body.classList.remove('osk-open');
+    navFocus = true; input.focus({ preventScroll: true }); navFocus = false;
+    if (done) afterTyping(input);
+  }
+  function afterTyping(input) {
+    if (input.id === 'search') { input.blur(); const c = document.querySelector('#main .card, #main .btn'); c && focusEl(c); return; }
+    const next = input.parentElement && input.parentElement.querySelector('button');
+    if (next) { focusEl(next); return; }
+    move('down');
+  }
+  // "Press OK to type" next to a text box reached with the remote.
+  let oskHint = null;
+  function showOskHint(input) {
+    hideOskHint();
+    const r = input.getBoundingClientRect();
+    oskHint = h('div', { class: 'osk-hint' }, 'Press OK to type');
+    oskHint.style.left = `${Math.max(8, r.left)}px`;
+    oskHint.style.top = `${r.bottom + 6}px`;
+    document.body.append(oskHint);
+  }
+  function hideOskHint() { if (oskHint) { oskHint.remove(); oskHint = null; } }
+  document.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (!isTextInput(t) || !oskAllowed() || osk) { hideOskHint(); return; }
+    if (navFocus) { if (!kbInUse() && document.body.classList.contains('navmode')) showOskHint(t); return; }
+    hideOskHint();
+  });
+  document.addEventListener('focusout', () => hideOskHint());
+  // Clicking a text box with a mouse / air mouse opens the keyboard too (unless a real keyboard is being used).
+  document.addEventListener('click', (e) => {
+    if (isTextInput(e.target) && oskAllowed() && !kbInUse() && !osk) openOsk(e.target);
+  });
+  const printable = (e) => e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey;
+
   document.addEventListener('keydown', (e) => {
     const t = e.target;
+    // On-screen keyboard open: real-keyboard typing goes straight into the text box (and closes it).
+    if (osk) {
+      if (printable(e)) { e.preventDefault(); kbTypedAt = Date.now(); oskInsert(e.key); closeOsk(); return; }
+      if (e.key === 'Backspace') { e.preventDefault(); if (!e.repeat && !osk.input.value) closeOsk(); else oskInsert(null); return; }
+      if (e.key === 'Escape' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); closeOsk(); return; }
+    }
+    if (isTextInput(t) && printable(e)) kbTypedAt = Date.now();
     if (pinState && /^[0-9]$/.test(e.key)) { e.preventDefault(); pinState.add(e.key); return; }
     if (pinState && e.key === 'Backspace') { e.preventDefault(); pinState.del(); return; }
     if (t.tagName === 'INPUT' && t.type === 'search') {
       if (e.key === 'Escape') { t.blur(); e.preventDefault(); }
+      else if (e.key === 'Enter' && oskAllowed() && !kbInUse()) { e.preventDefault(); openOsk(t); }
       else if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); t.blur(); const c = document.querySelector('#main .card, #main .btn'); c && focusEl(c); }
       return;
+    }
+    if (isTextInput(t) && !pinState) {
+      // Backspace deletes; it only means "back" in an empty box, and only for remote users (holding it down
+      // on a keyboard never throws away the screen you were typing in).
+      if (e.key === 'Backspace') {
+        if (t.value || kbInUse() || e.repeat) return;
+        e.preventDefault(); goBack(); return;
+      }
+      // Left/right move the cursor inside the text; at either end they move on to the next thing.
+      if ((e.key === 'ArrowLeft' && (t.selectionStart > 0 || t.selectionEnd > 0)) ||
+          (e.key === 'ArrowRight' && t.selectionEnd < t.value.length)) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (oskAllowed() && !kbInUse()) openOsk(t); else afterTyping(t);
+        return;
+      }
     }
     const dir = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key];
     if (dir) {
@@ -1017,6 +1153,8 @@
     } else if (m.type === 'open') {
       if (!$('#settings').hidden) closeSettings();
       openEntry(m.key);
+    } else if (m.type === 'text' && osk) {
+      osk.input.value = ''; oskInsert(m.text || '');
     } else if (m.type === 'text' && pinState) {
       pinState.typed(m.text);
     } else if (m.type === 'text') {
