@@ -156,6 +156,9 @@ jobs:
           # (The test machine has no Bluetooth adapter, so this checks the service is set up and starts.)
           # Details for debugging go to screens-diag.txt on the ci-screens release (annotations are capped at 10).
           $SSH "set -x; dpkg -l | grep -i -E 'bluez|bluealsa'; ls -l /usr/bin/blue* /usr/sbin/blue* 2>&1; systemctl cat bluealsa.service; systemctl status bluealsa --no-pager -n 20; sudo grep -n -i -E -A25 'sound and Bluetooth|box refresh' /var/log/screenroom-install.log | head -80" > screens-diag.txt 2>&1 || true
+          # The Settings → System → "Check for updates" button: the TV user (the app) may start the update service.
+          { echo "=== polkit"; $SSH "dpkg -l | grep -i polkit; sudo ls -la /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; sudo cat /etc/polkit-1/rules.d/50-screenroom.rules; systemctl status polkit --no-pager -n 5; sudo -u tv systemctl start --no-block screenroom-update.service; echo exit=\$?; sudo journalctl -u polkit --no-pager -n 20"; } >> screens-diag.txt 2>&1 || true
+          check "TV user may start an update"          "$SSH 'sudo -u tv systemctl start --no-block screenroom-update.service'"
           check "Bluetooth sound service set up"       "$SSH 'systemctl is-enabled bluealsa && sudo systemctl start bluealsa && sleep 3 && systemctl is-active bluealsa'"
           # An update (installing a newer app package) also brings the box's own setup up to date.
           scp -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -P 2222 out/screenroom_*_amd64.deb screenroom@localhost:/tmp/sr.deb || echo "::error::copying the app package to the test box failed"
