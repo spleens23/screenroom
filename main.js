@@ -82,7 +82,7 @@ function applyZoom() {
 
 function applyTv() {
   if (!win || win.isDestroyed()) return;
-  win.setFullScreen(wantFull());
+  if (win.isFullScreen() !== wantFull()) win.setFullScreen(wantFull());
   win.setMenuBarVisibility(!isTv());
   applyZoom();
 }
@@ -90,11 +90,20 @@ function applyTv() {
 // The screen can change size after we start (a VM resizing its display, a TV waking up and
 // reporting its real resolution). Re-fit the full-screen window so it never covers only part of it.
 let refitTimer = null;
-function refit() {
-  if (!isTv()) return;
+let lastRefit = 0;
+function refit(_e, _display, changed) {
+  // Only on the Linux TV box (a Mac changes its "work area" every time a window goes full screen, which used
+  // to start an endless full screen / windowed loop), only for a real change of the screen's size, and only
+  // when the window doesn't already cover the screen.
+  if (!isTv() || process.platform !== 'linux') return;
+  if (Array.isArray(changed) && !changed.some((c) => c === 'bounds' || c === 'scaleFactor')) return;
+  if (Date.now() - lastRefit < 5000) return;
   clearTimeout(refitTimer);
   refitTimer = setTimeout(() => {
     if (!win || win.isDestroyed()) return;
+    const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
+    if (b.width === d.width && b.height === d.height && b.x === d.x && b.y === d.y) return;
+    lastRefit = Date.now();
     win.setFullScreen(false);
     setTimeout(() => {
       if (!win || win.isDestroyed()) return;
@@ -112,7 +121,7 @@ function watchDisplay() {
     setTimeout(() => {
       if (!isTv() || !win || win.isDestroyed()) return;
       const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
-      if (b.width !== d.width || b.height !== d.height) refit();
+      if (b.width !== d.width || b.height !== d.height) refit(null, null, ['bounds']);
     }, ms);
   }
 }
@@ -121,7 +130,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
     backgroundColor: '#141414',
-    fullscreen: wantFull(),
+    fullscreen: process.platform === 'darwin' ? false : wantFull(),
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
@@ -133,8 +142,9 @@ function createWindow() {
     const fs_ = win.isFullScreen();
     if (!!config.appFullscreen !== fs_) { config.appFullscreen = fs_; writeJson(cfgFile(), config); win.webContents.send('config-changed', snapshot()); }
   };
-  win.on('enter-full-screen', syncFull);
-  win.on('leave-full-screen', syncFull);
+  if (process.platform === 'darwin' && wantFull()) win.once('ready-to-show', () => { if (!win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true); });
+  // (listen only after start-up, so the window going full screen at start isn't mistaken for a choice)
+  setTimeout(() => { if (win && !win.isDestroyed()) { win.on('enter-full-screen', syncFull); win.on('leave-full-screen', syncFull); } }, 3000);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', applyZoom);
   win.on('resize', applyZoom);

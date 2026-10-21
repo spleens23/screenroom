@@ -39,9 +39,13 @@ window.createParlor = function createParlor(ctx) {
         h('div', { class: 'cg-artist' }, (a && a.artist) || '')));
   }
   /** The record itself: grooves, a shine, and the album's cover (or colour) as its centre label. */
+  const VINYL_KINDS = ['black', 'color', 'color', 'marble', 'clear', 'color', 'black', 'split'];
   function vinyl(a, extra) {
+    const seed = hue(((a && (a.key || a.title)) || '') + '#record');
+    const kind = VINYL_KINDS[seed % VINYL_KINDS.length];
     const label = a && a.art ? h('img', { src: fileUrl(a.art), alt: '', draggable: 'false' }) : h('div', { class: 'vl-gen', style: `--h:${hue((a && (a.key || a.title)) || '')}` });
-    return h('div', { class: 'vinyl ' + (extra || '') }, h('div', { class: 'vinyl-shine' }), h('div', { class: 'vinyl-label' }, label, h('i', { class: 'vinyl-hole' })));
+    return h('div', { class: `vinyl v-${kind} ${extra || ''}`, style: `--vh:${(seed * 7) % 360}` },
+      h('div', { class: 'vinyl-shine' }), h('div', { class: 'vinyl-label' }, label, h('i', { class: 'vinyl-hole' })));
   }
   function cover(a, size) {
     const box = h('div', { class: `cover ${size || ''}` });
@@ -328,6 +332,7 @@ window.createParlor = function createParlor(ctx) {
   }
 
   // Now Playing bar (bottom of the screen, both sides of the app) and the full Now Playing view.
+  function noteIcon() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17.5V5.2l11-2.2v12.4"/><path d="M9 9.2l11-2.2"/><ellipse cx="6.3" cy="17.6" rx="2.7" ry="2.2"/><ellipse cx="17.3" cy="15.5" rx="2.7" ry="2.2"/></svg>'; }
   function cdIcon() { return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="url(#cdg)" stroke="#8a97a8" stroke-width=".8"/><defs><linearGradient id="cdg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f7fb"/><stop offset=".45" stop-color="#b9d3ee"/><stop offset=".55" stop-color="#f1d6ef"/><stop offset="1" stop-color="#dfe8f1"/></linearGradient></defs><circle cx="12" cy="12" r="3.4" fill="#d6dde6" stroke="#8a97a8" stroke-width=".6"/><circle cx="12" cy="12" r="1.3" fill="#3b4652"/></svg>'; }
 
   // The bar and the full view are built once and then only updated (rebuilding them several times a second
@@ -507,6 +512,7 @@ window.createParlor = function createParlor(ctx) {
       const el = k && main.querySelector(`.card[data-key="${CSS.escape(k)}"]`); if (el) el.focus({ preventScroll: true });
     },
     cdIcon,
+    noteIcon,
     state: () => P,
     settingsBlock,
   };

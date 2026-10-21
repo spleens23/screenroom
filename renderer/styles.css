@@ -666,3 +666,28 @@ body.big .npb { width: 44px; height: 44px; } body.big .npb.big { width: 56px; he
 body.big #np-chip { font-size: 15px; padding: 7px 14px 7px 8px; } body.big #np-chip .npc-disc { width: 24px; height: 24px; }
 body.big .cover-pick span { font-size: 15px; } body.big .poverlay-card { width: min(620px, 94vw); padding: 28px 30px; }
 body.big .poverlay-card h2 { font-size: 24px; }
+
+/* ---- highlight room: the enlarged, outlined card is never clipped at the top of its row ---- */
+.strip { padding-top: 26px; padding-bottom: 34px; }
+.row h2 { margin-bottom: 0; }
+body.big .strip { padding-top: 36px; padding-bottom: 44px; }
+/* nothing (a record sliding out, an enlarged card) can push the page sideways */
+html, body { overflow-x: clip; }
+.ppage, .rows, .pgrid { overflow-x: clip; overflow-y: visible; }
+.pgrid { padding-right: calc(4% + 60px); }
+
+/* ---- the Parlor button: a music note in the same outline style as the film icon ---- */
+#parlor-btn svg { width: 24px; height: 24px; }
+#parlor-btn:hover { transform: none; color: #fff; }
+body.parlor #parlor-btn svg { width: 24px; height: 24px; }
+
+/* ---- coloured records ---- */
+.vinyl.v-color { background: repeating-radial-gradient(circle, hsla(var(--vh) 70% 46% / .95) 0 1.2px, hsla(var(--vh) 70% 38% / .95) 1.2px 2.6px),
+  radial-gradient(circle, hsl(var(--vh) 70% 52%), hsl(var(--vh) 70% 30%)); }
+.vinyl.v-marble { background: repeating-radial-gradient(circle, rgba(0,0,0,.14) 0 1px, transparent 1px 2.6px),
+  conic-gradient(from 30deg, hsl(var(--vh) 65% 55%), hsl(calc(var(--vh) + 40) 70% 70%), hsl(var(--vh) 55% 35%), hsl(calc(var(--vh) - 30) 65% 60%), hsl(var(--vh) 65% 55%)); }
+.vinyl.v-clear { background: repeating-radial-gradient(circle, rgba(255,255,255,.10) 0 1px, transparent 1px 2.6px),
+  radial-gradient(circle, hsla(var(--vh) 60% 70% / .55), hsla(var(--vh) 60% 45% / .35)); backdrop-filter: blur(2px); box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.25); }
+.vinyl.v-split { background: repeating-radial-gradient(circle, rgba(0,0,0,.16) 0 1.2px, transparent 1.2px 2.6px),
+  linear-gradient(135deg, hsl(var(--vh) 70% 50%) 0 50%, hsl(calc(var(--vh) + 150) 65% 55%) 50% 100%); }
+.vinyl.v-black { }

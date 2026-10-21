@@ -1341,7 +1341,7 @@
     $('#search').placeholder = mode === 'parlor' ? 'Search music…' : 'Search titles, genres…';
     const b = $('#parlor-btn');
     b.title = mode === 'parlor' ? 'Back to films' : 'Parlor (music)';
-    b.innerHTML = mode === 'parlor' ? FILM_ICON : parlorUI.cdIcon();
+    b.innerHTML = mode === 'parlor' ? FILM_ICON : parlorUI.noteIcon();
     query = ''; $('#search').value = '';
     if (!$('#modal').hidden) closeModal();
     render(); window.scrollTo(0, 0);
@@ -1362,7 +1362,7 @@
     });
     const b = $('#parlor-btn');
     b.hidden = false;
-    b.innerHTML = parlorUI.cdIcon();
+    b.innerHTML = parlorUI.noteIcon();
     b.addEventListener('click', toggleMode);
     document.querySelectorAll('#pnav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); parlorUI.go(a.dataset.pview); }));
   }
