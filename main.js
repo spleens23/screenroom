@@ -447,7 +447,9 @@ app.whenReady().then(async () => {
     return { appliance: isAppliance, version: app.getVersion(), host: `${os.hostname()}.local`, maintenance: maint.user ? maint : null, update };
   });
   ipcMain.handle('appliance-update', () => new Promise((resolve) => {
-    execFile('systemctl', ['start', '--no-block', 'screenroom-update.service'], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
+    execFile('systemctl', ['start', '--no-block', 'screenroom-update.service'], (err) => resolve(err ? { ok: false, error: /Access denied|not authorized/i.test(err.message)
+      ? 'This box isn\'t set up to let Screenroom install updates. Set it up again with the newest installer USB, or run "sudo screenroom-update" over the maintenance login.'
+      : 'Could not start the update: ' + err.message.split('\n')[0] } : { ok: true }));
   }));
   ipcMain.handle('quit', () => app.quit());
   ipcMain.handle('power', (_e, action) => new Promise((resolve) => {

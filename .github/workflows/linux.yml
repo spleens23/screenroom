@@ -158,6 +158,8 @@ jobs:
           $SSH "set -x; dpkg -l | grep -i -E 'bluez|bluealsa'; ls -l /usr/bin/blue* /usr/sbin/blue* 2>&1; systemctl cat bluealsa.service; systemctl status bluealsa --no-pager -n 20; sudo grep -n -i -E -A25 'sound and Bluetooth|box refresh' /var/log/screenroom-install.log | head -80" > screens-diag.txt 2>&1 || true
           # The Settings → System → "Check for updates" button: the TV user (the app) may start the update service.
           { echo "=== polkit"; $SSH "dpkg -l | grep -i polkit; sudo ls -la /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; sudo cat /etc/polkit-1/rules.d/50-screenroom.rules; systemctl status polkit --no-pager -n 5; sudo -u tv systemctl start --no-block screenroom-update.service; echo exit=\$?; sudo journalctl -u polkit --no-pager -n 20"; } >> screens-diag.txt 2>&1 || true
+          check "optional extras installed"            "$SSH dpkg -s polkitd cec-utils python3-evdev udiskie gvfs >/dev/null"
+          check "TV user may restart / shut down"      "$SSH \"sudo -u tv sh -c 'pkcheck --action-id org.freedesktop.login1.reboot --process \\\$\\\$'\""
           check "TV user may start an update"          "$SSH 'sudo -u tv systemctl start --no-block screenroom-update.service'"
           check "Bluetooth sound service set up"       "$SSH 'systemctl is-enabled bluealsa && sudo systemctl start bluealsa && sleep 3 && systemctl is-active bluealsa'"
           # An update (installing a newer app package) also brings the box's own setup up to date.

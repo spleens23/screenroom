@@ -71,18 +71,22 @@ apt-get install -y --no-install-recommends \
   mesa-va-drivers vainfo \
   udisks2 udiskie exfatprogs ntfs-3g dosfstools \
   samba avahi-daemon libnss-mdns \
-  network-manager bluez \
+  network-manager bluez polkitd \
   plymouth plymouth-themes \
   unattended-upgrades openssh-server \
   ca-certificates curl jq pciutils
 
 # Things whose names differ between Debian and Ubuntu, or that only some machines need.
+# Installed together when possible; if that fails (one package can't be installed), one at a time, so one bad
+# package never silently drops all the others.
 optional() {
   local pkgs=()
   for p in "$@"; do apt-cache show "$p" >/dev/null 2>&1 && pkgs+=("$p"); done
-  [ "${#pkgs[@]}" -gt 0 ] && apt-get install -y --no-install-recommends "${pkgs[@]}" || true
+  [ "${#pkgs[@]}" -gt 0 ] || return 0
+  apt-get install -y --no-install-recommends "${pkgs[@]}" && return 0
+  for p in "${pkgs[@]}"; do apt-get install -y --no-install-recommends "$p" || echo "Skipped optional package $p"; done
 }
-optional fonts-inter fonts-noto-core polkitd policykit-1 gvfs gvfs-backends cec-utils python3-evdev libva-drm2
+optional fonts-inter fonts-noto-core gvfs gvfs-backends cec-utils python3-evdev libva-drm2
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
   optional intel-media-va-driver i965-va-driver firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-intel-sound
 fi

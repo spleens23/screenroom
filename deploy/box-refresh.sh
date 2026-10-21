@@ -13,7 +13,7 @@ APT=(apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends)
 
 # ---- Bluetooth speakers and headphones (BlueALSA: Bluetooth sound without PulseAudio/PipeWire) -------------
 want=()
-for p in bluez-alsa-utils libasound2-plugin-bluez; do
+for p in polkitd bluez-alsa-utils libasound2-plugin-bluez; do
   dpkg -s "$p" >/dev/null 2>&1 || want+=("$p")
 done
 if [ "${#want[@]}" -gt 0 ]; then
