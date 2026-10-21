@@ -527,3 +527,142 @@ body.tv #npfull.big { cursor: none; }
 @media (max-width: 760px) {
   .npf { grid-template-columns: 1fr; } .turntable { width: 60vw; } .npf-side { padding-left: 0; }
 }
+
+/* Now Playing button in the top bar */
+#np-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 240px; padding: 5px 12px 5px 6px; border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #eee; font-size: 13px; }
+#np-chip[hidden] { display: none; }
+#np-chip .npc-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#np-chip .npc-disc { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle, #6ea6f0 0 22%, #111 24%, #333 60%, #111 62%); animation: recdisc 1.8s linear infinite; }
+body.music-paused #np-chip .npc-disc { animation-play-state: paused; }
+@keyframes recdisc { to { transform: rotate(360deg); } }
+#np-chip:hover, #np-chip:focus { border-color: #6ea6f0; background: rgba(110,166,240,.18); outline: none; }
+body.navmode #np-chip:focus { outline: 3px solid #6ea6f0; outline-offset: 2px; }
+
+/* ======================================================================================================
+   Parlor, dark: the same dark room as the film side (no bright flash when switching), with the iTunes
+   touches kept — graphite brushed-metal bar, Aqua-blue highlights, the LCD, striped lists, glossy sleeves.
+   ====================================================================================================== */
+body.parlor {
+  --p-bg: #141414; --p-panel: #1b1b1b; --p-line: #333; --p-text: #e8e8e8; --p-muted: #9a9a9a;
+  --p-blue: #4f8fe8; --p-blue2: #7db0f5; --p-stripe: #1d2129;
+  --bg: #141414; --bg2: #1b1b1b; --fg: #e8e8e8; --muted: #9a9a9a;
+  background: #141414; color: var(--p-text);
+}
+html:has(> body.parlor) { background: #141414; }
+body.parlor #nav, body.parlor #nav.solid { background: linear-gradient(#3a3a3a, #232323); border-bottom: 1px solid #000;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 10px rgba(0,0,0,.5); }
+body.parlor .brand { color: #7db0f5; text-shadow: 0 1px 0 rgba(0,0,0,.6); }
+body.parlor #pnav a { color: #ddd; text-shadow: 0 1px 0 rgba(0,0,0,.6); }
+body.parlor #pnav a.active { background: linear-gradient(#7db0f5, #3a74d6); color: #fff; }
+body.parlor #search { background: #111; border-color: #555; color: #eee; box-shadow: inset 0 1px 3px rgba(0,0,0,.6); }
+body.parlor #settings-btn, body.parlor #parlor-btn { color: #ddd; text-shadow: none; }
+body.parlor .btn.secondary { background: linear-gradient(#4a4a4a, #2c2c2c); color: #eee; border: 1px solid #111; box-shadow: inset 0 1px 0 rgba(255,255,255,.15); }
+body.parlor .btn.primary { background: linear-gradient(#8bbaf6, #3a74d6 55%, #2f63bd); border-color: #1d4a91; }
+body.parlor .page-title, body.parlor .phead h1 { color: #f2f2f2; text-shadow: none; }
+body.parlor .row h2 { color: #e5e5e5; text-shadow: none; }
+body.parlor #scan-status { background: #222; color: #eee; border-color: #444; }
+body.parlor .pcard-t { color: #eee; } body.parlor .pcard-s { color: #9a9a9a; }
+body.parlor .cover { background: #2a2a2a; box-shadow: 0 1px 1px rgba(0,0,0,.5), 0 8px 18px rgba(0,0,0,.55), 0 22px 34px -14px rgba(0,0,0,.7); }
+body.parlor .cover-blank { background: linear-gradient(135deg, #3b3b3b, #1e2a3a); color: #7f93ad; }
+body.parlor.navmode :focus { outline-color: var(--p-blue2); }
+
+body.parlor table.songs { background: #181818; border-color: #333; color: #e6e6e6; }
+body.parlor table.songs th { background: linear-gradient(#3a3a3a, #262626); color: #ddd; border-color: #111; border-right-color: #333; }
+body.parlor table.songs tbody tr:nth-child(even) { background: var(--p-stripe); }
+body.parlor table.songs .t, body.parlor table.songs .n, body.parlor table.songs .g { color: #a5a5a5; }
+body.parlor .srow:hover td { background: rgba(79,143,232,.12); }
+body.parlor .srow.now td:first-child, body.parlor .srow.now td:nth-child(2) { color: #7db0f5; }
+body.parlor tr.disc td { background: #222 !important; color: #bbb; }
+body.parlor .rowbtn { color: #7db0f5; } body.parlor .rowbtn:hover, body.parlor .rowbtn:focus { background: #222; border-color: #7db0f5; }
+body.parlor .srow .by { color: #999; }
+
+.modal-card.pmodal, body.parlor .modal-card.pmodal { background: linear-gradient(#232323, #181818); color: #e8e8e8; border-color: #000; }
+.modal-card.pmodal .close { background: linear-gradient(#4a4a4a, #2a2a2a); color: #eee; border-color: #111; }
+.modal-card.pmodal .palbum-info h1 { color: #f5f5f5; }
+.modal-card.pmodal .partist { color: #7db0f5; }
+.modal-card.pmodal .pmeta, .modal-card.pmodal .pshare-t { color: #9a9a9a; }
+.modal-card.pmodal table.songs { background: #181818; border-color: #333; color: #e6e6e6; }
+.modal-card.pmodal table.songs tbody tr:nth-child(even) { background: #1d2129; }
+.modal-card.pmodal table.songs .t, .modal-card.pmodal table.songs .n { color: #a5a5a5; }
+.chip.pchip { background: linear-gradient(#4a4a4a, #2c2c2c); color: #eee; border-color: #111; }
+.chip.pchip.on { background: linear-gradient(#7db0f5, #3a74d6); border-color: #1d4a91; }
+
+.poverlay { background: rgba(0,0,0,.6); }
+.poverlay-card { background: linear-gradient(#262626, #1a1a1a); color: #eee; border-color: #000; }
+.poverlay input.pin-input { background: #111; color: #eee; border-color: #555; }
+.poverlay-card .btn.secondary, body:not(.parlor) .poverlay-card .btn.secondary { background: linear-gradient(#4a4a4a, #2c2c2c); color: #eee; border: 1px solid #111; }
+.cover-pick { color: #eee; } .cover-pick small { color: #999; }
+.pempty { color: #e8e8e8; } .pempty p { color: #aaa; }
+
+#npbar, body.parlor #npbar { background: linear-gradient(#333, #1c1c1c); border-top: 1px solid #000; color: #eee; box-shadow: 0 -2px 10px rgba(0,0,0,.5); }
+.npb { background: linear-gradient(#555, #2b2b2b); color: #eee; border-color: #111; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 1px 3px rgba(0,0,0,.5); }
+.npb:hover { filter: brightness(1.15); }
+.npb:focus, .npb-art:focus, .lcd:focus, .npf-bar:focus, .upnext-i:focus { outline-color: #7db0f5; }
+.lcd { border-color: #000; }
+
+#npfull { background: #101010; color: #eee; }
+#npfull::after { background: radial-gradient(ellipse at 35% 45%, rgba(20,20,20,.35), rgba(16,16,16,.78) 60%, rgba(10,10,10,.92)); }
+.npf-bg { opacity: .6; }
+.np-close { background: linear-gradient(#4a4a4a, #262626); color: #eee; border-color: #000; box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 2px 8px rgba(0,0,0,.6); }
+.np-close:focus { outline-color: #7db0f5; }
+.npf-from { color: #9a9a9a; }
+.npf-side h1 { text-shadow: 0 2px 10px rgba(0,0,0,.6); color: #fafafa; }
+.npf-side h2 { color: #7db0f5; } .npf-side h3 { color: #b5b5b5; }
+.npf-prog, .npf-vol { color: #cfcfcf; }
+.npf-bar { border-color: #000; background: #2a2a2a; box-shadow: inset 0 1px 3px rgba(0,0,0,.7); }
+.npf-bar div { background: linear-gradient(#8bbaf6, #3a74d6); }
+.upnext { background: rgba(24,24,24,.85); border-color: #333; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.upnext-t { background: linear-gradient(#3a3a3a, #262626); border-color: #111; color: #ddd; }
+.upnext-i { color: #eee; } .upnext-i:nth-child(odd) { background: rgba(29,33,41,.9); } .upnext-i small { color: #999; }
+.npf-caption span { color: #bbb; }
+.turntable .cover.huge { box-shadow: 0 2px 2px rgba(0,0,0,.5), 0 34px 70px -10px rgba(0,0,0,.85), -18px 22px 40px -14px rgba(0,0,0,.6); }
+.vinyl { box-shadow: 0 8px 24px rgba(0,0,0,.7), inset 0 0 0 2px #000; }
+
+/* ======================================================================================================
+   Big buttons: on the TV (always) and on a computer when switched on in Settings. Everything is also
+   zoomed up by the app; these make small text, controls and the highlight bolder still.
+   ====================================================================================================== */
+body.big { --card-w: 200px; }
+body.big #nav nav { font-size: 17px; gap: 26px; }
+body.big #pnav a { font-size: 16px; padding: 7px 16px; }
+body.big #search { font-size: 16px; padding: 9px 14px; }
+body.big .btn { font-size: 19px; padding: 12px 28px; border-radius: 8px; }
+body.big .chip { font-size: 17px; padding: 10px 20px; }
+body.big.navmode :focus, body.big.navmode .btn:focus, body.big.navmode .chip:focus { outline-width: 4px; outline-offset: 4px; }
+body.big .card:focus, body.big .card:hover { transform: scale(1.1); }
+/* settings */
+body.big .modal-card.narrow { width: min(860px, 100%); padding: 34px 38px; }
+body.big #settings-body h2 { font-size: 30px; }
+body.big #settings-body h3 { font-size: 22px; margin-top: 30px; }
+body.big label.row-set { font-size: 19px; padding: 18px 4px; gap: 20px; }
+body.big label.row-set small { font-size: 15px; line-height: 1.4; }
+body.big label.row-set input[type=checkbox] { width: 30px; height: 30px; flex: 0 0 auto; accent-color: #e50914; }
+body.big.parlor label.row-set input[type=checkbox] { accent-color: #4f8fe8; }
+body.big .am-card { padding: 22px 24px; }
+body.big .am-hint { font-size: 16px; }
+body.big .dev-select, body.big .season-select { font-size: 17px; padding: 12px 14px; max-width: 420px; }
+body.big .dirs .dir { font-size: 16px; padding: 12px 14px; }
+body.big .dir button, body.big .linkish { font-size: 16px; }
+body.big .btns { flex-wrap: wrap; gap: 14px; }
+body.big .drive { padding: 14px 0; font-size: 17px; } body.big .drive-name small { font-size: 14px; }
+body.big .close { width: 48px; height: 48px; font-size: 20px; }
+body.big .remote-box { font-size: 17px; }
+/* films */
+body.big .m-body { font-size: 18px; } body.big .side { font-size: 16px; }
+body.big .meta { font-size: 17px; } body.big .badge { font-size: 13px; }
+body.big .track { padding: 13px 16px; font-size: 17px; }
+body.big .ep { padding: 18px 16px; } body.big .ep-desc { font-size: 15px; }
+body.big .m-actions .quality select { font-size: 18px; padding: 10px 14px; }
+/* parlor */
+body.big table.songs { font-size: 17px; } body.big table.songs th { font-size: 15px; padding: 8px 12px; }
+body.big table.songs td { padding: 12px 14px; }
+body.big .rowbtn { width: 38px; height: 32px; font-size: 20px; }
+body.big .pcard-t { font-size: 16px; } body.big .pcard-s { font-size: 14px; }
+body.big .pmeta { font-size: 16px; } body.big .palbum-info h1 { font-size: 36px; } body.big .partist { font-size: 22px; }
+body.big #npbar { height: 84px; } body.big .lcd { height: 66px; } body.big .lcd-t { font-size: 16px; } body.big .lcd-s { font-size: 13px; }
+body.big .npb { width: 44px; height: 44px; } body.big .npb.big { width: 56px; height: 56px; }
+body.big #np-chip { font-size: 15px; padding: 7px 14px 7px 8px; } body.big #np-chip .npc-disc { width: 24px; height: 24px; }
+body.big .cover-pick span { font-size: 15px; } body.big .poverlay-card { width: min(620px, 94vw); padding: 28px 30px; }
+body.big .poverlay-card h2 { font-size: 24px; }

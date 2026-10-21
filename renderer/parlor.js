@@ -346,6 +346,13 @@ window.createParlor = function createParlor(ctx) {
     B.title, B.sub, h('div', { class: 'lcd-p' }, B.pos, h('div', { class: 'lcd-bar' }, B.fill), B.left));
   bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, B.play, B.next), B.lcd);
   document.body.append(bar);
+  // A "Now Playing" button in the top bar, on both sides of the app: always one press of Back away
+  // (Back jumps to the top bar), so the music is easy to reach with a remote from anywhere.
+  const chipTitle = h('span', { class: 'npc-t' });
+  const chip = h('button', { id: 'np-chip', hidden: true, title: 'Now Playing', onclick: () => openFull() },
+    h('span', { class: 'npc-disc' }), chipTitle);
+  const navRight = $('#nav .nav-right');
+  if (navRight) navRight.prepend(chip);
   let fullOpen = false;
   let lastTrack = null, lastPaused = null;
 
@@ -353,6 +360,7 @@ window.createParlor = function createParlor(ctx) {
     const s = P && P.player;
     const t = s && s.track;
     bar.hidden = !t;
+    chip.hidden = !t;
     document.body.classList.toggle('has-npbar', !!t);
     document.body.classList.toggle('music-paused', !!(s && s.paused));
     if (!t) { lastTrack = null; if (fullOpen) closeFull(); return; }
@@ -360,6 +368,7 @@ window.createParlor = function createParlor(ctx) {
       const a = album(t.albumKey) || { art: t.art, title: t.album, artist: t.artist, key: t.albumKey };
       B.art.replaceChildren(cover(a, 'tiny'));
       B.title.textContent = t.title; B.sub.textContent = `${t.artist} — ${t.album}`;
+      chipTitle.textContent = t.title;
     }
     if (force || lastPaused !== s.paused) B.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
     B.pos.textContent = mmss(s.pos); B.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
@@ -420,13 +429,16 @@ window.createParlor = function createParlor(ctx) {
   }, true);
   full.addEventListener('mousemove', () => { if (!full.classList.contains('big')) wakeFull(); });
 
+  let fullFrom = null;
   function openFull() {
+    fullFrom = document.activeElement;
     fullOpen = true; full.hidden = false; full.classList.remove('big');
     drawFull(true); F.play.focus({ preventScroll: true }); wakeFull();
   }
   function closeFull() {
     fullOpen = false; full.hidden = true; full.classList.remove('big'); clearTimeout(idle);
-    if (!bar.hidden) B.lcd.focus({ preventScroll: true });
+    const back = fullFrom && document.body.contains(fullFrom) ? fullFrom : (!chip.hidden ? chip : null);
+    if (back) back.focus({ preventScroll: true });
     return true;
   }
   function drawFull(rebuild) {

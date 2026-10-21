@@ -75,7 +75,9 @@ function applyZoom() {
   if (!win || win.isDestroyed()) return;
   // On a TV the UI is read from across the room: scale so the page behaves like a ~1600x900 screen.
   const h = win.getContentSize()[1];
-  win.webContents.setZoomFactor(isTv() ? Math.min(2.6, Math.max(1, h / 900)) : 1);
+  // TV: read from across the room, so everything is drawn big (the page behaves like a ~1350x760 screen).
+  // "Big buttons" on a computer: a fixed, comfortable step up.
+  win.webContents.setZoomFactor(isTv() ? Math.min(3, Math.max(1, h / 760)) : config.bigUi ? 1.3 : 1);
 }
 
 function applyTv() {
@@ -442,6 +444,7 @@ app.whenReady().then(async () => {
     config = { ...config, ...patch };
     writeJson(cfgFile(), config);
     if (('tvMode' in patch && patch.tvMode !== before.tvMode) || ('appFullscreen' in patch && patch.appFullscreen !== before.appFullscreen)) applyTv();
+    if ('bigUi' in patch && patch.bigUi !== before.bigUi) applyZoom();
     if (('remote' in patch && patch.remote !== before.remote) || ('remotePort' in patch && patch.remotePort !== before.remotePort)) startRemote();
     return snapshot();
   });

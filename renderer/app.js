@@ -268,6 +268,8 @@
 
   function render() {
     document.body.classList.toggle('tv', !!S.tv);
+    // big buttons and text: always on the TV, optional on a computer (Settings → Big buttons)
+    document.body.classList.toggle('big', !!S.tv || !!(S.config && S.config.bigUi));
     drawProfileButton();
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
@@ -852,7 +854,11 @@
   // ---- settings ----------------------------------------------------------------
   function toggle(label, hint, key) {
     return h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
-      h('input', { type: 'checkbox', checked: !!S.config[key], onchange: async (e) => { S = await api.setConfig({ [key]: e.target.checked }); renderSettings(); } }));
+      h('input', { type: 'checkbox', checked: !!S.config[key], onchange: async (e) => {
+        S = await api.setConfig({ [key]: e.target.checked });
+        document.body.classList.toggle('big', !!S.tv || !!S.config.bigUi);
+        renderSettings(); const again = $(`#settings input[data-key="${key}"]`); again && again.focus({ preventScroll: true });
+      }, 'data-key': key }));
   }
   function renderSettings() {
     if (S.profile && S.profile.kids) {
@@ -891,6 +897,7 @@
       isAndroid ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
       isAndroid ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
       isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
+      isAndroid || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       isAndroid || S.tv ? null : toggle('Full screen', 'Screenroom and the player use the whole screen. (Also F11, or the green button on a Mac window.)', 'appFullscreen'),
       isAndroid || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
       isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
@@ -1039,6 +1046,14 @@
     if (!$('#modal').hidden) { closeModal(); return true; }
     if (!$('#settings').hidden) { closeSettings(); return true; }
     if (document.activeElement === $('#search')) $('#search').blur();
+    // Scrolled down a page: Back first jumps to the top bar (menu, Now Playing, search, settings).
+    const inNav = document.activeElement && document.activeElement.closest && document.activeElement.closest('#nav');
+    if (!inNav && (window.scrollY > 60 || (document.activeElement && document.activeElement.closest && document.activeElement.closest('#npbar')))) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const target = $('#np-chip:not([hidden])') || document.querySelector(mode === 'parlor' ? '#pnav a.active' : '#nav nav:not(#pnav) a.active');
+      if (target) { navFocus = true; target.focus({ preventScroll: true }); navFocus = false; }
+      return true;
+    }
     if (query) { query = ''; $('#search').value = ''; render(); return true; }
     if (mode === 'parlor') { if (!parlorUI.back()) toggleMode(); return true; }
     if (view !== 'home') { setView('home'); return true; }
