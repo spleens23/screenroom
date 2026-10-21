@@ -106,6 +106,8 @@ androidComponents {
 dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
+    // FFmpeg audio decoders (DTS, DTS-HD, TrueHD, ...) built for Media3, published by the Jellyfin project.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.4.1+1")
     implementation("androidx.annotation:annotation:1.8.2")
     implementation("androidx.annotation:annotation-experimental:1.4.1")
     implementation("org.nanohttpd:nanohttpd:2.3.1")

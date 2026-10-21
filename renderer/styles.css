@@ -248,3 +248,5 @@ html:has(> body.tv)::-webkit-scrollbar { display: none; }
 .osk-key:focus, .osk-key:hover { background: #fff; color: #000; outline: none; }
 body.osk-open .modal-card { margin-bottom: 48vh; }
 .osk-hint { position: fixed; z-index: 85; background: #fff; color: #000; font-size: 14px; font-weight: 600; padding: 4px 10px; border-radius: 6px; pointer-events: none; }
+.problem { padding: 8px 0; border-top: 1px solid #333; }
+.problem small { display: block; color: #aaa; margin-top: 3px; word-break: break-word; }

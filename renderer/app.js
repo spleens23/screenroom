@@ -590,6 +590,17 @@
   }
 
 
+  // Android: the last few films that stopped with an error, with what the TV was decoding (to report or look into).
+  function problemsBlock() {
+    const when = (t) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return h('div', { class: 'am-card' },
+      h('p', { class: 'am-hint' }, 'Films that stopped playing, newest first, with what the TV was decoding.'),
+      ...S.playbackProblems.slice(0, 5).map((p) => h('div', { class: 'problem' },
+        h('div', {}, h('b', {}, p.title), ` · ${when(p.at)} · ${p.code}`),
+        h('small', {}, p.details || ''))),
+      h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async () => { S = await api.clearProblems(); renderSettings(); } }, 'Clear')));
+  }
+
   function systemBlock() {
     const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
     let polling = null;
@@ -857,6 +868,8 @@
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('main') }, 'System settings'),
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('storage') }, 'Storage & drives'),
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('network') }, 'Wi-Fi & network')) : null,
+      isAndroid && (S.playbackProblems || []).length ? h('h3', {}, 'Playback problems') : null,
+      isAndroid && (S.playbackProblems || []).length ? problemsBlock() : null,
       isAndroid && api.kioskStatus ? h('h3', {}, 'Lock to Screenroom') : null,
       isAndroid && api.kioskStatus ? kioskBlock() : null,
       S.platform === 'linux' && api.applianceInfo ? h('h3', {}, 'System') : null,

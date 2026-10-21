@@ -121,6 +121,20 @@ class Store(private val ctx: Context) {
         writeObj(profiles.progressFile(currentId), progress)
     }
 
+    // ---- playback problems (shown in Settings so they can be reported) ---------------------------------------
+    private val problemsFile = File(dir, "playback-problems.json")
+
+    @Synchronized fun addProblem(title: String, code: String, details: String) {
+        val old = try { JSONArray(problemsFile.readText()) } catch (_: Throwable) { JSONArray() }
+        val next = JSONArray().put(JSONObject().put("at", System.currentTimeMillis()).put("title", title).put("code", code).put("details", details))
+        for (i in 0 until minOf(old.length(), 9)) next.put(old.get(i))
+        problemsFile.writeText(next.toString())
+    }
+
+    fun problems(): JSONArray = try { JSONArray(problemsFile.readText()) } catch (_: Throwable) { JSONArray() }
+
+    @Synchronized fun clearProblems() { problemsFile.delete() }
+
     @Synchronized fun saveLibrary(next: JSONObject) {
         library = next
         writeObj(libFile, next)
@@ -144,6 +158,7 @@ class Store(private val ctx: Context) {
             .put("profile", currentProfile())
             .put("profiles", profiles.list())
             .put("pickProfile", needPick)
+            .put("playbackProblems", problems())
         if (!canManageAllFiles()) {
             s.put("storageWarning", "Screenroom can only see video files on drives, not subtitles, and uploads are kept inside the app. " +
                 "Run the setup script once (it grants full file access) to fix this.")

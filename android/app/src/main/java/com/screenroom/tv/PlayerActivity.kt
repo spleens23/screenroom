@@ -36,7 +36,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import org.json.JSONObject
@@ -114,7 +115,7 @@ class PlayerActivity : Activity() {
 
         buildUi()
 
-        val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+        val renderers = Renderers(this)
         player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
@@ -132,9 +133,13 @@ class PlayerActivity : Activity() {
         val params = player.trackSelectionParameters.buildUpon()
         audioLang.takeIf { it.isNotBlank() }?.let { params.setPreferredAudioLanguage(it) }
         subLang.takeIf { it.isNotBlank() }?.let { params.setPreferredTextLanguage(it) }
+        // Dolby first when a film has both Dolby and DTS (the TV/soundbar takes Dolby as it is); DTS still works
+        // (decoded by Screenroom) and can be picked under Audio & Subtitles.
+        params.setPreferredAudioMimeTypes(MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_TRUEHD, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_AC3)
         player.trackSelectionParameters = params.build()
 
         player.addListener(listener)
+        player.addAnalyticsListener(diag)
         val items = queue.map { mediaItem(it) }
         val first = queue[0]
         val prog = App.store.progress.optJSONObject(first.id)
@@ -482,10 +487,43 @@ class PlayerActivity : Activity() {
         override fun onPlayerError(error: PlaybackException) {
             val name = queue.getOrNull(player.currentMediaItemIndex)?.let { listOf(it.title, it.sub).filter { s -> s.isNotBlank() }.joinToString(" ") } ?: "this video"
             val msg = "Couldn't play $name (${error.errorCodeName})"
+            val details = diagText() + (error.cause?.let { " · ${it.javaClass.simpleName}: ${it.message ?: ""}".take(200) } ?: "")
+            App.store.addProblem(name, error.errorCodeName, details)
             toast(msg)
-            App.emit("playback-error", msg)
+            App.emit("playback-error", "$msg. Details are in Settings → Playback problems.")
             finish()
         }
+    }
+
+    // ---- what is decoding what (for "Playback problems" in Settings) ------------------------------------
+    private var videoInfo = ""
+    private var audioInfo = ""
+    private var videoDecoder = ""
+    private var audioDecoder = ""
+    private var dropped = 0
+
+    private fun fmtVideo(f: Format): String {
+        val codec = f.codecs ?: f.sampleMimeType?.substringAfter('/') ?: "video"
+        val hdr = when (f.colorInfo?.colorTransfer) { C.COLOR_TRANSFER_ST2084 -> " HDR10"; C.COLOR_TRANSFER_HLG -> " HLG"; else -> "" }
+        val fps = if (f.frameRate > 0) " %.3f fps".format(Locale.US, f.frameRate).replace(".000", "") else ""
+        val mbps = if (f.bitrate > 0) " %.0f Mb/s".format(Locale.US, f.bitrate / 1e6) else ""
+        return "$codec ${f.width}×${f.height}$hdr$fps$mbps"
+    }
+
+    private fun diagText(): String = listOf(
+        if (videoInfo.isNotEmpty()) "video $videoInfo" + (if (videoDecoder.isNotEmpty()) " via $videoDecoder" else "") else "",
+        if (audioInfo.isNotEmpty()) "audio $audioInfo" + (if (audioDecoder.isNotEmpty()) " via $audioDecoder" else "") else "",
+        if (dropped > 0) "$dropped frames dropped" else "",
+    ).filter { it.isNotEmpty() }.joinToString(" · ")
+
+    @OptIn(UnstableApi::class)
+    private val diag = object : AnalyticsListener {
+        override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: Format, reuse: DecoderReuseEvaluation?) { videoInfo = fmtVideo(format) }
+        override fun onAudioInputFormatChanged(t: AnalyticsListener.EventTime, format: Format, reuse: DecoderReuseEvaluation?) { audioInfo = audioLabel(format) }
+        override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { videoDecoder = decoderName }
+        override fun onAudioDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { audioDecoder = decoderName }
+        override fun onDroppedVideoFrames(t: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) { dropped += droppedFrames }
+        override fun onMediaItemTransition(t: AnalyticsListener.EventTime, mediaItem: MediaItem?, reason: Int) { dropped = 0 }
     }
 
     private val tick = object : Runnable {

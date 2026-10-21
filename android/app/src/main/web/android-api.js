@@ -140,6 +140,7 @@
     saveProfile: async (profile, pin) => withState(await call('profileSave', profile, pin || '')),
     setProfilePin: async (id, newPin, pin) => withState(await call('profileSetPin', id, newPin, pin || '')),
     deleteProfile: async (id, pin) => withState(await call('profileDelete', id, pin || '')),
+    clearProblems: async () => finish(await call('clearProblems')),
     kioskStatus: () => call('kioskStatus'),
     kioskLock: (pin) => call('kioskLock', pin),
     kioskUnlock: (pin) => call('kioskUnlock', pin),

@@ -122,6 +122,7 @@ class Bridge(private val activity: MainActivity) {
                     withState(r)
                 }
             }
+            "clearProblems" -> { st.clearProblems(); st.snapshot() }
             "kioskStatus" -> Kiosk.status(activity)
             "kioskLock" -> Kiosk.lock(activity, a.optString(0, ""))
             "kioskUnlock" -> Kiosk.unlock(activity, a.optString(0, ""))
