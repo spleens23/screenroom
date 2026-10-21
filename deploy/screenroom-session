@@ -18,6 +18,9 @@ Xft.rgba: none
 Xft.autohint: 0
 XRES
 
+# Sound outputs on (a fresh install can leave the headphone jack / HDMI muted).
+[ -x /usr/local/bin/screenroom-audio-setup ] && /usr/local/bin/screenroom-audio-setup &
+
 # A tiny window manager so full-screen windows (Screenroom, then the mpv player) stack properly.
 openbox &
 

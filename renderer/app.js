@@ -541,27 +541,49 @@
 
   function bluetoothBlock() {
     const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    const soundOn = (mac) => (S.config.audioDevice || '').toUpperCase() === `BT:${mac}`;
+    const useForSound = async (d) => { S = await api.setConfig({ audioDevice: `bt:${d.mac}` }); flash(`Sound will play on ${d.name}`); renderSettings(); };
     const draw = async (found) => {
       const st = await api.btStatus();
       box.replaceChildren();
       if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
       if (!st.hasAdapter) { box.append(h('p', { class: 'am-hint' }, 'No Bluetooth adapter found. A USB Bluetooth dongle works too.')); return; }
-      box.append(h('p', { class: 'am-hint' }, 'For Bluetooth remotes and game controllers. USB and 2.4 GHz dongle remotes work without pairing.'));
+      box.append(h('p', { class: 'am-hint' }, 'Remotes, game controllers, speakers and headphones. USB and 2.4 GHz dongle remotes work without pairing.'));
       if (st.paired.length) {
         box.append(h('div', { class: 'drives' }, st.paired.map((d) => h('div', { class: 'drive' },
-          h('div', { class: 'drive-name' }, d.name, h('small', {}, 'Paired')),
-          h('button', { class: 'btn secondary', onclick: async () => { const r = await api.btRemove(d.mac); flash(r.ok ? `Removed ${d.name}` : r.error); draw(); } }, 'Forget')))));
+          h('div', { class: 'drive-name' }, d.name,
+            h('small', {}, [d.audio ? 'Speaker / headphones' : 'Paired', d.connected ? 'connected' : (d.audio ? 'not connected' : ''), soundOn(d.mac) ? 'sound plays here' : '']
+              .filter(Boolean).join(' · '))),
+          d.audio && !d.connected ? h('button', { class: 'btn secondary', onclick: async (e) => {
+            e.target.textContent = 'Connecting…';
+            const r = await api.btConnect(d.mac); flash(r.ok ? `${d.name} connected` : r.error); draw();
+          } }, 'Connect') : null,
+          d.audio && !soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: () => useForSound(d) }, 'Play sound here') : null,
+          d.audio && soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: async () => {
+            S = await api.setConfig({ audioDevice: '' }); flash('Sound is back on Automatic (the TV)'); renderSettings();
+          } }, 'Use the TV instead') : null,
+          h('button', { class: 'btn secondary', onclick: async () => {
+            const r = await api.btRemove(d.mac);
+            if (r.ok) { S = await api.state(); flash(`Removed ${d.name}`); renderSettings(); } else flash(r.error);
+          } }, 'Forget')))));
       }
       box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
         e.target.textContent = 'Searching… (put the device in pairing mode)';
         const r = await api.btScan();
         draw(r.devices || []);
-      } }, 'Pair a remote or controller')));
+      } }, 'Pair a device')));
       if (!found) return;
-      if (!found.length) { box.append(h('p', { class: 'am-hint' }, 'Nothing found. Put it in pairing mode (often: hold the pairing/sync button until a light flashes) and search again.')); return; }
+      if (!found.length) { box.append(h('p', { class: 'am-hint' }, 'Nothing found. Put it in pairing mode (often: hold the pairing or Bluetooth button until a light flashes) and search again.')); return; }
       box.append(h('div', { class: 'drives' }, found.map((d) => h('div', { class: 'drive' },
         h('div', { class: 'drive-name' }, d.name),
-        h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Pairing…'; const r = await api.btPair(d.mac); flash(r.ok ? `${d.name} is ready` : r.error); draw(); } }, 'Pair')))));
+        h('button', { class: 'btn secondary', onclick: async (e) => {
+          e.target.textContent = 'Pairing…';
+          const r = await api.btPair(d.mac);
+          if (!r.ok) { flash(r.error); draw(); return; }
+          // A speaker you just paired is a speaker you want to hear: send sound to it straight away.
+          if (r.audio) { await useForSound(d); return; }
+          flash(`${d.name} is ready`); draw();
+        } }, 'Pair')))));
     };
     draw().catch(() => {});
     return box;
@@ -578,7 +600,7 @@
       const busy = u && ['checking', 'downloading', 'installing'].includes(u.state) && (Date.now() - Date.parse(u.at)) < 15 * 60 * 1000;
       box.append(
         h('p', {}, `Screenroom ${a.version}`),
-        u ? h('p', { class: 'am-hint' }, u.message) : null,
+        u && u.message ? h('p', { class: 'am-hint' }, u.message) : null,
         h('div', { class: 'btns' }, h('button', { class: 'btn secondary', disabled: busy, onclick: async () => {
           const r = await api.applianceUpdate();
           if (!r.ok) flash(r.error || 'Could not start the update');
@@ -783,7 +805,8 @@
     api.audioDevices().then((list) => {
       for (const d of list) {
         if (d.id === 'auto') continue;
-        deviceSel.append(h('option', { value: d.id, selected: d.id === S.config.audioDevice }, `${d.label}  [${d.id}]`));
+        if (d.nice && d.id === '') { deviceSel.firstChild.textContent = d.label; continue; } // TV box: friendly names
+        deviceSel.append(h('option', { value: d.id, selected: d.id === S.config.audioDevice }, d.nice ? d.label : `${d.label}  [${d.id}]`));
       }
       deviceSel.value = S.config.audioDevice || '';
     }).catch(() => {});
@@ -811,7 +834,9 @@
       isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
       isAndroid ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
       isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
-        : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, 'Pick your HDMI / optical device for surround or passthrough.')), deviceSel),
+        : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
+          ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
+          : 'Pick your HDMI / optical device for surround or passthrough.')), deviceSel),
       toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote'),
       remoteBox,
       h('h3', {}, 'Add media'),

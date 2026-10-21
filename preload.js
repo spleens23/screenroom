@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   btStatus: () => ipcRenderer.invoke('bt-status'),
   btScan: () => ipcRenderer.invoke('bt-scan'),
   btPair: (mac) => ipcRenderer.invoke('bt-pair', mac),
+  btConnect: (mac) => ipcRenderer.invoke('bt-connect', mac),
   btRemove: (mac) => ipcRenderer.invoke('bt-remove', mac),
   applianceInfo: () => ipcRenderer.invoke('appliance-info'),
   applianceUpdate: () => ipcRenderer.invoke('appliance-update'),

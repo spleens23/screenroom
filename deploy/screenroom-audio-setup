@@ -1,0 +1,14 @@
+#!/bin/sh
+# Screenroom: switch the sound outputs on.
+# After a fresh install Linux often leaves the headphone jack and the HDMI / DisplayPort outputs muted or at
+# zero. Screenroom has its own volume control, so the computer's own levels are simply set fairly high.
+# Runs when the TV session starts, and after setup/updates.
+for c in $(sed -n 's/^ *\([0-9][0-9]*\) \[.*/\1/p' /proc/asound/cards 2>/dev/null); do
+  amixer -c "$c" scontrols 2>/dev/null | sed -n "s/^Simple mixer control //p" | while IFS= read -r ctl; do
+    case "$ctl" in *Capture*|*Mic*|*Boost*|*Beep*|*Loopback*|*Input*|*Auto-Mute*) continue ;; esac
+    caps=" $(amixer -c "$c" sget "$ctl" 2>/dev/null | sed -n 's/^ *Capabilities: //p') "
+    case "$caps" in *" pvolume "*|*" volume "*) amixer -q -M -c "$c" sset "$ctl" 85% >/dev/null 2>&1 ;; esac
+    case "$caps" in *" pswitch "*|*" switch "*) amixer -q -c "$c" sset "$ctl" unmute >/dev/null 2>&1 ;; esac
+  done
+done
+exit 0

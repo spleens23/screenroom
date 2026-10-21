@@ -327,6 +327,10 @@ EOF
   chown -R "$TV_USER:$TV_USER" "/home/$TV_USER/.config"
 fi
 
+# ---- sound: outputs switched on, Bluetooth speakers (also re-run after every Screenroom update) -----------
+say "Setting up sound and Bluetooth speakers"
+SCREENROOM_CHROOT="$IN_CHROOT" bash "$HERE/box-refresh.sh" || true
+
 if [ "$IN_CHROOT" = "0" ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl restart systemd-logind smbd avahi-daemon >/dev/null 2>&1 || true
@@ -339,5 +343,5 @@ echo
 echo " It starts Screenroom by itself. Then:"
 echo "   - Put media on it: a drive inside the computer is set up automatically;"
 echo "     USB drives appear by themselves; or from a computer open  smb://$NEW_HOST.local"
-echo "   - Wi-Fi, Bluetooth remotes and the phone remote are in Screenroom's Settings."
+echo "   - Wi-Fi, Bluetooth remotes and speakers, and the phone remote are in Screenroom's Settings."
 echo "================================================================"

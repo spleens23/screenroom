@@ -40,6 +40,9 @@ jobs:
             # like a fresh install from the USB stick: the stick is still listed as a package source
             echo "deb cdrom:[Debian GNU/Linux 13 _Trixie_ - Official amd64 NETINST]/ trixie main" >> /etc/apt/sources.list
             cd /w/deploy && SCREENROOM_CHROOT=1 bash ./install-tv.sh /w/dist/screenroom_*_amd64.deb
+            echo "--- Bluetooth sound service:"; command -v bluealsad bluealsa || true
+            cat /usr/lib/systemd/system/bluealsa.service /lib/systemd/system/bluealsa.service /etc/systemd/system/bluealsa.service 2>/dev/null | grep -E "^(ExecStart|User|Type)" || true
+            cat /etc/systemd/system/bluealsa.service.d/*.conf 2>/dev/null || true
           ' > container-setup.log 2>&1
           code=$?
           set -e
@@ -125,6 +128,7 @@ jobs:
             -drive file=os.qcow2,if=virtio,format=qcow2 \
             -drive file=media.img,if=virtio,format=raw \
             -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
+            -audiodev none,id=snd0 -device ich9-intel-hda -device hda-output,audiodev=snd0 \
             -vga std -display none -monitor unix:$PWD/mon2.sock,server,nowait -daemonize
           SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -p 2222 screenroom@localhost"
           for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
@@ -145,6 +149,12 @@ jobs:
           check "library shows the test show"           "curl -fsS --max-time 10 -H 'x-pin: $PIN' http://localhost:8686/api/library | grep -q 'Test Show'"
           check "maintenance login created"             "$SSH sudo test -s /etc/screenroom/maintenance"
           check "power button = shut down"              "$SSH grep -q HandlePowerKey=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf"
+          check "sound outputs switched on (none muted)" "$SSH 'amixer -c 0 scontents' > /tmp/mix; grep -q Playback /tmp/mix && ! grep -q '\[off\]' /tmp/mix"
+          check "Bluetooth sound service running"      "$SSH systemctl is-active bluealsa"
+          # An update (installing a newer app package) also brings the box's own setup up to date.
+          scp -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 2222 dist/screenroom_*_amd64.deb screenroom@localhost:/tmp/sr.deb
+          $SSH "sudo apt-get install -y --reinstall /tmp/sr.deb >/dev/null 2>&1"; sleep 45
+          check "update refreshes the box setup"       "$SSH grep -q 'box refresh done' /var/log/screenroom-refresh.log"
           echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
           echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
           echo "screendump $PWD/final.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert final.ppm screens-final.png || true

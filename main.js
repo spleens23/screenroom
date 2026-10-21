@@ -9,6 +9,7 @@ const { play, findBinary, control, listAudioDevices } = require('./lib/player');
 const remote = require('./lib/remote');
 const transfer = require('./lib/transfer');
 const system = require('./lib/system');
+const audio = require('./lib/audio');
 const { Profiles } = require('./lib/profiles');
 const core = require('./lib/media-core');
 const qrcode = require('qrcode-generator');
@@ -50,6 +51,21 @@ let library = [];
 let remoteServer = null;
 
 const isTv = () => TV_FLAG || !!config.tvMode;
+
+// The Linux TV box (set up by the Screenroom installer) uses plain ALSA: pick the speaker/TV/headphone jack ourselves.
+const isAppliance = () => process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance');
+let mpvIds = null;
+async function soundFor() {
+  const choice = config.audioDevice || '';
+  if (!isAppliance()) return { audioDevice: choice.startsWith('bt:') ? '' : choice };
+  try {
+    if (!mpvIds) mpvIds = new Set((await listAudioDevices(findBinary('mpv', config.mpvPath))).map((d) => d.id));
+    const r = await audio.resolve(choice, { passthrough: !!config.passthrough, mpvIds });
+    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '' };
+  } catch {
+    return { audioDevice: choice.startsWith('bt:') ? '' : choice };
+  }
+}
 
 // ---- window / TV mode ---------------------------------------------------------
 function applyZoom() {
@@ -398,7 +414,11 @@ app.whenReady().then(async () => {
     return snapshot();
   });
 
-  ipcMain.handle('audio-devices', () => listAudioDevices(findBinary('mpv', config.mpvPath)));
+  ipcMain.handle('audio-devices', async () => {
+    if (!isAppliance()) return listAudioDevices(findBinary('mpv', config.mpvPath));
+    const paired = ((await system.btStatus()).paired || []).map((d) => d.mac);
+    return audio.listOutputs(paired, config.audioDevice || '');
+  });
   ipcMain.handle('remote-info', () => remoteInfo());
   // Linux appliance: Wi-Fi and Bluetooth (remotes, controllers)
   const linuxOnly = (fn) => async (...a) => (process.platform === 'linux' ? fn(...a) : { available: false, ok: false, message: 'Only on Linux' });
@@ -408,7 +428,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('bt-status', linuxOnly(() => system.btStatus()));
   ipcMain.handle('bt-scan', linuxOnly(() => system.btScan()));
   ipcMain.handle('bt-pair', linuxOnly((_e, mac) => system.btPair(mac)));
-  ipcMain.handle('bt-remove', linuxOnly((_e, mac) => system.btRemove(mac)));
+  ipcMain.handle('bt-connect', linuxOnly((_e, mac) => system.btConnect(mac)));
+  ipcMain.handle('bt-remove', linuxOnly(async (_e, mac) => {
+    const r = await system.btRemove(mac);
+    // Forgetting the speaker that sound was going to: back to Automatic.
+    if (r.ok && (config.audioDevice || '').toUpperCase() === `BT:${String(mac).toUpperCase()}`) { config.audioDevice = ''; writeJson(cfgFile(), config); }
+    return r;
+  }));
 
   // Installed by the Screenroom installer as an "appliance": version, updates, maintenance login.
   ipcMain.handle('appliance-info', () => {
@@ -447,7 +473,8 @@ app.whenReady().then(async () => {
 
     try {
       playing = true;
-      await play(entries, { ...config, preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
+      const sound = await soundFor();
+      await play(entries, { ...config, ...sound, preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };

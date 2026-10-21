@@ -100,7 +100,7 @@ Works the same on the Mac/Linux app and the Android TV app.
 Every push builds **Screenroom-Installer-<version>.iso** (a Debian 13 installer that sets up Screenroom with no questions) and tests it by installing it in a UEFI virtual machine. Write it to a USB stick, boot the mini PC from it with a network cable plugged in, and it becomes a Screenroom appliance:
 - a boot splash,
 - Screenroom only,
-- Wi-Fi and Bluetooth in Settings,
+- Wi-Fi and Bluetooth in Settings (remotes, controllers, and speakers/headphones as a sound output),
 - automatic security updates,
 - one-button app updates,
 - a second internal drive used as the library.
