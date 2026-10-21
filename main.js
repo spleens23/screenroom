@@ -263,7 +263,11 @@ function remoteLibrary() {
       const key = it.tv.series.toLowerCase();
       if (!series.has(key)) series.set(key, { key, name: it.tv.series, kind: 'series', seasons: new Set(), episodes: 0 });
       const s = series.get(key); s.seasons.add(it.tv.season); s.episodes++;
-    } else movies.push({ key: it.id, name: it.title, kind: 'movie', year: it.year });
+    }
+  }
+  // the same movie in several qualities is listed once (opens the movie, where the quality can be picked)
+  for (const g of core.groupMovies(library.filter((it) => core.allowedFor(it, prof)))) {
+    movies.push({ key: g.versions[0].id, name: g.title, kind: 'movie', year: g.year });
   }
   const shows = [...series.values()].map((s) => ({ ...s, seasons: s.seasons.size }));
   return [...movies, ...shows].sort((a, b) => a.name.localeCompare(b.name));

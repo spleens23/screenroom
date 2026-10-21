@@ -37,14 +37,21 @@
     const movies = [];
     const bySeries = new Map();
     for (const it of items) {
-      if (it.tv) {
-        const key = it.tv.series.toLowerCase();
-        if (!bySeries.has(key)) bySeries.set(key, []);
-        bySeries.get(key).push(it);
-      } else {
-        movies.push({ kind: 'movie', key: it.id, name: it.title, item: it, items: [it], art: it.art, backdrop: it.backdrop || it.art,
-          description: it.description, genres: it.genres, year: it.year, mtime: it.mtime });
-      }
+      if (!it.tv) continue;
+      const key = it.tv.series.toLowerCase();
+      if (!bySeries.has(key)) bySeries.set(key, []);
+      bySeries.get(key).push(it);
+    }
+    // The same movie in several qualities (DVD / Blu-ray / 4K) is one title with a Quality choice.
+    for (const g of MediaCore.groupMovies(items)) {
+      const vs = g.versions;
+      const watching = vs.map((v) => ({ v, p: S.progress[v.id] })).filter((x) => x.p).sort((a, b) => b.p.updated - a.p.updated)[0];
+      const it = watching ? watching.v : vs[0]; // the copy you were watching, else the best one
+      const withArt = vs.find((v) => v.art) || {};
+      movies.push({ kind: 'movie', key: vs[0].id, name: g.title, item: it, versions: vs, items: vs,
+        art: withArt.art || null, backdrop: (vs.find((v) => v.backdrop) || withArt).backdrop || withArt.art || null,
+        description: (vs.find((v) => v.description) || it).description, genres: [...new Set(vs.flatMap((v) => v.genres))],
+        year: g.year || it.year, mtime: Math.max(...vs.map((v) => v.mtime || 0)) });
     }
     const series = [];
     for (const [key, eps] of bySeries) {
@@ -64,8 +71,16 @@
     }
     return [...movies, ...series].sort((a, b) => a.name.localeCompare(b.name));
   }
-  const catalogOf = (pred) => buildCatalog(pred ? S.library.filter(pred) : S.library);
-  const fullEntry = (key) => buildCatalog(S.library).find((e) => e.key === key);
+  // Filtered lists (4K / HD / SD, search...): a movie shows up if any of its copies matches, under its one
+  // plain title; a series shows just its matching episodes.
+  const catalogOf = (pred) => {
+    if (!pred) return buildCatalog(S.library);
+    const movies = buildCatalog(S.library.filter((i) => !i.tv)).filter((e) => e.versions.some(pred));
+    const series = buildCatalog(S.library.filter((i) => i.tv && pred(i)));
+    return [...movies, ...series].sort((a, b) => a.name.localeCompare(b.name));
+  };
+  // (a key can be any copy of a movie: lists filtered to e.g. SD only show that copy)
+  const fullEntry = (key) => buildCatalog(S.library).find((e) => e.key === key || (e.versions && e.versions.some((v) => v.id === key)));
 
   const RES_RANK = { '4K': 4, '1080p': 3, '720p': 2 };
   const resOf = (it) => (it.video ? it.video.res : '');
@@ -265,7 +280,7 @@
   function openEntry(key, focusEp) {
     const e = fullEntry(key);
     if (!e) return;
-    open = { key, season: null, focusEp: focusEp || null, returnKey: key };
+    open = { key, season: null, focusEp: focusEp || null, returnKey: key, version: null };
     if (e.kind === 'series') {
       const n = nextUp(e);
       open.season = (focusEp ? S.library.find((i) => i.id === focusEp) : n.ep).tv.season;
@@ -295,8 +310,17 @@
         h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: () => playEntry(e) }, playLabel(e)), extraBtns)));
   }
 
+  const qualityLabel = (v) => {
+    const vid = v.video || {};
+    const q = MediaCore.qualityOf(v);
+    const best = v.audio.slice().sort((a, b) => (b.channels || 0) - (a.channels || 0))[0];
+    return [q === '4K' ? '4K Ultra HD' : q === 'HD' ? `HD ${vid.res || ''}`.trim() : `SD ${vid.height ? vid.height + 'p' : ''}`.trim(),
+      vid.dv ? 'Dolby Vision' : vid.hdr, best && best.label, `${(v.size / 1e9).toFixed(1)} GB`].filter(Boolean).join(' · ');
+  };
+
   function movieDetail(e) {
-    const item = e.item;
+    const vs = e.versions || [e.item];
+    const item = (open.version && vs.find((v) => v.id === open.version)) || e.item;
     const p = prog(item.id);
     const resumable = p && !p.done && p.pos > 5;
     const def = item.audio.find((a) => a.default) || item.audio[0];
@@ -318,7 +342,10 @@
             h('button', { class: 'btn primary', onclick: () => start(item.id, selectedAudio) }, resumable ? `▶ Resume ${fmtTime(p.pos)}` : '▶ Play'),
             resumable ? h('button', { class: 'btn secondary', onclick: () => start(item.id, selectedAudio, true) }, '↺ From start') : null,
             h('button', { class: 'btn secondary', title: p && p.done ? 'Mark as unwatched' : 'Mark as watched',
-              onclick: async () => { S = await api.setWatched([item.id], !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched')))),
+              onclick: async () => { S = await api.setWatched(vs.map((v) => v.id), !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched')),
+          vs.length > 1 ? h('label', { class: 'quality' }, h('span', {}, 'Quality'),
+            h('select', { class: 'dev-select', onchange: (ev) => { open.version = ev.target.value; renderModal(); const s = $('#modal .quality select'); s && s.focus(); } },
+              vs.map((v) => h('option', { value: v.id, selected: v.id === item.id }, qualityLabel(v))))) : null)),
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges([item])),
@@ -960,8 +987,15 @@
     }
     if (best) focusEl(best);
   }
+  // TV remote on a dropdown (Quality, Audio output...): OK moves to the next choice.
+  function cycleSelect(sel) {
+    if (!sel.options.length) return;
+    sel.selectedIndex = (sel.selectedIndex + 1) % sel.options.length;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   function activate() {
     const el = document.activeElement;
+    if (el && el.tagName === 'SELECT') { cycleSelect(el); return; }
     if (isTextInput(el) && oskAllowed()) { openOsk(el); return; }
     if (el && el !== document.body && scopeEls().includes(el)) el.click();
     else move('down');
@@ -1121,14 +1155,16 @@
     }
     const dir = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key];
     if (dir) {
-      // let a focused dropdown use up/down itself; left/right still navigate
-      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down')) return;
+      // with a mouse/keyboard a focused dropdown uses up/down itself; on a TV the arrows always move on
+      // (OK steps through the choices instead)
+      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !S.tv) return;
       e.preventDefault(); move(dir); return;
     }
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
     if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); closeModal(); if (!$('#settings').hidden) closeSettings(); setView('home'); return; }
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
     if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type === 'checkbox') { e.preventDefault(); t.click(); return; }
+    if (e.key === 'Enter' && t.tagName === 'SELECT' && S.tv) { e.preventDefault(); cycleSelect(t); return; }
     if (e.key === 'Enter' && t === document.body) { e.preventDefault(); activate(); return; }
     if (e.key === 'ContextMenu' || e.key === 'F1' || e.key === 'Tab' && e.altKey) { e.preventDefault(); toggleSettings(); }
   });

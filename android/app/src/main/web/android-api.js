@@ -62,8 +62,9 @@
         const key = it.tv.series.toLowerCase();
         if (!series.has(key)) series.set(key, { key, name: it.tv.series, kind: 'series', seasons: new Set(), episodes: 0 });
         const s = series.get(key); s.seasons.add(it.tv.season); s.episodes++;
-      } else movies.push({ key: it.id, name: it.title, kind: 'movie', year: it.year });
+      }
     }
+    for (const g of MediaCore.groupMovies(library)) movies.push({ key: g.versions[0].id, name: g.title, kind: 'movie', year: g.year });
     const shows = [...series.values()].map((s) => ({ ...s, seasons: s.seasons.size }));
     call('setCatalog', [...movies, ...shows].sort((a, b) => a.name.localeCompare(b.name))).catch(() => {});
   }

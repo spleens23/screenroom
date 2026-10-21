@@ -250,3 +250,7 @@ body.osk-open .modal-card { margin-bottom: 48vh; }
 .osk-hint { position: fixed; z-index: 85; background: #fff; color: #000; font-size: 14px; font-weight: 600; padding: 4px 10px; border-radius: 6px; pointer-events: none; }
 .problem { padding: 8px 0; border-top: 1px solid #333; }
 .problem small { display: block; color: #aaa; margin-top: 3px; word-break: break-word; }
+.m-actions .quality { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+.m-actions .quality select { max-width: 520px; }
+.m-actions .quality select { background: #1f1f1f; color: #fff; border: 1px solid #666; border-radius: 6px; padding: 8px 10px; font-size: 15px; }
+.m-actions .quality select:focus { outline: 2px solid #fff; }
