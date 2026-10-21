@@ -125,14 +125,17 @@ jobs:
           qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
-            -drive file=os.qcow2,if=virtio,format=qcow2 \
-            -drive file=media.img,if=virtio,format=raw \
+            -drive file=os.qcow2,if=none,id=os,format=qcow2 -device virtio-blk-pci,drive=os,bootindex=1 \
+            -drive file=media.img,if=none,id=media,format=raw -device virtio-blk-pci,drive=media \
+            -drive file=installer-test.iso,if=none,id=cd,media=cdrom,readonly=on -device ide-cd,drive=cd,bootindex=0 \
             -netdev user,id=n0,hostfwd=tcp::2222-:22,hostfwd=tcp::8686-:8686 -device virtio-net-pci,netdev=n0 \
             -audiodev none,id=snd0 -device ich9-intel-hda -device hda-output,audiodev=snd0 \
             -vga std -display none -monitor unix:$PWD/mon2.sock,server,nowait -daemonize
           SSH="ssh -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -p 2222 screenroom@localhost"
+          # The installer stick is still in (and first in the boot order): its menu must start the installed box,
+          # not reinstall it.
           for i in $(seq 1 60); do $SSH true 2>/dev/null && break; sleep 5; done
-          $SSH true || { echo "::error::The installed box never came up on ssh"; exit 1; }
+          $SSH true || { echo "::error::The installed box never came up on ssh (did the installer start again?)"; echo "screendump $PWD/stuck.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert stuck.ppm screens-stuck.png || true; exit 1; }
           sleep 75   # let the TV session start and the library scan run
           echo "screendump $PWD/boot.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert boot.ppm screens-boot.png || true
 
