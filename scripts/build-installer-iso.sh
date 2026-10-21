@@ -32,8 +32,11 @@ echo "Base image: $NAME"
 STAGE="$WORK/screenroom"
 mkdir -p "$STAGE/deploy" "$STAGE/installer"
 cp "$DEB" "$STAGE/"
-cp -r "$ROOT/deploy/install-tv.sh" "$ROOT/deploy/screenroom-session" "$ROOT/deploy/screenroom-cec.py" \
-      "$ROOT/deploy/screenroom-disks" "$ROOT/deploy/screenroom-update" "$ROOT/deploy/splash" "$STAGE/deploy/"
+# Everything in deploy/ except the installer's own files and the guides (new helper scripts come along by themselves).
+for f in "$ROOT"/deploy/*; do
+  case "$(basename "$f")" in installer|*.md) continue ;; esac
+  cp -r "$f" "$STAGE/deploy/"
+done
 cp "$ROOT/deploy/installer/pick-disk.sh" "$ROOT/deploy/installer/late.sh" "$ROOT/deploy/installer/templates" "$STAGE/installer/"
 chmod +x "$STAGE/deploy/"*.sh "$STAGE/deploy/screenroom-"* "$STAGE/installer/"*.sh
 [ -n "$TEST_KEY" ] && cp "$TEST_KEY" "$STAGE/test_authorized_keys"
