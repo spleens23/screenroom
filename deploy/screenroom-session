@@ -34,10 +34,9 @@ if [ -x /usr/local/bin/screenroom-cec ]; then
   /usr/local/bin/screenroom-cec >/tmp/screenroom-cec.log 2>&1 &
 fi
 
-# Run Screenroom in TV mode; if it ever crashes, start it again.
+# Run Screenroom in TV mode, and start it again whenever it stops (crash, update, or "Restart Screenroom"),
+# so the box never drops to a login screen.
 while true; do
   screenroom --tv
-  code=$?
-  [ "$code" -eq 0 ] && break      # exited cleanly (Quit in Settings): end the session
-  sleep 2
+  sleep 1
 done

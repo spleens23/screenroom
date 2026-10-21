@@ -220,18 +220,8 @@ AVEOF
 systemctl enable smbd nmbd avahi-daemon ssh >/dev/null 2>&1 || true
 
 # ---- appliance behaviour ---------------------------------------------------------------------------------
-say "Setting up appliance behaviour (splash, power button, no sleep, automatic updates)"
-# Power button = clean shut down. Never sleep.
-mkdir -p /etc/systemd/logind.conf.d
-cat > /etc/systemd/logind.conf.d/50-screenroom.conf <<'EOF'
-[Login]
-HandlePowerKey=poweroff
-HandleSuspendKey=ignore
-HandleHibernateKey=ignore
-HandleLidSwitch=ignore
-IdleAction=ignore
-EOF
-systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1 || true
+say "Setting up appliance behaviour (splash, power button, automatic updates)"
+# Power button (press = sleep, hold = off) is set up by box-refresh.sh, below.
 
 # Keep logs small.
 mkdir -p /etc/systemd/journald.conf.d

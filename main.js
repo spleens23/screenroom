@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen, powerMonitor } = require('electron');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
@@ -139,7 +139,7 @@ function toolPaths() {
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
-    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), duplicates: (library.dups || []).length,
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), duplicates: (library.dups || []).length,
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
@@ -241,11 +241,11 @@ const remotePage = () => (app.isPackaged
   ? path.join(process.resourcesPath, 'remote', 'index.html')
   : path.join(__dirname, 'remote', 'index.html'));
 
-// While something is playing the phone's D-pad drives mpv; otherwise it drives the browse screens.
+// While something is playing the phone's D-pad works the player's on-screen controls like a TV remote
+// (the phone page has its own skip / volume buttons); otherwise it drives the browse screens.
 const PLAYER_KEYS = {
-  up: ['add', 'volume', 5], down: ['add', 'volume', -5],
-  left: ['seek', -10, 'relative+exact'], right: ['seek', 10, 'relative+exact'],
-  ok: ['cycle', 'pause'], back: ['quit'], home: ['quit'],
+  up: ['keypress', 'UP'], down: ['keypress', 'DOWN'], left: ['keypress', 'LEFT'], right: ['keypress', 'RIGHT'],
+  ok: ['keypress', 'ENTER'], back: ['keypress', 'ESC'], home: ['quit'],
 };
 const PLAYER_CMDS = {
   pause: ['cycle', 'pause'], seekback: ['seek', -10, 'relative+exact'], seekfwd: ['seek', 10, 'relative+exact'],
@@ -340,6 +340,8 @@ if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
 app.whenReady().then(async () => {
+  // Going to sleep (power button or Settings): pause the film so it's where you left it when the box wakes.
+  powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
   config = { ...defaults, ...readJson(cfgFile(), {}) };
   profiles = new Profiles(dataDir());
   currentId = profiles.last().id;
@@ -453,7 +455,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('quit', () => app.quit());
   ipcMain.handle('power', (_e, action) => new Promise((resolve) => {
-    if (process.platform !== 'linux' || !['poweroff', 'reboot'].includes(action)) return resolve({ ok: false, error: 'Not available here' });
+    if (process.platform !== 'linux' || !['poweroff', 'reboot', 'suspend'].includes(action)) return resolve({ ok: false, error: 'Not available here' });
     execFile('systemctl', [action], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
   }));
 
@@ -476,7 +478,7 @@ app.whenReady().then(async () => {
     try {
       playing = true;
       const sound = await soundFor();
-      await play(entries, { ...config, ...sound, preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
+      await play(entries, { ...config, ...sound, tv: isTv(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };

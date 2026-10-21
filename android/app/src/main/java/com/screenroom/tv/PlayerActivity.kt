@@ -581,9 +581,9 @@ class PlayerActivity : Activity() {
                     if (nextCard.visibility == View.VISIBLE) next() else { togglePause(); showControls(playBtn) }
                     return true
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT -> { seekBy(-10); showControls(seek); return true }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> { seekBy(10); showControls(seek); return true }
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_MENU -> { showControls(playBtn); return true }
+                // Arrows just bring the controls up (Play/Pause highlighted); then they move between them.
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_MENU -> { showControls(playBtn); return true }
             }
             return super.dispatchKeyEvent(e)
         }
@@ -599,20 +599,40 @@ class PlayerActivity : Activity() {
     /** Commands from the phone remote (see RemoteServer). Runs on the main thread. */
     fun remote(cmd: String) {
         val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        // The phone's D-pad, OK and Back act like the TV remote's: they move around the on-screen controls.
+        val key = when (cmd) {
+            "up" -> KeyEvent.KEYCODE_DPAD_UP; "down" -> KeyEvent.KEYCODE_DPAD_DOWN
+            "left" -> KeyEvent.KEYCODE_DPAD_LEFT; "right" -> KeyEvent.KEYCODE_DPAD_RIGHT
+            "ok" -> KeyEvent.KEYCODE_DPAD_CENTER; "back" -> KeyEvent.KEYCODE_BACK
+            else -> null
+        }
+        val dir = when (cmd) { "up" -> View.FOCUS_UP; "down" -> View.FOCUS_DOWN; "left" -> View.FOCUS_LEFT; "right" -> View.FOCUS_RIGHT; else -> null }
+        // (Injected arrow keys don't move focus by themselves, so move it here, like the remote would.)
+        if (dir != null && controlsShown && !(seek.isFocused && (dir == View.FOCUS_LEFT || dir == View.FOCUS_RIGHT))) {
+            poke()
+            val from = currentFocus ?: playBtn
+            from.focusSearch(dir)?.requestFocus()
+            return
+        }
+        if (key != null) {
+            dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
+            dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+            return
+        }
         when (cmd) {
-            "pause", "ok" -> togglePause()
-            "seekback", "left" -> seekBy(-10)
-            "seekfwd", "right" -> seekBy(10)
+            "pause" -> togglePause()
+            "seekback" -> seekBy(-10)
+            "seekfwd" -> seekBy(10)
             "next" -> next()
-            "stop", "back", "home" -> close()
-            "volup", "up" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-            "voldown", "down" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+            "stop", "home" -> close()
+            "volup" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+            "voldown" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
             "mute" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, AudioManager.FLAG_SHOW_UI)
             "audio" -> cycle(C.TRACK_TYPE_AUDIO)
             "subs" -> cycle(C.TRACK_TYPE_TEXT)
             "settings" -> showTracks()
         }
-        if (cmd != "stop" && cmd != "back" && cmd != "home") showControls(playBtn)
+        if (cmd != "stop" && cmd != "home") showControls(playBtn)
     }
 
     override fun onPause() {

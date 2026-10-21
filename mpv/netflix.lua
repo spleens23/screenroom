@@ -5,7 +5,7 @@ local mp = require 'mp'
 local utils = require 'mp.utils'
 local options = require 'mp.options'
 
-local o = { meta = '', font = '', accent = 'E50914' }
+local o = { meta = '', font = '', accent = 'E50914', tv = 'no' }
 options.read_options(o, 'netflix')
 
 -- ---------------------------------------------------------------- constants
@@ -29,6 +29,7 @@ local S = {
   menu = false, col = 1, row = 1,
   toast = nil, toast_until = 0,
   next_dismissed = false, pref_audio = nil, pref_sub = nil,
+  focus = nil, kbnav = false, lastcol = 1,  -- remote / keyboard focus on the controls
 }
 local meta = {}
 local lines, hits = {}, {}
@@ -384,6 +385,7 @@ local function draw_controls(k)
   gradient(H - 360, H, 0, 0.88, k)
 
   -- back arrow
+  if S.kbnav and S.focus == 'back' then shape(circle(MARGIN + 30, 96, 52), WHITE, 0.25 * k) end
   icon_back(MARGIN + 30, 96, 46, WHITE, k)
   hit(MARGIN - 20, 40, 120, 112, { onclick = quit_player })
 
@@ -391,7 +393,8 @@ local function draw_controls(k)
   local bx0, bx1 = MARGIN, W - MARGIN - 130
   local by = H - 190
   local bw = bx1 - bx0
-  local over_bar = (S.my >= by - 36 and S.my <= by + 36 and S.mx >= bx0 - 10 and S.mx <= bx1 + 10) or S.drag ~= nil and S.drag.is_bar
+  local bar_focus = S.kbnav and S.focus == 'bar'
+  local over_bar = (S.my >= by - 36 and S.my <= by + 36 and S.mx >= bx0 - 10 and S.mx <= bx1 + 10) or S.drag ~= nil and S.drag.is_bar or bar_focus
   local bh = over_bar and 10 or 6
   shape(rect(bx0, by - bh / 2, bw, bh), WHITE, 0.30 * k)
   shape(rect(bx0, by - bh / 2, bw * frac, bh), ACCENT, k)
@@ -410,7 +413,7 @@ local function draw_controls(k)
     end,
   })
   if over_bar and dur > 0 and not S.drag then
-    local f = clamp((S.mx - bx0) / bw, 0, 1)
+    local f = bar_focus and frac or clamp((S.mx - bx0) / bw, 0, 1)
     local tx = clamp(bx0 + bw * f, bx0 + 50, bx1 - 50)
     shape(rect(tx - 56, by - 84, 112, 44), PANEL, 0.95 * k)
     text(tx, by - 62, fmt_time(f * dur), 28, WHITE, k, 5, false)
@@ -418,17 +421,19 @@ local function draw_controls(k)
 
   -- button row
   local cy = H - 100
-  local function btn(cx, size, draw, onclick)
+  local function btn(cx, size, draw, onclick, key)
     local spec = { onclick = onclick }
     hit(cx - size * 0.9, cy - size * 0.9, size * 1.8, size * 1.8, spec)
     local hov = in_rect(spec, S.mx, S.my)
-    draw(cx, cy, size, WHITE, k * (hov and 1 or 0.85))
+    local foc = S.kbnav and key and S.focus == key
+    if foc then shape(circle(cx, cy, size * 1.05), WHITE, 0.25 * k) end
+    draw(cx, cy, size, WHITE, k * ((hov or foc) and 1 or 0.85))
   end
-  btn(MARGIN + 36, 56, S.paused and icon_play or icon_pause, toggle_pause)
-  btn(MARGIN + 150, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, false) end, function() seek_by(-SKIP) end)
-  btn(MARGIN + 262, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, true) end, function() seek_by(SKIP) end)
+  btn(MARGIN + 36, 56, S.paused and icon_play or icon_pause, toggle_pause, 'play')
+  btn(MARGIN + 150, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, false) end, function() seek_by(-SKIP) end, 'rew')
+  btn(MARGIN + 262, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, true) end, function() seek_by(SKIP) end, 'fwd')
   local vx = MARGIN + 380
-  btn(vx, 50, function(x, y, s, c, op) icon_volume(x, y, s, c, op, S.vol, S.mute) end, toggle_mute)
+  btn(vx, 50, function(x, y, s, c, op) icon_volume(x, y, s, c, op, S.vol, S.mute) end, toggle_mute, 'mute')
   local sx0, sw = vx + 50, 150
   local vfrac = S.mute and 0 or clamp(S.vol / 100, 0, 1)
   shape(rect(sx0, cy - 3, sw, 6), WHITE, 0.3 * k)
@@ -443,13 +448,13 @@ local function draw_controls(k)
 
   -- right-hand group
   local rx = W - MARGIN - 36
-  btn(rx, 50, icon_fullscreen, toggle_fullscreen)
+  if o.tv == 'yes' then rx = rx + 110 else btn(rx, 50, icon_fullscreen, toggle_fullscreen, 'full') end -- TV: always full screen
   btn(rx - 110, 50, icon_subs, function()
     if S.menu then close_menu() else open_menu() end
-  end)
+  end, 'subs')
   local right_edge = rx - 110 - 60
   if has_next then
-    btn(rx - 220, 50, icon_next, play_next)
+    btn(rx - 220, 50, icon_next, play_next, 'next')
     right_edge = rx - 220 - 60
   end
 
@@ -614,6 +619,7 @@ end
 
 mp.add_forced_key_binding('mouse_move', 'nf_move', function()
   update_mouse()
+  S.kbnav = false
   S.last_act = now()
   if S.drag and S.drag.ondrag then S.drag.ondrag(S.mx) end
 end)
@@ -649,52 +655,109 @@ end, { complex = true })
 
 mp.add_forced_key_binding('SPACE', 'nf_space', toggle_pause)
 mp.add_forced_key_binding('p', 'nf_p', toggle_pause)
-mp.add_forced_key_binding('LEFT', 'nf_left', function() seek_by(-SKIP); toast('-' .. SKIP .. 's') end, { repeatable = true })
-mp.add_forced_key_binding('RIGHT', 'nf_right', function() seek_by(SKIP); toast('+' .. SKIP .. 's') end, { repeatable = true })
-mp.add_forced_key_binding('UP', 'nf_up', function()
-  mp.set_property_native('mute', false)
-  mp.commandv('add', 'volume', 5); S.last_act = now()
-  toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
-end, { repeatable = true })
-mp.add_forced_key_binding('DOWN', 'nf_down', function()
-  mp.commandv('add', 'volume', -5); S.last_act = now()
-  toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
-end, { repeatable = true })
 mp.add_forced_key_binding('m', 'nf_mute', function() toggle_mute(); toast(S.mute and 'Muted' or 'Unmuted') end)
 mp.add_forced_key_binding('f', 'nf_fs', toggle_fullscreen)
 mp.add_forced_key_binding('c', 'nf_menu', function() if S.menu then close_menu() else open_menu() end end)
 mp.add_forced_key_binding('n', 'nf_next', function() if playlist_info().next then play_next() end end)
-local function enter_action()
+-- Remote / keyboard / game controller: the arrows move a highlight over the controls (like the TV apps),
+-- OK presses the highlighted control, Back hides the controls and then leaves the film.
+--   controls hidden:  any arrow shows them (Play/Pause highlighted); OK pauses (or starts the next episode
+--                     when its card is showing)
+--   progress bar highlighted: left/right skip 10 s
+local function focus_rows()
+  local buttons = { 'play', 'rew', 'fwd', 'mute' }
+  if playlist_info().next then buttons[#buttons + 1] = 'next' end
+  buttons[#buttons + 1] = 'subs'
+  if o.tv ~= 'yes' then buttons[#buttons + 1] = 'full' end
+  return { { 'back' }, { 'bar' }, buttons }
+end
+local FOCUS_ACT = {
+  back = function() quit_player() end,
+  bar = function() toggle_pause() end,
+  play = function() toggle_pause() end,
+  rew = function() seek_by(-SKIP) end,
+  fwd = function() seek_by(SKIP) end,
+  mute = function() toggle_mute() end,
+  next = function() play_next() end,
+  subs = function() if S.menu then close_menu() else open_menu() end end,
+  full = function() toggle_fullscreen() end,
+}
+local function controls_up() return S.fade > 0.5 or S.paused end
+
+local function nav(dir)
+  local was_up = controls_up()
+  S.kbnav = true
+  S.last_act = now()
+  local rows = focus_rows()
+  local r, c
+  for ri, row in ipairs(rows) do for ci, key in ipairs(row) do if key == S.focus then r, c = ri, ci end end end
+  if not was_up or not r then S.focus = 'play'; return end
+  if S.focus == 'bar' and (dir == 'left' or dir == 'right') then
+    seek_by(dir == 'left' and -SKIP or SKIP); return
+  end
+  if dir == 'left' or dir == 'right' then
+    c = clamp(c + (dir == 'left' and -1 or 1), 1, #rows[r])
+  else
+    if r == 3 then S.lastcol = c end
+    r = clamp(r + (dir == 'up' and -1 or 1), 1, #rows)
+    c = (r == 3) and clamp(S.lastcol, 1, #rows[3]) or 1
+  end
+  S.focus = rows[r][c]
+end
+
+local function next_card_showing()
   local pl = playlist_info()
   local remaining = S.dur - S.pos
-  if pl.next and S.dur > 0 and remaining <= NEXT_CARD_AT then play_next() else toggle_pause() end
+  return pl.next and not S.next_dismissed and S.dur > 0 and remaining <= NEXT_CARD_AT and remaining >= 0
+end
+
+local function enter_action()
+  S.kbnav = true
+  if not controls_up() then
+    if next_card_showing() then play_next(); return end
+    toggle_pause(); S.focus = 'play'; S.last_act = now(); return
+  end
+  S.last_act = now()
+  local f = FOCUS_ACT[S.focus or 'play']
+  if f then f() end
+end
+
+local function esc_action()
+  if S.menu then close_menu(); S.focus = 'subs'; return end
+  if controls_up() and not S.paused then S.last_act = -100; return end -- first Back just hides the controls
+  if S.fs and o.tv ~= 'yes' then mp.set_property_native('fullscreen', false); return end
+  quit_player()
+end
+
+for _, b in ipairs({
+  { 'LEFT', 'left' }, { 'RIGHT', 'right' }, { 'UP', 'up' }, { 'DOWN', 'down' },
+  { 'GAMEPAD_DPAD_LEFT', 'left' }, { 'GAMEPAD_DPAD_RIGHT', 'right' }, { 'GAMEPAD_DPAD_UP', 'up' }, { 'GAMEPAD_DPAD_DOWN', 'down' },
+}) do
+  mp.add_forced_key_binding(b[1], 'nf_nav_' .. b[1], function() nav(b[2]) end, { repeatable = true })
 end
 mp.add_forced_key_binding('ENTER', 'nf_enter', enter_action)
 mp.add_forced_key_binding('KP_ENTER', 'nf_kpenter', enter_action)
-mp.add_forced_key_binding('ESC', 'nf_esc', function()
-  if S.menu then close_menu()
-  elseif S.fs then mp.set_property_native('fullscreen', false)
-  else quit_player() end
-end)
-
--- Game controller (A = play/pause or OK, B = back, D-pad = seek/volume, Y = audio & subtitles, RB = next episode)
-local function esc_action()
-  if S.menu then close_menu() else quit_player() end
+mp.add_forced_key_binding('ESC', 'nf_esc', esc_action)
+mp.add_forced_key_binding('BS', 'nf_bs', esc_action)
+-- Volume on the keyboard ([ ] or + -); a TV remote's own volume buttons work as usual.
+for _, b in ipairs({ { '+', 5 }, { '=', 5 }, { '-', -5 }, { 'VOLUME_UP', 5 }, { 'VOLUME_DOWN', -5 } }) do
+  mp.add_forced_key_binding(b[1], 'nf_vol_' .. b[1], function()
+    if b[2] > 0 then mp.set_property_native('mute', false) end
+    mp.commandv('add', 'volume', b[2]); S.last_act = now()
+    toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
+  end, { repeatable = true })
 end
+
+-- Game controller extras: A = OK, B = back, Y = audio & subtitles, RB = next episode
 mp.add_forced_key_binding('GAMEPAD_ACTION_DOWN', 'nf_gp_a', enter_action)
 mp.add_forced_key_binding('GAMEPAD_ACTION_RIGHT', 'nf_gp_b', esc_action)
 mp.add_forced_key_binding('GAMEPAD_ACTION_UP', 'nf_gp_y', function() if S.menu then close_menu() else open_menu() end end)
 mp.add_forced_key_binding('GAMEPAD_RIGHT_SHOULDER', 'nf_gp_rb', function() if playlist_info().next then play_next() end end)
-mp.add_forced_key_binding('GAMEPAD_DPAD_LEFT', 'nf_gp_l', function() seek_by(-SKIP); toast('-' .. SKIP .. 's') end, { repeatable = true })
-mp.add_forced_key_binding('GAMEPAD_DPAD_RIGHT', 'nf_gp_r', function() seek_by(SKIP); toast('+' .. SKIP .. 's') end, { repeatable = true })
-mp.add_forced_key_binding('GAMEPAD_DPAD_UP', 'nf_gp_u', function()
-  mp.set_property_native('mute', false); mp.commandv('add', 'volume', 5); S.last_act = now()
-  toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
-end, { repeatable = true })
-mp.add_forced_key_binding('GAMEPAD_DPAD_DOWN', 'nf_gp_d', function()
-  mp.commandv('add', 'volume', -5); S.last_act = now()
-  toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
-end, { repeatable = true })
+
+-- (for troubleshooting / tests)
+mp.register_script_message('nf-debug', function()
+  mp.msg.warn(string.format('nf-debug focus=%s paused=%s menu=%s up=%s', tostring(S.focus), tostring(S.paused), tostring(S.menu), tostring(controls_up())))
+end)
 
 -- ---------------------------------------------------------------- property tracking
 mp.observe_property('time-pos', 'number', function(_, v) if v then S.pos = v end end)

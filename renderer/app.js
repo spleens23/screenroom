@@ -875,8 +875,13 @@
       S.platform === 'linux' && api.applianceInfo ? h('h3', {}, 'System') : null,
       S.platform === 'linux' && api.applianceInfo ? systemBlock() : null,
       isAndroid ? null : h('h3', {}, 'Power'),
+      S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
       isAndroid ? null : h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Quit Screenroom'),
+        // The TV box always runs Screenroom (quitting used to leave a login screen), so offer a restart instead.
+        S.appliance ? h('button', { class: 'btn secondary', onclick: () => api.power('suspend') }, 'Sleep') : null,
+        S.appliance
+          ? h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Restart Screenroom')
+          : h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Quit Screenroom'),
         canPower ? h('button', { class: 'btn secondary', onclick: () => { if (confirm('Restart this computer?')) api.power('reboot'); } }, 'Restart') : null,
         canPower ? h('button', { class: 'btn secondary', onclick: () => { if (confirm('Shut down this computer?')) api.power('poweroff'); } }, 'Shut down') : null),
     ].filter(Boolean));

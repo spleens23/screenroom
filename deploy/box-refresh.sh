@@ -57,6 +57,43 @@ UNIT
   in_chroot || systemctl restart bluealsa.service >/dev/null 2>&1 || true
 fi
 
+# ---- power button: press = sleep, hold 5 seconds = turn off -------------------------------------------
+mkdir -p /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/50-screenroom.conf <<'EOF'
+[Login]
+HandlePowerKey=suspend
+HandlePowerKeyLongPress=poweroff
+HandleSuspendKey=suspend
+HandleHibernateKey=ignore
+HandleLidSwitch=ignore
+IdleAction=ignore
+EOF
+# Older Screenroom versions switched sleep off completely.
+systemctl unmask sleep.target suspend.target >/dev/null 2>&1 || true
+systemctl mask hibernate.target hybrid-sleep.target suspend-then-hibernate.target >/dev/null 2>&1 || true
+# Wake up from a USB keyboard / 2.4 GHz remote too (the BIOS may also need "wake from USB" allowed).
+cat > /etc/udev/rules.d/90-screenroom-wake.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{bDeviceClass}=="09", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", DRIVER=="usbhid", ATTR{bInterfaceProtocol}=="01", RUN+="/bin/sh -c 'echo enabled > /sys%p/../power/wakeup'"
+ACTION=="add", SUBSYSTEM=="pci", ATTR{class}=="0x0c0330", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+EOF
+# Let the app put the box to sleep (Settings -> Power -> Sleep).
+TVU="$(sed -n 's/.*subject.user == "\([^"]*\)".*/\1/p' /etc/polkit-1/rules.d/50-screenroom.rules 2>/dev/null | head -1)"
+TVU="${TVU:-tv}"
+mkdir -p /etc/polkit-1/rules.d
+cat > /etc/polkit-1/rules.d/51-screenroom-sleep.rules <<EOF
+polkit.addRule(function(action, subject) {
+  if (subject.user == "$TVU" &&
+      (action.id == "org.freedesktop.login1.suspend" || action.id == "org.freedesktop.login1.suspend-multiple-sessions")) {
+    return polkit.Result.YES;
+  }
+});
+EOF
+if ! in_chroot; then
+  udevadm control --reload >/dev/null 2>&1 || true
+  systemctl kill -s HUP systemd-logind >/dev/null 2>&1 || true
+fi
+
 # ---- sound outputs switched on ------------------------------------------------------------------------
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
