@@ -151,13 +151,14 @@ jobs:
           check "power button = shut down"              "$SSH grep -q HandlePowerKey=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf"
           check "sound outputs switched on (none muted)" "$SSH 'amixer -c 0 scontents' > /tmp/mix; grep -q Playback /tmp/mix && ! grep -q '\[off\]' /tmp/mix"
           # (The test machine has no Bluetooth adapter, so this checks the service is set up and starts.)
-          $SSH "systemctl cat bluealsa.service; systemctl status bluealsa --no-pager -n 15; command -v bluealsa bluealsad" 2>&1 | tail -n 40 | while IFS= read -r l; do echo "::notice::bluealsa: ${l//%/%25}"; done
+          # Details for debugging go to screens-diag.txt on the ci-screens release (annotations are capped at 10).
+          $SSH "set -x; dpkg -l | grep -i -E 'bluez|bluealsa'; ls -l /usr/bin/blue* /usr/sbin/blue* 2>&1; systemctl cat bluealsa.service; systemctl status bluealsa --no-pager -n 20; sudo grep -n -i -E -A25 'sound and Bluetooth|box refresh' /var/log/screenroom-install.log | head -80" > screens-diag.txt 2>&1 || true
           check "Bluetooth sound service set up"       "$SSH 'systemctl is-enabled bluealsa && sudo systemctl start bluealsa && sleep 3 && systemctl is-active bluealsa'"
           # An update (installing a newer app package) also brings the box's own setup up to date.
           scp -i test_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -P 2222 out/screenroom_*_amd64.deb screenroom@localhost:/tmp/sr.deb || echo "::error::copying the app package to the test box failed"
           $SSH "sudo apt-get install -y --reinstall /tmp/sr.deb >/dev/null 2>&1" || echo "::error::reinstalling the app package failed"
           sleep 45
-          $SSH "sudo tail -n 15 /var/log/screenroom-refresh.log" 2>&1 | while IFS= read -r l; do echo "::notice::refresh: ${l//%/%25}"; done
+          { echo "=== refresh after update"; $SSH "sudo tail -n 40 /var/log/screenroom-refresh.log"; } >> screens-diag.txt 2>&1 || true
           check "update refreshes the box setup"       "$SSH grep -q 'box refresh done' /var/log/screenroom-refresh.log"
           echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
           echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
@@ -174,7 +175,9 @@ jobs:
           prerelease: true
           make_latest: false
           body: Screens from the latest automated test install. Not an installable release.
-          files: screens-*.png
+          files: |
+            screens-*.png
+            screens-diag.txt
           fail_on_unmatched_files: false
 
       # ---- 4. publish --------------------------------------------------------------------------------------
