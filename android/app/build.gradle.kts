@@ -47,7 +47,7 @@ val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
 android {
     namespace = "com.screenroom.tv"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.screenroom.tv"
@@ -104,10 +104,10 @@ androidComponents {
 }
 
 dependencies {
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-ui:1.4.1")
+    implementation("androidx.media3:media3-exoplayer:1.5.0")
+    implementation("androidx.media3:media3-ui:1.5.0")
     // FFmpeg audio decoders (DTS, DTS-HD, TrueHD, ...) built for Media3, published by the Jellyfin project.
-    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.4.1+1")
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
     implementation("androidx.annotation:annotation:1.8.2")
     implementation("androidx.annotation:annotation-experimental:1.4.1")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
