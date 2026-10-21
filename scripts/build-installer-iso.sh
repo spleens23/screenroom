@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Build the Screenroom automatic-installer ISO from the official Debian 13 netinst image.
 #
-#   scripts/build-installer-iso.sh <screenroom_x.y.z_amd64.deb> <output.iso> [--test-key ~/.ssh/id.pub]
+#   scripts/build-installer-iso.sh <screenroom_x.y.z_amd64.deb> <output.iso> [--pool <dir>] [--test-key ~/.ssh/id.pub]
 #
 # Needs: curl, xorriso, openssl, sha256sum. Downloads the Debian image (verified against Debian's
 # SHA256SUMS) and adds the Screenroom package, setup scripts, answers for the installer, and a boot menu.
 set -euo pipefail
 
 DEB="$1"; OUT="$2"; shift 2
-TEST_KEY=""
-while [ $# -gt 0 ]; do case "$1" in --test-key) TEST_KEY="$2"; shift 2 ;; *) shift ;; esac; done
+TEST_KEY=""; POOL=""
+while [ $# -gt 0 ]; do case "$1" in --test-key) TEST_KEY="$2"; shift 2 ;; --pool) POOL="$2"; shift 2 ;; *) shift ;; esac; done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
@@ -45,9 +45,13 @@ chmod +x "$STAGE/deploy/"*.sh "$STAGE/deploy/screenroom-"* "$STAGE/installer/"*.
 HASH="$(openssl passwd -6 "$(openssl rand -hex 24)")"
 sed "s|@ADMIN_HASH@|$HASH|" "$ROOT/deploy/installer/preseed.cfg" > "$WORK/preseed.cfg"
 
+POOLMAP=()
+# Offline installer: a folder of .deb files with a Packages index (see the CI workflow) goes on the stick.
+[ -n "$POOL" ] && POOLMAP=(-map "$(readlink -f "$POOL")" /screenroom/pool)
 xorriso -indev "$CACHE/$NAME" -outdev "$OUT" \
   -map "$WORK/preseed.cfg" /preseed.cfg \
   -map "$STAGE" /screenroom \
+  "${POOLMAP[@]}" \
   -map "$ROOT/deploy/installer/grub.cfg" /boot/grub/grub.cfg \
   -map "$ROOT/deploy/installer/isolinux.cfg" /isolinux/isolinux.cfg \
   -map "$ROOT/deploy/installer/screenroom.txt" /isolinux/screenroom.txt \

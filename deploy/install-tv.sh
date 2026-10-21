@@ -61,7 +61,28 @@ fi
 if [ "$IS_DEBIAN" = "1" ] && [ -f /etc/apt/sources.list.d/debian.sources ] && ! grep -q "non-free-firmware" /etc/apt/sources.list.d/debian.sources; then
   sed -i -E 's/^Components:.*/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
 fi
-apt-get update -y
+# Offline installer: every package Screenroom needs is on the USB stick, as a package source.
+if [ -n "${SCREENROOM_POOL:-}" ] && [ -f "$SCREENROOM_POOL/Packages" ]; then
+  say "Using the packages on the USB stick (no internet needed)"
+  echo "deb [trusted=yes] file:$SCREENROOM_POOL ./" > /etc/apt/sources.list.d/screenroom-offline.list
+fi
+# Debian's servers, for updates later (an installation without internet doesn't list them).
+if [ "$IS_DEBIAN" = "1" ] && ! grep -rqsE "^[^#]*(deb\.debian\.org|ftp\.[a-z.]*debian\.org|security\.debian\.org)" /etc/apt/sources.list /etc/apt/sources.list.d/; then
+  cat > /etc/apt/sources.list.d/debian.sources <<SRC
+Types: deb
+URIs: http://deb.debian.org/debian
+Suites: ${VERSION_CODENAME} ${VERSION_CODENAME}-updates
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.debian.org/debian-security
+Suites: ${VERSION_CODENAME}-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+SRC
+fi
+apt-get update -y || echo "Some package sources couldn't be reached (no internet?); continuing with what is available."
 
 # Plain ALSA audio on purpose (no PulseAudio/PipeWire): that's what lets Dolby/DTS bitstreams reach
 # your receiver untouched over HDMI / DisplayPort.

@@ -43,6 +43,15 @@ jobs:
             echo "--- Bluetooth sound service:"; command -v bluealsad bluealsa || true
             cat /usr/lib/systemd/system/bluealsa.service /lib/systemd/system/bluealsa.service /etc/systemd/system/bluealsa.service 2>/dev/null | grep -E "^(ExecStart|User|Type)" || true
             cat /etc/systemd/system/bluealsa.service.d/*.conf 2>/dev/null || true
+            # The offline installer: every package this setup installed, as a package source for the USB stick.
+            echo "--- collecting packages for the offline installer"
+            mkdir -p /w/pool && cd /w/pool
+            dpkg-query -W -f="\${binary:Package}=\${Version}\n" | grep -v "^screenroom[:=]" > /tmp/pkgs
+            xargs -a /tmp/pkgs -n 50 apt-get download -q >/dev/null 2>/tmp/dl.err || true
+            for p in $(cat /tmp/pkgs); do n="${p%%=*}"; n="${n%%:*}"; ls ${n}_*.deb >/dev/null 2>&1 || apt-get download -q "$p" >/dev/null 2>>/tmp/dl.err || echo "MISSING $p"; done
+            apt-get install -y -qq apt-utils >/dev/null
+            apt-ftparchive packages . > Packages && apt-ftparchive release . > Release
+            echo "pool: $(ls *.deb | wc -l) packages, $(du -sh . | cut -f1)"
           ' > container-setup.log 2>&1
           code=$?
           set -e
@@ -53,6 +62,8 @@ jobs:
             exit 1
           fi
           echo "::notice::Setup works on Debian 13"
+          grep "^MISSING" container-setup.log | head -n 10 | while IFS= read -r l; do echo "::warning::offline installer: ${l}"; done
+          echo "::notice::$(grep '^pool:' container-setup.log)"
 
       # ---- 2. the automatic installer image ----------------------------------------------------------
       - name: Tools
@@ -71,9 +82,13 @@ jobs:
         run: |
           mkdir -p out
           DEB="$(ls dist/screenroom_*_amd64.deb)"
-          scripts/build-installer-iso.sh "$DEB" "out/Screenroom-Installer-${VERSION}.iso"
+          sudo chown -R "$(id -u)" pool
+          scripts/build-installer-iso.sh "$DEB" "out/Screenroom-Installer-${VERSION}.iso" --pool pool
           ssh-keygen -q -t ed25519 -N '' -f test_key
-          scripts/build-installer-iso.sh "$DEB" installer-test.iso --test-key test_key.pub
+          scripts/build-installer-iso.sh "$DEB" installer-test.iso --pool pool --test-key test_key.pub
+          # GitHub release files can't be over 2 GB.
+          SIZE=$(stat -c %s "out/Screenroom-Installer-${VERSION}.iso"); echo "::notice::Installer size: $((SIZE / 1048576)) MB"
+          [ "$SIZE" -lt 2000000000 ] || { echo "::error::The installer is over 2 GB, too big for a GitHub release"; exit 1; }
           cp "$DEB" out/
 
       # ---- 3. install it in a virtual machine (UEFI, like the M910q) ---------------------------------
@@ -105,14 +120,19 @@ jobs:
               sleep 2; convert install.ppm screens-install-live.png 2>/dev/null && gh release upload ci-screens screens-install-live.png --clobber >/dev/null 2>&1 || true
             done ) &
           set +e
-          timeout 100m qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 \
+          # Installed with the network cable "unplugged": everything must come from the USB stick.
+          timeout 100m qemu-system-x86_64 $KVM -m 4096 -smp 2 -machine q35 -S \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=os.qcow2,if=virtio,format=qcow2 \
             -drive file=media.img,if=virtio,format=raw \
             -drive file=installer-test.iso,media=cdrom,readonly=on \
             -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
-            -vga std -display none -monitor unix:mon.sock,server,nowait -no-reboot
+            -vga std -display none -monitor unix:mon.sock,server,nowait -no-reboot &
+          QPID=$!
+          for i in $(seq 1 50); do [ -S mon.sock ] && break; sleep 0.2; done
+          printf 'set_link n0 off\ncont\n' | socat - UNIX-CONNECT:mon.sock >/dev/null
+          wait $QPID
           code=$?
           set -e
           [ -f install.ppm ] && convert install.ppm screens-install-last.png || true
