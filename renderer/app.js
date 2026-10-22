@@ -281,7 +281,7 @@
       for (let i = picked.length - 1; i >= 0; i--) { const e = voteMovies().find((x) => x.key === picked[i]); if (!e || !allowedForAll(e, vs)) picked.splice(i, 1); }
       const q = filter.trim().toLowerCase();
       const list = voteMovies().filter((e) => allowedForAll(e, vs) && (!q || e.name.toLowerCase().includes(q) || e.genres.join(' ').toLowerCase().includes(q)));
-      list.sort((a, b) => (picked.includes(b.key) - picked.includes(a.key)) || a.name.localeCompare(b.name));
+      list.sort((a, b) => a.name.localeCompare(b.name)); // stays put when you pick one, so the remote doesn't lose its place
       grid.replaceChildren(...list.slice(0, 120).map((e) => {
         const on = picked.includes(e.key);
         return h('button', { class: 'card mn-card' + (on ? ' on' : ''), style: bg(e.art), 'data-key': e.key, title: e.name,
@@ -1150,7 +1150,7 @@
       h('button', { class: 'pic' + (!d.avatar ? ' on' : ''), title: 'Initial', onclick: () => pick('') }, avatar({ name: name.value || '?', color: d.color })),
       ...(window.Avatars ? window.Avatars.list : []).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => pick('char:' + c.id) },
         avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))),
-      d.photo ? h('button', { class: 'pic' + (d.avatar === 'photo' ? ' on' : ''), title: 'Photo', onclick: () => pick('photo') }, avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo })) : null);
+      ...(d.photo ? [h('button', { class: 'pic' + (d.avatar === 'photo' ? ' on' : ''), title: 'Photo', onclick: () => pick('photo') }, avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo }))] : []));
     drawPics();
     const photoHint = !p ? h('p', { class: 'am-hint' }, 'Save the profile first to give it a photo.')
       : h('div', { class: 'photo-hint' },
@@ -1354,7 +1354,16 @@
     el.focus({ preventScroll: true });
     navFocus = false;
     // (things in fixed bars / overlays are always on screen: scrolling them "into view" would shift the whole page)
-    if (!el.closest('#nav, #npbar, #npfull, .poverlay, #sheet')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    // In a pop-up (Movie night, Recommend) only the pop-up's own list scrolls, keeping the focused film in the middle.
+    const card = el.closest('#sheet .sheet-card');
+    if (card) {
+      const r = el.getBoundingClientRect(), c = card.getBoundingClientRect();
+      const foot = card.querySelector('.sheet-foot');
+      const bottom = c.bottom - (foot && !foot.contains(el) ? foot.offsetHeight : 0);
+      if (r.top < c.top + 20 || r.bottom > bottom - 20) card.scrollTo({ top: card.scrollTop + (r.top + r.height / 2) - (c.top + (bottom - c.top) / 2), behavior: 'smooth' });
+      return;
+    }
+    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
   function defaultFocus(els) {
     return els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card')) || els[0];

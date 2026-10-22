@@ -785,3 +785,12 @@ body.navmode .who-opt:focus .avatar { transform: scale(1.06); border-color: #fff
 .sheet-foot { position: sticky; bottom: -26px; background: #181818; padding: 12px 0; margin-bottom: -10px; }
 .photo-hint { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 12px; }
 .photo-hint .am-hint { margin: 0; }
+
+/* Movie night: the highlighted film stays in its spot (a bright frame instead of growing over its neighbours) */
+.mn-card, .mn-card:hover, .mn-card:focus, .mn-card:focus-visible, body.navmode .mn-card:focus, body.big .mn-card:focus, body.big .mn-card:hover { transform: none; flex: none; }
+.mn-card:focus, .mn-card:focus-visible, body.navmode .mn-card:focus { outline: 4px solid #fff; outline-offset: 2px; z-index: 1; }
+.mn-card.on:focus { outline-color: #f5c518; }
+body .mn-card.won { transform: scale(1.06); }
+.sheet-foot { z-index: 3; }
+.mn-grid { overflow: hidden; padding: 8px; }
+.mn-grid.vote { overflow: visible; }
