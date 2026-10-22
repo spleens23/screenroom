@@ -153,7 +153,12 @@ window.createParlor = function createParlor(ctx) {
   }
   function renderSongs() {
     const ids = Object.values(P.tracks).sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || (a.disc - b.disc) || (a.track - b.track)).map((t) => t.id);
-    page('Songs', songTable(ids, { context: { kind: 'songs', name: 'Songs' } }));
+    const ctxs = { kind: 'songs', name: 'Songs' };
+    page('Songs',
+      ids.length ? h('div', { class: 'btns pbtns' },
+        h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxs) }, svg(ICON.play), 'Play'),
+        h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxs) }, svg(ICON.shuffle), 'Shuffle')) : null,
+      songTable(ids, { context: ctxs }));
   }
   function renderPlaylists() {
     page('Playlists', grid([
@@ -359,7 +364,12 @@ window.createParlor = function createParlor(ctx) {
   }
 
   // ---- playing -----------------------------------------------------------------------------------------
+  let lastPlay = { key: '', at: 0 };
   async function playIds(ids, start, context) {
+    // a double-click on a song is one request, not two
+    const key = `${ids[start]}|${ids.length}`;
+    if (key === lastPlay.key && Date.now() - lastPlay.at < 700) return;
+    lastPlay = { key, at: Date.now() };
     const r = await api.musicPlay({ trackIds: ids, start, context });
     if (!r.ok) ctx.flash(r.error || 'Could not play that');
   }

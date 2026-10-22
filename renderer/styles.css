@@ -794,3 +794,13 @@ body .mn-card.won { transform: scale(1.06); }
 .sheet-foot { z-index: 3; }
 .mn-grid { overflow: hidden; padding: 8px; }
 .mn-grid.vote { overflow: visible; }
+
+/* sheets: the content scrolls, the buttons underneath always show */
+.sheet-card { display: flex; flex-direction: column; overflow: hidden; }
+.sheet-body { overflow-y: auto; min-height: 0; flex: 1; margin: -6px -12px 0; padding: 6px 12px 4px; }
+.sheet-foot { position: static; bottom: auto; margin: 0; padding: 16px 0 0; border-top: 1px solid #2a2a2a; flex: none; }
+/* Now Playing record: a comfortable size, with the big-cover mode only a step larger (it used to fill the screen) */
+.turntable { width: min(52vh, 34vw); }
+#npfull.big .turntable { width: min(60vh, 42vw); }
+#npfull.big .npf { padding: 8vh 0 14vh; }
+@media (max-width: 760px) { .turntable { width: 60vw; } }

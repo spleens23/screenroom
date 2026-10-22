@@ -189,9 +189,17 @@
   }
 
   // ---- sheets: full-screen pop-ups that work with the remote (Recommend, Movie night) -----------------
+  // A sheet's content scrolls; its .sheet-foot buttons (Start the vote, Cancel…) always stay on screen below it.
+  function fillSheet(card, kids) {
+    const all = kids.flat().filter((k) => k != null && k !== false);
+    const foot = all.filter((k) => k.classList && k.classList.contains('sheet-foot'));
+    card.replaceChildren(h('div', { class: 'sheet-body' }, all.filter((k) => !foot.includes(k))), ...foot);
+  }
   function sheet(cls, ...kids) {
     closeSheet(true);
-    const el = h('div', { id: 'sheet', class: 'sheet ' + cls, onmousedown: (ev) => { if (ev.target === el) closeSheet(); } }, h('div', { class: 'sheet-card' }, ...kids));
+    const card = h('div', { class: 'sheet-card' });
+    fillSheet(card, kids);
+    const el = h('div', { id: 'sheet', class: 'sheet ' + cls, onmousedown: (ev) => { if (ev.target === el) closeSheet(); } }, card);
     document.body.append(el);
     return el;
   }
@@ -282,7 +290,7 @@
       const q = filter.trim().toLowerCase();
       const list = voteMovies().filter((e) => allowedForAll(e, vs) && (!q || e.name.toLowerCase().includes(q) || e.genres.join(' ').toLowerCase().includes(q)));
       list.sort((a, b) => a.name.localeCompare(b.name)); // stays put when you pick one, so the remote doesn't lose its place
-      grid.replaceChildren(...list.slice(0, 120).map((e) => {
+      grid.replaceChildren(...list.map((e) => {
         const on = picked.includes(e.key);
         return h('button', { class: 'card mn-card' + (on ? ' on' : ''), style: bg(e.art), 'data-key': e.key, title: e.name,
           onclick: () => {
@@ -412,7 +420,7 @@
           h('button', { class: 'btn primary', onclick: reveal }, left ? `Count the votes (${left} still to vote)` : 'Count the votes'),
           h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel the vote'))];
     const existing = $('#sheet.vote');
-    if (existing) existing.querySelector('.sheet-card').replaceChildren(...kids);
+    if (existing) fillSheet(existing.querySelector('.sheet-card'), kids);
     else { const cb = sheetClosed; sheet('vote movienight', ...kids); sheetClosed = cb; }
     $('#sheet .mn-icon').innerHTML = POPCORN;
     if (!reveal_ && api.remoteInfo) api.remoteInfo().then((r) => { if (r && r.enabled && r.qr) qr.innerHTML = r.qr; else qr.remove(); }).catch(() => qr.remove());
@@ -623,7 +631,9 @@
   function openEntry(key, focusEp) {
     const e = fullEntry(key);
     if (!e) return;
-    open = { key, season: null, focusEp: focusEp || null, returnKey: key, version: null };
+    const from = document.activeElement;
+    open = { key, season: null, focusEp: focusEp || null, returnKey: key, version: null,
+      returnSel: from && from.closest && from.closest('.hero') ? '.hero .btn.secondary' : null, returnEl: from && from !== document.body ? from : null, scrollY: window.scrollY };
     if (e.kind === 'series') {
       const n = nextUp(e);
       open.season = (focusEp ? S.library.find((i) => i.id === focusEp) : n.ep).tv.season;
@@ -634,11 +644,18 @@
     const first = $('#modal .btn.primary'); first && first.focus();
   }
   const closeModal = () => {
-    const back = open && open.returnKey;
+    const o = open;
     $('#modal').hidden = true; open = null;
     if (parlorUI) parlorUI.onModalClosed();
-    const el = back && document.querySelector(`.card[data-key="${CSS.escape(back)}"]`);
-    if (el) el.focus({ preventScroll: false });
+    if (!o) return;
+    // back to exactly what opened it (the hero's More Info, or the same poster in the same row), staying where the page was
+    let el = o.returnEl && document.body.contains(o.returnEl) ? o.returnEl : null;
+    if (!el && o.returnSel) el = document.querySelector(o.returnSel);
+    if (!el) el = o.returnKey && document.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"]`);
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const r = el.getBoundingClientRect();
+    if (r.bottom < 60 || r.top > innerHeight - 40) el.scrollIntoView({ block: 'center', inline: 'nearest' });
   };
 
   function renderModal() {
@@ -1355,12 +1372,12 @@
     navFocus = false;
     // (things in fixed bars / overlays are always on screen: scrolling them "into view" would shift the whole page)
     // In a pop-up (Movie night, Recommend) only the pop-up's own list scrolls, keeping the focused film in the middle.
-    const card = el.closest('#sheet .sheet-card');
-    if (card) {
-      const r = el.getBoundingClientRect(), c = card.getBoundingClientRect();
-      const foot = card.querySelector('.sheet-foot');
-      const bottom = c.bottom - (foot && !foot.contains(el) ? foot.offsetHeight : 0);
-      if (r.top < c.top + 20 || r.bottom > bottom - 20) card.scrollTo({ top: card.scrollTop + (r.top + r.height / 2) - (c.top + (bottom - c.top) / 2), behavior: 'smooth' });
+    if (el.closest('#sheet')) {
+      const box = el.closest('.sheet-body');
+      if (box) {
+        const r = el.getBoundingClientRect(), c = box.getBoundingClientRect();
+        if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (c.top + c.height / 2), behavior: 'smooth' });
+      }
       return;
     }
     if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
@@ -1383,6 +1400,27 @@
     const grp = cur.closest('[data-navrow]');
     let pool = els;
     if (grp && (dir === 'left' || dir === 'right')) { const inG = els.filter((e) => grp.contains(e)); if (inG.length > 1) pool = inG; }
+    // The music bar along the bottom is only reached on purpose: Left from the first thing in a row
+    // (or Back → the Now Playing chip), never by just scrolling down past it.
+    const inBar = (e) => !!e.closest('#npbar');
+    if (!inBar(cur)) pool = pool.filter((e) => !inBar(e));
+    // Left/right stay on the same line (the end of a row doesn't jump up to the menu or into another row).
+    if (dir === 'left' || dir === 'right') {
+      const same = pool.filter((e) => { if (e === cur) return false; const r = e.getBoundingClientRect(); return r.bottom > a.top + 4 && r.top < a.bottom - 4; });
+      const inNav = !!cur.closest('#nav');
+      const sameSide = same.filter((e) => !!e.closest('#nav') === inNav);
+      const ahead = sameSide.filter((e) => { const r = e.getBoundingClientRect(); const dx = r.left + r.width / 2 - ax; return dir === 'right' ? dx > 2 : dx < -2; });
+      if (ahead.length) pool = sameSide;
+      else {
+        if (dir === 'left' && !inBar(cur)) { const bar = els.filter(inBar); const play = bar.find((e) => e.dataset.b === 'play') || bar[0]; if (play) { focusEl(play); return; } }
+        return; // nothing further this way
+      }
+    }
+    if ((dir === 'up' || dir === 'down') && !cur.closest('#nav')) {
+      // up/down inside the page only reach the top menu from the top of the page
+      const rest = pool.filter((e) => !e.closest('#nav'));
+      if (dir === 'down' || rest.some((e) => e !== cur && e.getBoundingClientRect().bottom <= a.top - 2)) pool = rest;
+    }
     for (const el of pool) {
       if (el === cur) continue;
       const r = el.getBoundingClientRect();
@@ -1558,6 +1596,9 @@
       if (e.key === 'Escape') { t.blur(); e.preventDefault(); }
       else if (e.key === 'Enter' && oskAllowed() && !kbInUse()) { e.preventDefault(); openOsk(t); }
       else if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); t.blur(); const c = document.querySelector('#main .card, #main .btn'); c && focusEl(c); }
+      else if ((e.key === 'ArrowRight' && t.selectionEnd >= t.value.length) || (e.key === 'ArrowLeft' && t.selectionStart === 0 && t.selectionEnd === 0)) {
+        e.preventDefault(); move(e.key === 'ArrowRight' ? 'right' : 'left');
+      }
       return;
     }
     if (isTextInput(t) && !pinState) {
