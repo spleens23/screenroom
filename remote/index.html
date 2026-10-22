@@ -51,6 +51,21 @@
   .up .st { color: var(--muted); white-space: nowrap; }
   .up.fail .st { color: #ff8a8a; }
   .note { color: var(--muted); font-size: 13px; line-height: 1.45; }
+  .av { width: 52px; height: 52px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 24px; color: #fff; overflow: hidden; flex: none; }
+  .av svg { width: 92%; height: 92%; margin-top: 8%; }
+  .av img { width: 100%; height: 100%; object-fit: cover; }
+  .prof { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 12px; margin-bottom: 8px; border: 0; border-radius: 12px; background: var(--card); font-size: 17px; text-align: left; }
+  .prof .grow { flex: 1; }
+  .prof small { color: var(--muted); display: block; font-size: 13px; }
+  .prof.on { outline: 3px solid #fff; }
+  #vote-banner { display: block; width: 100%; padding: 14px; margin-bottom: 14px; border: 0; border-radius: 12px; background: #f5c518; color: #000; font-size: 17px; font-weight: 800; }
+  .cands { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cand { position: relative; border: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--card); text-align: left; }
+  .cand .poster { aspect-ratio: 2/3; background: #333 center/cover; }
+  .cand .t { padding: 8px 10px; font-size: 14px; font-weight: 600; }
+  .cand .n { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.75); border-radius: 20px; padding: 3px 9px; font-size: 13px; font-weight: 700; }
+  .cand.mine { outline: 4px solid #f5c518; }
+  .winner { text-align: center; font-size: 22px; font-weight: 800; margin: 20px 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -66,10 +81,12 @@
 
 <div id="app" hidden>
   <header><div class="brand">SCREENROOM</div><div id="status" class="msg" style="margin:0;font-size:13px">connected</div></header>
+  <button id="vote-banner" hidden>🍿 Movie night vote — tap to vote</button>
   <div class="tabs">
     <button id="tab-remote" class="on">Remote</button>
     <button id="tab-lib">Library</button>
-    <button id="tab-add">Add media</button>
+    <button id="tab-add">Add</button>
+    <button id="tab-prof">Profiles</button>
   </div>
 
   <section id="remote">
@@ -119,12 +136,30 @@
     <p id="add-hint" class="note"></p>
   </section>
 
+  <section id="profiles" hidden>
+    <p class="note">Tap a profile to give it a photo. Pick a character or the initial on the TV in Settings → Profiles.</p>
+    <div id="prof-list"></div>
+    <div id="prof-photo" hidden>
+      <div class="pick">
+        <label>Take a photo<input id="photo-cam" type="file" accept="image/*" capture="user"></label>
+        <label class="alt">Choose a picture<input id="photo-pick" type="file" accept="image/*"></label>
+      </div>
+      <input id="prof-pin" type="tel" inputmode="numeric" maxlength="4" placeholder="This profile's PIN" hidden>
+      <p id="photo-msg" class="note"></p>
+    </div>
+  </section>
+
+  <section id="vote" hidden>
+    <div id="vote-body"></div>
+  </section>
+
   <section id="library" hidden>
     <input id="filter" type="search" placeholder="Filter your library…">
     <div id="list" class="list"></div>
   </section>
 </div>
 
+<script src="/avatars.js"></script>
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
@@ -155,7 +190,7 @@
       await api('/api/ping');
       try { localStorage.setItem('pin', pin); } catch {}
       $('#pin-screen').hidden = true; $('#app').hidden = false;
-      loadLibrary();
+      loadLibrary(); pollVote();
     } catch (e) { if (e.message !== 'pin') showPin('Could not reach Screenroom'); }
   }
   $('#pin-go').onclick = () => { pin = $('#pin').value.trim(); connect(); };
@@ -169,16 +204,141 @@
   let t;
   $('#tv-search').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => api('/api/search', { q: e.target.value }).catch(() => {}), 350); });
 
+  const TABS = { remote: 'remote', library: 'lib', add: 'add', profiles: 'prof', vote: null };
   function showTab(name) {
-    for (const t of ['remote', 'library', 'add']) {
+    for (const t of Object.keys(TABS)) {
       $('#' + t).hidden = t !== name;
-      $('#tab-' + (t === 'library' ? 'lib' : t)).className = t === name ? 'on' : '';
+      if (TABS[t]) $('#tab-' + TABS[t]).className = t === name ? 'on' : '';
     }
     if (name === 'add') loadInfo();
+    if (name === 'profiles') loadProfiles();
+    if (name === 'vote') drawVote();
   }
   $('#tab-remote').onclick = () => showTab('remote');
   $('#tab-lib').onclick = () => showTab('library');
   $('#tab-add').onclick = () => showTab('add');
+  $('#tab-prof').onclick = () => showTab('profiles');
+  $('#vote-banner').onclick = () => showTab('vote');
+
+  // ---- profiles: the same pictures as the TV, and sending a photo -----------------------------------
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const blobs = {};
+  async function pictureUrl(path) {
+    if (blobs[path]) return blobs[path];
+    const r = await fetch(path, { headers: { 'x-pin': pin } });
+    if (!r.ok) return '';
+    return (blobs[path] = URL.createObjectURL(await r.blob()));
+  }
+  function avatarEl(p) {
+    const a = el('span', 'av'); a.style.background = p.color || '#555';
+    if (p.avatar === 'photo' && p.hasPhoto) {
+      const img = el('img'); a.append(img);
+      pictureUrl('/api/photo?profile=' + encodeURIComponent(p.id) + '&v=' + (p.photoV || '')).then((u) => { img.src = u; });
+    } else if (p.avatar && p.avatar.startsWith('char:') && window.Avatars && window.Avatars.svg(p.avatar.slice(5))) {
+      a.innerHTML = window.Avatars.svg(p.avatar.slice(5));
+    } else a.textContent = (p.name || '?').trim().charAt(0).toUpperCase();
+    return a;
+  }
+  let profs = [], photoFor = null;
+  async function loadProfiles() {
+    try { profs = await api('/api/profiles'); } catch { return; }
+    const list = $('#prof-list'); list.replaceChildren();
+    if (!profs.length) list.append(el('p', 'msg', 'No profiles yet — add them on the TV.'));
+    for (const p of profs) {
+      const b = el('button', 'prof' + (photoFor && photoFor.id === p.id ? ' on' : ''));
+      const t = el('span', 'grow', p.name); t.append(el('small', '', p.avatar === 'photo' ? 'Photo' : p.avatar ? 'Character' : 'Initial'));
+      b.append(avatarEl(p), t);
+      b.onclick = () => { photoFor = p; $('#prof-photo').hidden = false; $('#prof-pin').hidden = !p.hasPin; $('#photo-msg').textContent = `New photo for ${p.name}:`; loadProfiles(); };
+      list.append(b);
+    }
+  }
+  // Shrink to a 512px square on the phone so it sends quickly.
+  function squareJpeg(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const s = Math.min(img.naturalWidth, img.naturalHeight), out = Math.min(512, s);
+        const c = document.createElement('canvas'); c.width = c.height = out;
+        c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, out, out);
+        URL.revokeObjectURL(img.src);
+        c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not read that picture'))), 'image/jpeg', 0.86);
+      };
+      img.onerror = () => reject(new Error('Could not read that picture'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  async function sendPhoto(e) {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!f || !photoFor) return;
+    const msg = $('#photo-msg'); msg.textContent = 'Sending…';
+    try {
+      const b = await squareJpeg(f);
+      const r = await fetch('/api/avatar?profile=' + encodeURIComponent(photoFor.id), { method: 'PUT', headers: { 'x-pin': pin, 'x-profile-pin': $('#prof-pin').value.trim(), 'Content-Type': 'image/jpeg' }, body: b });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) { showPin('Wrong PIN'); return; }
+      if (!r.ok) { msg.textContent = j.error || 'That didn\'t work'; return; }
+      msg.textContent = `Done — ${photoFor.name} has a new photo on the TV.`;
+      Object.keys(blobs).forEach((k) => { if (k.includes(photoFor.id)) delete blobs[k]; });
+      photoFor.photoV = Date.now(); buzz(); loadProfiles();
+    } catch (err) { msg.textContent = err.message; }
+  }
+  $('#photo-cam').onchange = sendPhoto;
+  $('#photo-pick').onchange = sendPhoto;
+
+  // ---- movie night vote ------------------------------------------------------------------------------
+  let vote = { open: false }, me = '';
+  try { me = localStorage.getItem('voteAs') || ''; } catch {}
+  const deviceId = (() => { try { let d = localStorage.getItem('dev'); if (!d) { d = Math.random().toString(36).slice(2); localStorage.setItem('dev', d); } return d; } catch { return 'phone'; } })();
+  async function pollVote() {
+    try {
+      const v = await api('/api/vote');
+      const was = vote; vote = v || { open: false };
+      $('#vote-banner').hidden = !vote.open && !vote.winner;
+      $('#vote-banner').textContent = vote.winner ? '🍿 And the winner is…' : '🍿 Movie night vote — tap to vote';
+      if (!was.open && vote.open && $('#vote').hidden) buzz();
+      if (!$('#vote').hidden && JSON.stringify(was) !== JSON.stringify(vote)) drawVote();
+      if ($('#vote').hidden === false && !vote.open && !vote.winner) showTab('remote');
+    } catch {}
+  }
+  function drawVote() {
+    const box = $('#vote-body'); box.replaceChildren();
+    if (!vote.open && !vote.winner) { box.append(el('p', 'msg', 'No vote right now.')); return; }
+    if (vote.winner) {
+      const w = (vote.candidates || []).find((c) => c.key === vote.winner);
+      box.append(el('div', 'winner', w ? `🏆 ${w.name}` : 'Vote closed'));
+      return;
+    }
+    const voter = (vote.voters || []).find((v) => v.id === me);
+    if (!voter) {
+      box.append(el('h3', '', 'Who are you?'));
+      for (const p of vote.voters || []) {
+        const b = el('button', 'prof'); const t = el('span', 'grow', p.name);
+        b.append(avatarEl(p), t);
+        b.onclick = () => { me = p.id; try { localStorage.setItem('voteAs', me); } catch {} drawVote(); };
+        box.append(b);
+      }
+      return;
+    }
+    const head = el('button', 'prof'); head.append(avatarEl(voter), el('span', 'grow', `Voting as ${voter.name}`));
+    head.lastChild.append(el('small', '', 'Not you? Tap to change'));
+    head.onclick = () => { me = ''; drawVote(); };
+    box.append(head, el('h3', '', voter.choice ? 'Your vote is in — tap another to change it' : 'Tap the one you want to watch'));
+    const grid = el('div', 'cands');
+    for (const c of vote.candidates || []) {
+      const b = el('button', 'cand' + (voter.choice === c.key ? ' mine' : ''));
+      const poster = el('div', 'poster');
+      if (c.art) pictureUrl('/api/art?id=' + encodeURIComponent(c.art)).then((u) => { if (u) poster.style.backgroundImage = `url("${u}")`; });
+      else poster.append(el('div', 't', c.name));
+      b.append(poster, el('div', 't', c.name + (c.year && !c.name.includes(String(c.year)) ? ` (${c.year})` : '')));
+      if (vote.showTally && vote.tally) b.append(el('span', 'n', String(vote.tally[c.key] || 0)));
+      b.onclick = () => { buzz(); api('/api/vote', { voter: deviceId, profile: voter.id, name: voter.name, choice: c.key }).catch(() => {}); voter.choice = c.key; drawVote(); setTimeout(pollVote, 400); };
+      grid.append(b);
+    }
+    box.append(grid);
+    const left = (vote.voters || []).filter((v) => !v.choice).map((v) => v.name);
+    box.append(el('p', 'note center', left.length ? `Still to vote: ${left.join(', ')}` : 'Everyone has voted!'));
+  }
+  setInterval(() => { if (!$('#app').hidden && document.visibilityState === 'visible') pollVote(); }, 2500);
 
   let lib = [];
   async function loadLibrary() {

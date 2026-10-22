@@ -40,6 +40,7 @@ class Store(private val ctx: Context) {
 
     @Synchronized fun afterProfileDeleted(id: String) {
         forgetRatings(id)
+        forgetRecs(id)
         if (id == currentId) {
             currentId = profiles.last().optString("id")
             progress = readObj(profiles.progressFile(currentId))
@@ -141,6 +142,63 @@ class Store(private val ctx: Context) {
         writeObj(ratingsFile, ratings)
     }
 
+    // ---- the house: who's watched what, and recommendations (see lib/social.js on the desktop) --------------
+    /** { itemId: [profile ids that finished it] } */
+    fun watchedBy(): JSONObject {
+        val out = JSONObject()
+        val list = profiles.list()
+        for (i in 0 until list.length()) {
+            val pid = list.getJSONObject(i).optString("id")
+            val prog = if (pid == currentId) progress else readObj(profiles.progressFile(pid))
+            for (id in prog.keys()) {
+                val v = prog.optJSONObject(id) ?: continue
+                val dur = v.optDouble("dur", 0.0)
+                if (v.optBoolean("done") || (dur > 0 && v.optDouble("pos", 0.0) / dur > 0.9)) {
+                    (out.optJSONArray(id) ?: JSONArray().also { out.put(id, it) }).put(pid)
+                }
+            }
+        }
+        return out
+    }
+
+    private val recsFile = File(dir, "recommendations.json")
+    @Volatile private var recs: JSONArray = try { JSONArray(recsFile.readText()) } catch (_: Throwable) { JSONArray() }
+    private fun saveRecs() {
+        val tmp = File(dir, "recommendations.json.tmp")
+        tmp.writeText(recs.toString())
+        if (!tmp.renameTo(recsFile)) { recsFile.delete(); tmp.renameTo(recsFile) }
+    }
+    private fun recList(): List<JSONObject> = (0 until recs.length()).mapNotNull { recs.optJSONObject(it) }
+
+    @Synchronized fun recommend(to: JSONArray, item: JSONObject) {
+        val key = item.optString("key").take(300)
+        val kind = item.optString("kind")
+        if (key.isEmpty() || kind !in setOf("movie", "series", "album")) return
+        var list = recList()
+        for (i in 0 until to.length()) {
+            val pid = to.optString(i)
+            if (pid.isEmpty() || pid == currentId || profiles.get(pid) == null) continue
+            list = list.filter { !(it.optString("from") == currentId && it.optString("to") == pid && it.optString("key") == key) } +
+                JSONObject().put("id", java.lang.Long.toHexString(SecureRandom().nextLong())).put("from", currentId).put("to", pid)
+                    .put("key", key).put("kind", kind).put("name", item.optString("name").take(120)).put("at", System.currentTimeMillis())
+        }
+        recs = JSONArray(list.takeLast(600))
+        saveRecs()
+    }
+
+    @Synchronized fun dismissRec(id: String) {
+        recs = JSONArray(recList().filter { !(it.optString("id") == id && it.optString("to") == currentId) })
+        saveRecs()
+    }
+
+    @Synchronized fun forgetRecs(pid: String) {
+        recs = JSONArray(recList().filter { it.optString("from") != pid && it.optString("to") != pid })
+        saveRecs()
+    }
+
+    /** Movie night: the vote runs in the web UI, which hands its state here for the phones. */
+    @Volatile var voteBlob: JSONObject? = null
+
     // ---- playback problems (shown in Settings so they can be reported) ---------------------------------------
     private val problemsFile = File(dir, "playback-problems.json")
 
@@ -180,6 +238,8 @@ class Store(private val ctx: Context) {
             .put("pickProfile", needPick)
             .put("playbackProblems", problems())
             .put("ratings", ratings)
+            .put("recs", recs)
+            .put("watchedBy", watchedBy())
         if (!canManageAllFiles()) {
             s.put("storageWarning", "Screenroom can only see video files on drives, not subtitles, and uploads are kept inside the app. " +
                 "Run the setup script once (it grants full file access) to fix this.")

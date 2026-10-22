@@ -99,6 +99,14 @@ window.createParlor = function createParlor(ctx) {
       h('div', { class: 'phead' }, h('h1', {}, 'Parlor'), h('div', { class: 'pstats' },
         `${plural(P.albums.length, 'album')} · ${plural(Object.keys(P.tracks).length, 'song')}`)),
       h('div', { class: 'rows' },
+        ctx.albumRecs ? row('Recommended for You', (() => {
+          const seen = new Set();
+          return ctx.albumRecs().map((x) => ({ ...x, a: album(x.rec.key) })).filter((x) => x.a && !seen.has(x.a.key) && seen.add(x.a.key)).map((x) => {
+            const c = albumCard(x.a);
+            c.append(h('div', { class: 'card-from' }, ctx.avatar(x.from), `from ${x.from.name}`));
+            return c;
+          });
+        })()) : null,
         row('Recently Played', recent.map(albumCard)),
         row('Recently Added', added.map(albumCard)),
         row('Playlists', P.playlists.map(playlistCard)),
@@ -225,7 +233,9 @@ window.createParlor = function createParlor(ctx) {
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
             h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '＋ Playlist'),
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: async () => { await api.musicCmd('enqueue', { trackIds: ids, next: true }); ctx.flash('Playing next'); } }, 'Play Next') : null,
-            P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null),
+            P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null,
+            ctx.recommend && ctx.canRecommend() ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '➜ Recommend') : null),
+          albumRecBanner(a),
           P.canManage ? sharePanel(a) : null)),
       h('table', { class: 'songs tracks' }, h('tbody', {}, albumTracks(a).map((t, i) => {
         const cur = P.player && P.player.track && P.player.track.id === t.id;
@@ -240,6 +250,29 @@ window.createParlor = function createParlor(ctx) {
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
     if (focusSel) { const f = $('#modal-body').querySelector(focusSel); f && f.focus(); }
+  }
+
+  // Recommend an album: grown-ups also share it with whoever they send it to; kids can send it to people who can already hear it.
+  function recommendAlbum(a) {
+    ctx.setSheetClosed(() => { const b = $('#modal .rec-btn'); b && b.focus(); });
+    ctx.recommend({ kind: 'album', key: a.key, name: a.title,
+      allowed: (p) => P.canManage || a.audience.includes(p.id),
+      beforeSend: async (to) => {
+        for (const pid of to) {
+          if (a.audience.includes(pid)) continue;
+          const r = await api.parlorShare(a.key, pid, true);
+          if (r.ok) P = r.state;
+        }
+        return true;
+      },
+      onSent: () => { drawAlbum('.rec-btn'); } });
+  }
+  function albumRecBanner(a) {
+    if (!ctx.albumRecs) return null;
+    const mine = ctx.albumRecs().filter((x) => x.rec.key === a.key);
+    if (!mine.length) return null;
+    return h('div', { class: 'rec-banner' }, ctx.avatar(mine[0].from), h('span', {}, `${mine.map((x) => x.from.name).join(' and ')} recommended this for you`),
+      h('button', { class: 'btn secondary small', onclick: async () => { await ctx.dismissRecs(mine.map((x) => x.rec.id)); drawAlbum('.btn.primary'); } }, 'Dismiss'));
   }
 
   // Share this album with other profiles (one press each; press again to unshare).

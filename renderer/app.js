@@ -140,6 +140,295 @@
   // Redraw the page behind the info window (new average on the card) without moving the focus.
   function renderKeepFocusQuiet() { const y = window.scrollY; const a = document.activeElement; render(); window.scrollTo(0, y); if (a && document.body.contains(a)) a.focus({ preventScroll: true }); }
 
+  // ---- the house: who's watched it, recommendations ----------------------------------------------------
+  const profById = (id) => (S.profiles || []).find((p) => p.id === id);
+  const others = () => (S.profiles || []).filter((p) => !S.profile || p.id !== S.profile.id);
+  const watchedIds = (id) => ((S.watchedBy || {})[id] || []);
+  /** Other profiles who've finished a film (any copy), or for a series: [{ profile, n }] episodes finished. */
+  function watchersOf(e) {
+    const me = S.profile && S.profile.id;
+    const count = new Map();
+    for (const it of e.items || []) for (const pid of watchedIds(it.id)) if (pid !== me) count.set(pid, (count.get(pid) || 0) + 1);
+    return [...count].map(([pid, n]) => ({ profile: profById(pid), n })).filter((x) => x.profile);
+  }
+  function watchedByBlock(e) {
+    const list = watchersOf(e);
+    if (!list.length) return null;
+    const total = e.kind === 'series' ? e.eps.length : 0;
+    return h('div', { class: 'watched-by' }, h('span', { class: 'rating-label' }, 'Watched by'),
+      list.map((x) => h('span', { class: 'rating-chip' }, avatar(x.profile), h('span', { class: 'rn' }, x.profile.name),
+        total ? h('small', {}, x.n >= total ? ' · all' : ` · ${x.n} of ${total}`) : null)));
+  }
+  const tinyFaces = (profs, cls) => (profs.length ? h('div', { class: cls }, profs.slice(0, 3).map((p) => avatar(p)), profs.length > 3 ? h('span', { class: 'more' }, `+${profs.length - 3}`) : null) : null);
+
+  // Recommendations sent to me, newest first: [{ rec, from }]
+  const recsForMe = (kind) => (S.recs || []).filter((r) => S.profile && r.to === S.profile.id && (!kind || kind.includes(r.kind)))
+    .sort((a, b) => b.at - a.at).map((rec) => ({ rec, from: profById(rec.from) })).filter((x) => x.from);
+  /** Films and series people sent me that I haven't finished yet. */
+  function recommendedEntries(all) {
+    const out = [], seen = new Set();
+    for (const { rec, from } of recsForMe(['movie', 'series'])) {
+      const e = all.find((x) => rkey(x) === rec.key);
+      if (!e || seen.has(e.key)) continue;
+      if (e.kind === 'movie' && e.versions.some((v) => isDone(v.id))) continue;
+      if (e.kind === 'series' && e.eps.every((x) => isDone(x.id))) continue;
+      seen.add(e.key); out.push({ entry: e, from, rec });
+    }
+    return out;
+  }
+  function recBanner(e) {
+    const mine = recsForMe(['movie', 'series']).filter((x) => x.rec.key === rkey(e));
+    if (!mine.length) return null;
+    const names = mine.map((x) => x.from.name);
+    return h('div', { class: 'rec-banner' }, avatar(mine[0].from),
+      h('span', {}, `${names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.slice(-1) : names[0]} recommended this for you`),
+      h('button', { class: 'btn secondary small', onclick: async () => {
+        for (const x of mine) S = await api.dismissRec(x.rec.id);
+        renderModal(); renderKeepFocusQuiet(); const f = $('#modal .btn.primary'); f && f.focus();
+      } }, 'Dismiss'));
+  }
+
+  // ---- sheets: full-screen pop-ups that work with the remote (Recommend, Movie night) -----------------
+  function sheet(cls, ...kids) {
+    closeSheet(true);
+    const el = h('div', { id: 'sheet', class: 'sheet ' + cls, onmousedown: (ev) => { if (ev.target === el) closeSheet(); } }, h('div', { class: 'sheet-card' }, ...kids));
+    document.body.append(el);
+    return el;
+  }
+  let sheetClosed = null;
+  function closeSheet(quiet) {
+    const s = $('#sheet');
+    if (!s) return false;
+    s.remove();
+    const cb = sheetClosed; sheetClosed = null;
+    if (cb && !quiet) cb();
+    return true;
+  }
+  const sheetFocus = (sel) => { const f = $('#sheet') && ($('#sheet').querySelector(sel) || $('#sheet').querySelector('button')); if (f) { f.focus({ preventScroll: true }); } };
+
+  /** Send a film, series or album to other profiles. item: { kind, key, name, entry? , onSent? } */
+  function recommendSheet(item) {
+    const chosen = new Set();
+    const can = item.allowed || ((p) => !item.entry || !window.MediaCore || !MediaCore.allowedFor || item.entry.items.some((it) => MediaCore.allowedFor(it, p)));
+    const people = others();
+    const seen = (p) => item.entry && item.entry.items.some((it) => watchedIds(it.id).includes(p.id));
+    const list = h('div', { class: 'who-pick', 'data-navrow': '1' });
+    const draw = (focusId) => {
+      list.replaceChildren(...people.map((p) => {
+        const ok = can(p);
+        return h('button', { class: 'who-opt' + (chosen.has(p.id) ? ' on' : ''), 'data-pid': p.id, disabled: ok ? undefined : 'disabled',
+          onclick: () => { chosen.has(p.id) ? chosen.delete(p.id) : chosen.add(p.id); draw(p.id); } },
+          avatar(p, true), h('span', { class: 'who-name' }, p.name),
+          h('small', {}, !ok ? 'Not allowed for this profile' : seen(p) ? 'Has watched it' : chosen.has(p.id) ? '✓ Selected' : ' '));
+      }));
+      if (focusId) { const f = list.querySelector(`[data-pid="${focusId}"]`); f && f.focus({ preventScroll: true }); }
+    };
+    draw();
+    const send = async () => {
+      if (!chosen.size) { flash('Pick who to send it to'); return; }
+      const to = [...chosen];
+      if (item.beforeSend) { const ok = await item.beforeSend(to); if (!ok) return; }
+      S = await api.recommend(to, { kind: item.kind, key: item.key, name: item.name });
+      closeSheet(true);
+      flash(`Recommended to ${to.map((id) => (profById(id) || {}).name).join(' and ')}`);
+      if (item.onSent) item.onSent();
+    };
+    sheet('rec', h('h2', {}, `Recommend “${item.name}” to…`),
+      people.length ? list : h('p', { class: 'am-hint' }, 'Add more profiles in Settings → Profiles first.'),
+      h('div', { class: 'btns' }, people.length ? h('button', { class: 'btn primary', onclick: send }, 'Send') : null,
+        h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+    sheetFocus('.who-opt:not([disabled])');
+  }
+  const recommendButton = (e) => (others().length ? h('button', { class: 'btn secondary', onclick: () => {
+    sheetClosed = () => { const b = $('#modal .rec-btn'); b && b.focus(); };
+    recommendSheet({ kind: e.kind, key: rkey(e), name: e.name, entry: e });
+  } }, '➜ Recommend') : null);
+
+  // ---- movie night vote ------------------------------------------------------------------------------
+  // Pick a few films, everyone votes (on the TV or on their phone through the phone remote), the winner plays.
+  let vote = null; // { voters: [pid], cands: [entry key], votes: { pid: key }, tvVoter, phase: 'vote'|'reveal', winner, tie }
+  const POPCORN = '<svg viewBox="0 0 24 24"><path d="M5 9h14l-1.6 12H6.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 9l.6 12M14.5 9l-.6 12" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6.5" r="2.2" fill="currentColor"/><circle cx="12" cy="5" r="2.4" fill="currentColor"/><circle cx="16" cy="6.5" r="2.2" fill="currentColor"/></svg>';
+  const voteMovies = () => catalogOf((i) => !i.tv);
+  function allowedForAll(e, voters) {
+    if (!window.MediaCore || !MediaCore.allowedFor) return true;
+    return voters.every((pid) => { const p = profById(pid); return !p || e.items.some((it) => MediaCore.allowedFor(it, p)); });
+  }
+  /** "Suggest for us": films nobody voting has finished, house favourites first, then a random few. */
+  function suggestFilms(voters, n) {
+    const pool = voteMovies().filter((e) => allowedForAll(e, voters));
+    const unseen = pool.filter((e) => !e.versions.some((v) => watchedIds(v.id).some((pid) => voters.includes(pid)) || (voters.includes(S.profile && S.profile.id) && isDone(v.id))));
+    const base = unseen.length >= n ? unseen : pool;
+    const scored = base.map((e) => ({ e, s: ((avgRating(e) || {}).avg || 3) + Math.random() * 2.5 })).sort((a, b) => b.s - a.s);
+    return scored.slice(0, n).map((x) => x.e.key);
+  }
+
+  function movieNightSetup(preset) {
+    const voters = new Set((S.profiles || []).map((p) => p.id));
+    const picked = preset ? [...preset] : [];
+    let filter = '';
+    const whoBox = h('div', { class: 'who-pick small', 'data-navrow': '1' });
+    const drawWho = (f) => {
+      whoBox.replaceChildren(...(S.profiles || []).map((p) => h('button', { class: 'who-opt' + (voters.has(p.id) ? ' on' : ''), 'data-pid': p.id,
+        onclick: () => { if (voters.has(p.id) && voters.size > 1) voters.delete(p.id); else voters.add(p.id); drawWho(p.id); drawGrid(); } },
+        avatar(p, true), h('span', { class: 'who-name' }, p.name), h('small', {}, voters.has(p.id) ? '✓ Voting' : ' '))));
+      if (f) { const x = whoBox.querySelector(`[data-pid="${f}"]`); x && x.focus({ preventScroll: true }); }
+    };
+    const count = h('span', { class: 'mn-count' });
+    const grid = h('div', { class: 'mn-grid' });
+    const startBtn = h('button', { class: 'btn primary', onclick: () => { if (picked.length < 2) { flash('Pick at least 2 films'); return; } startVote([...voters], picked); } }, 'Start the vote');
+    const drawGrid = (f) => {
+      const vs = [...voters];
+      for (let i = picked.length - 1; i >= 0; i--) { const e = voteMovies().find((x) => x.key === picked[i]); if (!e || !allowedForAll(e, vs)) picked.splice(i, 1); }
+      const q = filter.trim().toLowerCase();
+      const list = voteMovies().filter((e) => allowedForAll(e, vs) && (!q || e.name.toLowerCase().includes(q) || e.genres.join(' ').toLowerCase().includes(q)));
+      list.sort((a, b) => (picked.includes(b.key) - picked.includes(a.key)) || a.name.localeCompare(b.name));
+      grid.replaceChildren(...list.slice(0, 120).map((e) => {
+        const on = picked.includes(e.key);
+        return h('button', { class: 'card mn-card' + (on ? ' on' : ''), style: bg(e.art), 'data-key': e.key, title: e.name,
+          onclick: () => {
+            if (on) picked.splice(picked.indexOf(e.key), 1);
+            else if (picked.length >= 5) { flash('Up to 5 films'); return; } else picked.push(e.key);
+            drawGrid(e.key);
+          } },
+          on ? h('div', { class: 'mn-tick' }, String(picked.indexOf(e.key) + 1)) : null,
+          e.art ? null : h('div', { class: 'ttl' }, e.name));
+      }));
+      if (!list.length) {
+        const kidsVoting = vs.map(profById).filter((p) => p && p.kids).map((p) => p.name);
+        grid.append(h('p', { class: 'am-hint mn-empty' }, q ? 'No films match.' : kidsVoting.length
+          ? `None of the films are allowed for everyone voting. Untick ${kidsVoting.join(' or ')} to see more.` : 'No films.'));
+      }
+      count.textContent = picked.length ? `${picked.length} of up to 5 picked` : 'Pick 2 to 5 films';
+      startBtn.disabled = picked.length < 2;
+      if (f) { const x = grid.querySelector(`[data-key="${CSS.escape(f)}"]`); x && x.focus({ preventScroll: true }); }
+    };
+    const search = h('input', { type: 'search', class: 'pin-input mn-search', placeholder: 'Find a film…', oninput: (ev) => { filter = ev.target.value; drawGrid(); } });
+    drawWho(); drawGrid();
+    sheet('movienight',
+      h('div', { class: 'mn-head' }, h('div', { class: 'mn-icon' }), h('h2', {}, 'Movie night')),
+      h('h3', {}, 'Who’s voting?'), whoBox,
+      h('div', { class: 'mn-bar' }, h('h3', {}, 'The choices'), count,
+        h('button', { class: 'btn secondary', onclick: () => { picked.splice(0, picked.length, ...suggestFilms([...voters], 4)); drawGrid(); if (!startBtn.disabled) startBtn.focus({ preventScroll: true }); flash(`Picked ${picked.length} films`); } }, '✨ Suggest for us'),
+        search),
+      grid,
+      h('div', { class: 'btns sheet-foot' }, startBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+    $('#sheet .mn-icon').innerHTML = POPCORN;
+    sheetFocus('.mn-bar .btn');
+  }
+
+  function voteBlob() {
+    if (!vote) return null;
+    const cand = vote.cands.map((k) => fullEntry(k)).filter(Boolean);
+    return {
+      open: vote.phase === 'vote', id: vote.id, showTally: vote.phase !== 'vote',
+      winner: vote.phase === 'reveal' ? vote.winner : null,
+      candidates: cand.map((e) => ({ key: e.key, name: e.name, year: e.year || null, art: e.art ? e.item.id : '' })),
+      voters: vote.voters.map(profById).filter(Boolean).map((p) => ({ id: p.id, name: p.name, color: p.color, avatar: p.avatar || '', hasPhoto: !!p.photo, choice: vote.votes[p.id] || '' })),
+      tally: tally(),
+    };
+  }
+  const tally = () => { const t = {}; for (const k of Object.values(vote ? vote.votes : {})) t[k] = (t[k] || 0) + 1; return t; };
+  const pushVote = () => { if (api.setVoteState) api.setVoteState(voteBlob()); };
+  function startVote(voters, cands) {
+    vote = { id: Math.random().toString(36).slice(2, 8), voters, cands, votes: {}, phase: 'vote', winner: null, tie: false,
+      tvVoter: voters.includes(S.profile && S.profile.id) ? S.profile.id : voters[0] };
+    sheetClosed = endVote;
+    pushVote(); drawVote();
+  }
+  function endVote() { vote = null; clearInterval(countdownTimer); pushVote(); }
+  function castVote(pid, key) {
+    if (!vote || vote.phase !== 'vote' || !vote.voters.includes(pid) || !vote.cands.includes(key)) return;
+    vote.votes[pid] = key;
+    pushVote();
+    if (!$('#sheet.vote')) return;
+    const f = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.key || document.activeElement.dataset.pid : null;
+    drawVote(f);
+    if (vote.voters.every((v) => vote.votes[v])) setTimeout(() => { if (vote && vote.phase === 'vote' && vote.voters.every((v) => vote.votes[v])) reveal(); }, 1200);
+  }
+  function reveal() {
+    const t = tally();
+    const top = Math.max(0, ...vote.cands.map((k) => t[k] || 0));
+    const best = vote.cands.filter((k) => (t[k] || 0) === top);
+    vote.winner = best[Math.floor(Math.random() * best.length)];
+    vote.tie = best.length > 1;
+    vote.phase = 'reveal';
+    pushVote(); drawVote();
+    startCountdown();
+  }
+  let countdownTimer = null;
+  function startCountdown() {
+    let n = 10;
+    const tick = () => {
+      const el = $('#sheet .mn-countdown');
+      if (!vote || !el) { clearInterval(countdownTimer); return; }
+      if (n <= 0) { clearInterval(countdownTimer); playWinner(); return; }
+      el.textContent = `Starting in ${n}…`; n--;
+    };
+    clearInterval(countdownTimer); tick(); countdownTimer = setInterval(tick, 1000);
+  }
+  function playWinner() {
+    const e = vote && fullEntry(vote.winner);
+    clearInterval(countdownTimer);
+    closeSheet();
+    if (e) start(e.item.id);
+  }
+  function drawVote(focusKey) {
+    if (!vote) return;
+    const t = tally();
+    const reveal_ = vote.phase === 'reveal';
+    const cand = vote.cands.map((k) => fullEntry(k)).filter(Boolean);
+    const tvP = profById(vote.tvVoter);
+    const people = h('div', { class: 'who-pick small', 'data-navrow': '1' }, vote.voters.map(profById).filter(Boolean).map((p) =>
+      h('button', { class: 'who-opt' + (p.id === vote.tvVoter && !reveal_ ? ' on' : '') + (vote.votes[p.id] ? ' voted' : ''), 'data-pid': p.id,
+        title: reveal_ ? '' : `Vote on the TV as ${p.name}`,
+        onclick: () => { if (reveal_) return; vote.tvVoter = p.id; drawVote(); const c = $('#sheet .mn-card'); c && c.focus({ preventScroll: true }); } },
+        avatar(p, true), h('span', { class: 'who-name' }, p.name),
+        h('small', {}, reveal_ ? (fullEntry(vote.votes[p.id]) || {}).name || 'No vote' : vote.votes[p.id] ? '✓ Voted' : p.id === vote.tvVoter ? 'Voting on TV' : 'Waiting…'))));
+    const cards = h('div', { class: 'mn-grid vote' }, cand.map((e) => {
+      const mine = !reveal_ && tvP && vote.votes[tvP.id] === e.key;
+      const won = reveal_ && vote.winner === e.key;
+      return h('button', { class: 'card mn-card' + (mine ? ' on' : '') + (won ? ' won' : '') + (reveal_ && !won ? ' lost' : ''), style: bg(e.art), 'data-key': e.key, title: e.name,
+        onclick: () => { if (reveal_) { if (won) playWinner(); return; } castVote(vote.tvVoter, e.key); } },
+        e.art ? null : h('div', { class: 'ttl' }, e.name),
+        reveal_ ? h('div', { class: 'mn-votes' }, `${t[e.key] || 0} vote${(t[e.key] || 0) === 1 ? '' : 's'}`) : null,
+        mine ? h('div', { class: 'mn-tick' }, '✓') : null);
+    }));
+    const left = vote.voters.filter((v) => !vote.votes[v]).length;
+    const qr = h('div', { class: 'qr mn-qr' });
+    const w = fullEntry(vote.winner);
+    const kids = reveal_
+      ? [h('div', { class: 'mn-head' }, h('div', { class: 'mn-icon' }), h('h2', {}, vote.tie ? 'It’s a tie — the TV picked…' : 'And the winner is…')),
+        h('div', { class: 'mn-winner' }, w ? w.name : ''),
+        cards, people,
+        h('div', { class: 'btns sheet-foot' }, h('button', { class: 'btn primary', onclick: playWinner }, '▶ Play now'), h('span', { class: 'mn-countdown' }),
+          h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Not now'))]
+      : [h('div', { class: 'mn-head' }, h('div', { class: 'mn-icon' }), h('h2', {}, 'Movie night — vote!')),
+        h('div', { class: 'mn-voteinfo' },
+          h('div', {}, h('p', { class: 'am-hint' }, tvP ? `Voting on the TV as ${tvP.name} — pick a film. Press someone else’s picture to vote for them.` : ''),
+            h('p', { class: 'am-hint' }, 'Or vote on your phone: open the phone remote and tap the yellow Movie night bar.')),
+          qr),
+        cards, people,
+        h('div', { class: 'btns sheet-foot' },
+          h('button', { class: 'btn primary', onclick: reveal }, left ? `Count the votes (${left} still to vote)` : 'Count the votes'),
+          h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel the vote'))];
+    const existing = $('#sheet.vote');
+    if (existing) existing.querySelector('.sheet-card').replaceChildren(...kids);
+    else { const cb = sheetClosed; sheet('vote movienight', ...kids); sheetClosed = cb; }
+    $('#sheet .mn-icon').innerHTML = POPCORN;
+    if (!reveal_ && api.remoteInfo) api.remoteInfo().then((r) => { if (r && r.enabled && r.qr) qr.innerHTML = r.qr; else qr.remove(); }).catch(() => qr.remove());
+    else qr.remove();
+    const f = focusKey && $('#sheet').querySelector(`[data-key="${CSS.escape(focusKey)}"], [data-pid="${CSS.escape(focusKey)}"]`);
+    if (f) f.focus({ preventScroll: true });
+    else if (reveal_) sheetFocus('.sheet-foot .btn.primary');
+    else sheetFocus('.mn-card');
+  }
+  function openMovieNight() {
+    if (vote) { drawVote(); return; }
+    if (voteMovies().length < 2) { flash('Add at least two films for a movie night'); return; }
+    sheetClosed = () => { const b = $('#vote-btn'); b && b.focus(); };
+    movieNightSetup();
+  }
+
   // What to watch next in a series: resume the latest episode, or move on to the one after a finished episode.
   function nextUp(series) {
     let last = null;
@@ -194,6 +483,8 @@
     const all = catalogOf();
     const rows = [];
     const cont = continueList(all);
+    const recd = recommendedEntries(all);
+    if (recd.length) rows.push(['Recommended for You', recd]);
     if (cont.length) rows.push(['Continue Watching', cont]);
     rows.push(['Recently Added', [...all].sort((a, b) => b.mtime - a.mtime).slice(0, 20)]);
     // Rated 4 stars or more by the people in this house (best first)
@@ -228,6 +519,7 @@
     return h('button', { class: 'card', style: bg(entry.art), 'data-key': entry.key, title: entry.name, onclick: () => openEntry(entry.key, cont && cont.ep && cont.ep.id) },
       h('div', { class: 'badges' }, badges(entry.items).slice(0, 2)),
       (() => { const a = avgRating(entry); return a ? h('div', { class: 'card-stars', title: `${a.count} rating${a.count > 1 ? 's' : ''}` }, `★ ${a.avg.toFixed(1).replace('.0', '')}`) : null; })(),
+      cont && cont.from ? h('div', { class: 'card-from' }, avatar(cont.from), `from ${cont.from.name}`) : tinyFaces(watchersOf(entry).map((x) => x.profile), 'card-who'),
       h('div', { class: 'ttl' }, entry.name, sub ? h('span', { class: 'sub' }, sub) : null),
       pct ? h('div', { class: 'bar', style: `width:${pct}%` }) : null);
   }
@@ -311,6 +603,8 @@
     // big buttons and text: always on the TV, optional on a computer (Settings → Big buttons)
     document.body.classList.toggle('big', !!S.tv || !!(S.config && S.config.bigUi));
     drawProfileButton();
+    const vb = $('#vote-btn');
+    if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; }
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
     if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }
@@ -404,14 +698,16 @@
             h('button', { class: 'btn primary', onclick: () => start(item.id, selectedAudio) }, resumable ? `▶ Resume ${fmtTime(p.pos)}` : '▶ Play'),
             resumable ? h('button', { class: 'btn secondary', onclick: () => start(item.id, selectedAudio, true) }, '↺ From start') : null,
             h('button', { class: 'btn secondary', title: p && p.done ? 'Mark as unwatched' : 'Mark as watched',
-              onclick: async () => { S = await api.setWatched(vs.map((v) => v.id), !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched')),
+              onclick: async () => { S = await api.setWatched(vs.map((v) => v.id), !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched'),
+            (() => { const b = recommendButton(e); if (b) b.classList.add('rec-btn'); return b; })()),
           vs.length > 1 ? h('label', { class: 'quality' }, h('span', {}, 'Quality'),
             h('select', { class: 'dev-select', onchange: (ev) => { open.version = ev.target.value; renderModal(); const s = $('#modal .quality select'); s && s.focus(); } },
               vs.map((v) => h('option', { value: v.id, selected: v.id === item.id }, qualityLabel(v))))) : null)),
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges([item])),
-          ratingBlock(e),
+          recBanner(e),
+          ratingBlock(e), watchedByBlock(e),
           descBlock(item.description || 'No description.'),
           item.audio.length ? h('div', { class: 'tracks' }, h('h3', {}, 'Audio'), trackEls) : null),
         h('div', { class: 'side' },
@@ -451,22 +747,24 @@
           h('div', { class: 'ep-head' }, h('span', { class: 'ep-name' }, ep.tv.name),
             h('span', { class: 'ep-dur' }, ep.duration ? fmtDur(ep.duration) : ''),),
           h('div', { class: 'ep-desc' }, ep.description || ''),
-          h('div', { class: 'ep-badges' }, badges([ep]))),
+          h('div', { class: 'ep-badges' }, badges([ep]), tinyFaces(watchedIds(ep.id).filter((pid) => !S.profile || pid !== S.profile.id).map(profById).filter(Boolean), 'ep-who'))),
         h('button', { class: 'ep-watch' + (done ? ' on' : ''), title: done ? 'Mark as unwatched' : 'Mark as watched',
           onclick: async (ev) => { ev.stopPropagation(); S = await api.setWatched([ep.id], !done); renderModal(); render(); } }, '✓'));
       return row;
     });
 
     const n = nextUp(e);
-    const resumeBtn = n.mode === 'resume'
-      ? h('button', { class: 'btn secondary', onclick: () => start(n.ep.id, null, true) }, '↺ From start') : null;
+    const resumeBtn = [n.mode === 'resume'
+      ? h('button', { class: 'btn secondary', onclick: () => start(n.ep.id, null, true) }, '↺ From start') : null,
+      (() => { const b = recommendButton(e); if (b) b.classList.add('rec-btn'); return b; })()];
 
     const node = [
       heroBlock(e, resumeBtn),
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges(e.items)),
-          ratingBlock(e),
+          recBanner(e),
+          ratingBlock(e), watchedByBlock(e),
           descBlock(e.description || ''),
           h('h3', { class: 'ep-title' }, 'Episodes'), select ? h('div', { class: 'ep-top' }, select) : null,
           h('div', { class: 'eps' }, epRows)),
@@ -731,9 +1029,16 @@
     ['por', 'Portuguese'], ['jpn', 'Japanese'], ['kor', 'Korean'], ['chi', 'Chinese']];
   const COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
 
+  /** A profile's picture: their photo, a character on their colour, or their initial. */
   function avatar(p, big) {
-    return h('span', { class: 'avatar' + (big ? ' big' : ''), style: `background:${p.color || '#555'}` },
-      (p.name || '?').trim().charAt(0).toUpperCase());
+    const cls = 'avatar' + (big ? ' big' : '');
+    if (p.avatar === 'photo' && p.photo) return h('span', { class: cls + ' photo', style: `background:${p.color || '#555'}` }, h('img', { src: fileUrl(p.photo), alt: '' }));
+    if (p.avatar && p.avatar.startsWith('char:') && window.Avatars) {
+      const el = h('span', { class: cls + ' char', style: `background:${p.color || '#555'}` });
+      el.innerHTML = window.Avatars.svg(p.avatar.slice(5));
+      if (el.innerHTML) return el;
+    }
+    return h('span', { class: cls, style: `background:${p.color || '#555'}` }, (p.name || '?').trim().charAt(0).toUpperCase());
   }
 
   // A number pad that works with arrows + OK, digits on a keyboard, or the phone remote's "Type on TV".
@@ -836,10 +1141,27 @@
     const body = $('#settings-body');
     const name = h('input', { type: 'text', class: 'pin-input prof-name', maxlength: '24', placeholder: 'Name (or type it on your phone)', value: d.name });
     const preview = h('div', {});
-    const drawPreview = () => preview.replaceChildren(avatar({ name: name.value || '?', color: d.color }, true));
-    name.addEventListener('input', drawPreview);
+    const drawPreview = () => preview.replaceChildren(avatar({ name: name.value || '?', color: d.color, avatar: d.avatar, photo: d.photo }, true));
+    name.addEventListener('input', () => { drawPreview(); drawPics(); });
+    // Picture: the initial, one of the characters, or a photo
+    const pics = h('div', { class: 'pics' });
+    const pick = (a) => { d.avatar = a; drawPics(); drawPreview(); };
+    const drawPics = () => pics.replaceChildren(
+      h('button', { class: 'pic' + (!d.avatar ? ' on' : ''), title: 'Initial', onclick: () => pick('') }, avatar({ name: name.value || '?', color: d.color })),
+      ...(window.Avatars ? window.Avatars.list : []).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => pick('char:' + c.id) },
+        avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))),
+      d.photo ? h('button', { class: 'pic' + (d.avatar === 'photo' ? ' on' : ''), title: 'Photo', onclick: () => pick('photo') }, avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo })) : null);
+    drawPics();
+    const photoHint = !p ? h('p', { class: 'am-hint' }, 'Save the profile first to give it a photo.')
+      : h('div', { class: 'photo-hint' },
+        S.appliance || S.platform === 'android' ? null : h('button', { class: 'btn secondary', onclick: async () => {
+          const r = await api.profilePhoto(p.id, authPin);
+          if (!r.ok) { flash(r.error); return; }
+          if (r.profile) { d.photo = r.profile.photo; d.avatar = 'photo'; S = r.state; drawPics(); drawPreview(); drawProfileButton(); }
+        } }, 'Choose a photo…'),
+        h('p', { class: 'am-hint' }, 'Or send one from your phone: in the phone remote, open Profiles → Photo, pick this profile and take or choose a picture.'));
     const swatches = h('div', { class: 'swatches' });
-    const drawSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPreview(); } })));
+    const drawSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPreview(); drawPics(); } })));
     drawSw(); drawPreview();
     const kids = h('input', { type: 'checkbox', checked: !!d.kids });
     const level = h('select', { class: 'dev-select' }, LEVELS.map(([v, l, x]) => h('option', { value: String(v), selected: v === (d.maxLevel || 1) }, `${l} (${x})`)));
@@ -853,7 +1175,7 @@
     const subs = h('select', { class: 'dev-select' }, [['', 'Off'], ...LANGS.slice(1)].map(([v, l]) => h('option', { value: v, selected: v === (d.subLang || '') }, l)));
 
     const save = async () => {
-      const r = await api.saveProfile({ id: p ? p.id : undefined, name: name.value, color: d.color, kids: kids.checked,
+      const r = await api.saveProfile({ id: p ? p.id : undefined, name: name.value, color: d.color, avatar: d.avatar || '', kids: kids.checked,
         maxLevel: Number(level.value), allowUnrated: unrated.checked, preferredLang: audio.value, subLang: subs.value }, authPin);
       if (!r.ok) { flash(r.error); return; }
       S = r.state; drawProfileButton(); render(); renderSettings();
@@ -872,6 +1194,7 @@
     body.replaceChildren(...[
       h('h2', {}, p ? `Edit ${p.name}` : 'Add a profile'),
       h('div', { class: 'prof-edit-head' }, preview, h('div', { class: 'prof-edit-fields' }, name, swatches)),
+      h('h3', {}, 'Picture'), pics, photoHint,
       h('label', { class: 'row-set' }, h('span', {}, 'Kids profile', h('small', {}, 'Only shows titles rated for their age.')), kids),
       kidsOpts,
       h('label', { class: 'row-set' }, h('span', {}, 'Audio language', h('small', {}, 'Picked first when a movie has several.')), audio),
@@ -1018,6 +1341,7 @@
     let els;
     if (osk) els = osk.el.querySelectorAll('.osk-key');
     else if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
+    else if ($('#sheet')) els = $('#sheet').querySelectorAll(FOCUSABLE);
     else if ($('#who') && !$('#who').hidden) els = $('#who').querySelectorAll(FOCUSABLE);
     else if (parlorUI && parlorUI.scope()) els = parlorUI.scope().querySelectorAll(FOCUSABLE);
     else if (!$('#modal').hidden) els = $('#modal').querySelectorAll(FOCUSABLE);
@@ -1030,7 +1354,7 @@
     el.focus({ preventScroll: true });
     navFocus = false;
     // (things in fixed bars / overlays are always on screen: scrolling them "into view" would shift the whole page)
-    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    if (!el.closest('#nav, #npbar, #npfull, .poverlay, #sheet')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
   function defaultFocus(els) {
     return els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card')) || els[0];
@@ -1083,6 +1407,7 @@
   function goBack() {
     if (osk) { closeOsk(); return true; }
     if (pinState) { pinState.cancel(); return true; }
+    if ($('#sheet')) { closeSheet(); return true; }
     if ($('#who') && !$('#who').hidden) return true;
     if (parlorUI && parlorUI.scope()) { parlorUI.back(); return true; }
     if (!$('#modal').hidden) { closeModal(); return true; }
@@ -1291,6 +1616,7 @@
 
   // Phone remote
   api.onRemote((m) => {
+    if (m.type === 'vote') { castVote(m.profile, m.choice); return; }
     if (m.type === 'key') {
       if (['up', 'down', 'left', 'right'].includes(m.key)) move(m.key);
       else if (m.key === 'ok') activate();
@@ -1345,7 +1671,11 @@
   }
   api.onPlaybackError(flash);
   // full screen switched from the window itself (green button / menu): keep Settings in step
-  if (api.onConfigChanged) api.onConfigChanged((s) => { S = s; if (!$('#settings').hidden) renderSettings(); });
+  if (api.onConfigChanged) api.onConfigChanged((s) => {
+    S = s; drawProfileButton();
+    if (!$('#settings').hidden && !document.querySelector('#settings .prof-edit-head')) renderSettings();
+    if ($('#who') && !$('#who').hidden) renderPicker();
+  });
   api.onScanProgress((p) => { if (p.total) setScanning(true, p.music ? `Scanning music ${p.done}/${p.total}…` : `Scanning ${p.done}/${p.total}…`); });
   if (api.onParlorUpdated) api.onParlorUpdated(() => setScanning(false));
 
@@ -1401,6 +1731,13 @@
       openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
       wantsKeyboard: () => oskAllowed() && !kbInUse(),
       isTvBox: () => !!S.appliance,
+      // the house: albums people recommended, and recommending one
+      avatar,
+      albumRecs: () => recsForMe(['album']),
+      canRecommend: () => others().length > 0,
+      recommend: (item) => recommendSheet(item),
+      dismissRecs: async (ids) => { for (const id of ids) S = await api.dismissRec(id); },
+      setSheetClosed: (fn) => { sheetClosed = fn; },
     });
     const b = $('#parlor-btn');
     b.hidden = false;

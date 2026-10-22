@@ -13,6 +13,7 @@ const audio = require('./lib/audio');
 const { setupParlor } = require('./lib/parlor-ipc');
 const { Profiles } = require('./lib/profiles');
 const { Ratings } = require('./lib/ratings');
+const { Recommendations } = require('./lib/social');
 const core = require('./lib/media-core');
 const qrcode = require('qrcode-generator');
 
@@ -163,7 +164,7 @@ function toolPaths() {
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
-    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, duplicates: (library.dups || []).length,
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, recs: recs ? recs.all() : [], watchedBy: watchedBy(), duplicates: (library.dups || []).length,
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
@@ -175,6 +176,19 @@ function snapshot() {
 // ---- USB drives + the folder uploads land in ------------------------------------------------
 let drives = [];
 let ratings = null;
+let recs = null;
+// Who's watched it: { itemId: [profile ids that finished it] } from every profile's progress.
+function watchedBy() {
+  const out = {};
+  if (!profiles) return out;
+  for (const p of profiles.list()) {
+    const prog = p.id === currentId ? progress : profiles.loadProgress(p.id);
+    for (const [id, v] of Object.entries(prog || {})) {
+      if (v && (v.done || (v.dur > 0 && v.pos / v.dur > 0.9))) (out[id] || (out[id] = [])).push(p.id);
+    }
+  }
+  return out;
+}
 let parlorApi = null;
 let mediaRoot = null;
 
@@ -301,8 +315,28 @@ function remoteLibrary() {
 
 const tell = (msg) => { if (win && !win.isDestroyed()) win.webContents.send('remote', msg); };
 
+// Movie night: the vote runs in the window (renderer); it hands its state here for the phones to show,
+// and phones' votes go back to it. Only the candidates' posters may be fetched.
+let voteBlob = null;
 const remoteHandlers = {
   library: remoteLibrary,
+  profiles: () => (profiles ? profiles.list().map((p) => ({ id: p.id, name: p.name, color: p.color, kids: p.kids, avatar: p.avatar, hasPhoto: !!p.photo, hasPin: p.hasPin })) : []),
+  photoFile: (id) => { const p = profiles && profiles.public(profiles.get(id)); return p && p.photo ? p.photo : null; },
+  avatar: (id, bytes, ext, ppin) => {
+    const target = profiles && profiles.get(id);
+    if (!target) return { ok: false, error: 'Profile not found' };
+    if (target.pinHash && !profiles.checkPin(id, ppin)) return { ok: false, error: 'That profile has a PIN — type it above the buttons.' };
+    const r = profiles.setPhoto(id, bytes, ext);
+    if (r.ok) sendWin('config-changed', snapshot());
+    return r.ok ? { ok: true } : r;
+  },
+  voteState: () => voteBlob,
+  vote: (v) => { if (voteBlob && voteBlob.open) tell({ type: 'vote', ...v }); },
+  artFile: (id) => {
+    if (!voteBlob || !(voteBlob.candidates || []).some((c) => c.art === id)) return null;
+    const it = library.find((i) => i.id === id);
+    return it ? (it.art || it.backdrop) : null;
+  },
   key: (k) => {
     if (playing) { const c = PLAYER_KEYS[k]; if (c) control(c); return; }
     tell({ type: 'key', key: k });
@@ -353,6 +387,7 @@ function startRemote() {
     port: Number(config.remotePort) || 8686,
     pin: () => config.remotePin,
     pageFile: remotePage(),
+    avatarsFile: path.join(__dirname, 'renderer', 'avatars.js'),
     handlers: remoteHandlers,
     log: (m) => console.warn(m),
   });
@@ -382,6 +417,7 @@ app.whenReady().then(async () => {
   config = { ...defaults, ...readJson(cfgFile(), {}) };
   profiles = new Profiles(dataDir());
   ratings = new Ratings(dataDir());
+  recs = new Recommendations(dataDir());
   currentId = profiles.last().id;
   needPick = profiles.needsPicker();
   progress = profiles.loadProgress(currentId);
@@ -581,6 +617,13 @@ app.whenReady().then(async () => {
   const slow = () => new Promise((r) => setTimeout(r, 600)); // after a wrong PIN
   const canManage = () => !(currentProfile() || {}).kids;
   // Star ratings: everyone sees everyone's (that's the point), each profile changes only its own.
+  ipcMain.handle('vote-state', (_e, blob) => { voteBlob = blob && typeof blob === 'object' ? blob : null; return true; });
+  ipcMain.handle('recommend', (_e, to, item) => {
+    const p = currentProfile();
+    if (p && Array.isArray(to)) recs.add(p.id, to.filter((id) => profiles.get(id)), item);
+    return snapshot();
+  });
+  ipcMain.handle('rec-dismiss', (_e, id) => { const p = currentProfile(); if (p) recs.dismiss(String(id), p.id); return snapshot(); });
   ipcMain.handle('rate', (_e, key, stars) => {
     const p = currentProfile();
     if (!p || !ratings.set(key, p.id, stars)) return snapshot();
@@ -617,6 +660,16 @@ app.whenReady().then(async () => {
     const r = profiles.setPin(id, newPin);
     return r.ok ? { ...r, state: snapshot() } : r;
   });
+  // A photo from a file (Mac / Linux with a mouse); on the TV the phone remote sends one instead.
+  ipcMain.handle('profile-photo', async (_e, id, pin) => {
+    const err = await authorize(id, pin);
+    if (err) return { ok: false, error: err };
+    const r = await dialog.showOpenDialog(win, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
+    if (r.canceled || !r.filePaths[0]) return { ok: true, state: snapshot() };
+    const f = r.filePaths[0];
+    const res = profiles.setPhoto(id, fs.readFileSync(f), path.extname(f).slice(1));
+    return res.ok ? { ...res, state: snapshot() } : res;
+  });
   ipcMain.handle('profile-delete', async (_e, id, pin) => {
     const err = await authorize(id, pin);
     if (err) return { ok: false, error: err };
@@ -624,6 +677,7 @@ app.whenReady().then(async () => {
     if (!r.ok) return r;
     if (parlorApi) parlorApi.forget(id);
     if (ratings) ratings.forget(id);
+    if (recs) recs.forget(id);
     if (id === currentId) { currentId = profiles.last().id; progress = profiles.loadProgress(currentId); needPick = profiles.needsPicker(); }
     return { ok: true, state: snapshot() };
   });

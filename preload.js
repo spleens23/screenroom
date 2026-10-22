@@ -2,7 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   state: () => ipcRenderer.invoke('state'),
+  recommend: (to, item) => ipcRenderer.invoke('recommend', to, item),
+  dismissRec: (id) => ipcRenderer.invoke('rec-dismiss', id),
   rate: (key, stars) => ipcRenderer.invoke('rate', key, stars),
+  profilePhoto: (id, pin) => ipcRenderer.invoke('profile-photo', id, pin || ''),
+  setVoteState: (blob) => ipcRenderer.invoke('vote-state', blob),
   scan: () => ipcRenderer.invoke('scan'),
   addDir: () => ipcRenderer.invoke('add-dir'),
   removeDir: (d) => ipcRenderer.invoke('remove-dir', d),

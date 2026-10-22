@@ -112,6 +112,7 @@
     switch (name) {
       case 'library-updated':
       case 'playback-ended':
+      case 'config-changed':
         state().then((s) => emit(name, s)).catch(() => {});
         break;
       default:
@@ -145,6 +146,10 @@
     deleteProfile: async (id, pin) => withState(await call('profileDelete', id, pin || '')),
     clearProblems: async () => finish(await call('clearProblems')),
     rate: async (key, stars) => finish(await call('rate', key, stars)),
+    recommend: async (to, item) => finish(await call('recommend', to, item)),
+    dismissRec: async (id) => finish(await call('dismissRec', id)),
+    setVoteState: (blob) => call('setVoteState', blob).catch(() => {}),
+    onConfigChanged: on('config-changed'),
     kioskStatus: () => call('kioskStatus'),
     kioskLock: (pin) => call('kioskLock', pin),
     kioskUnlock: (pin) => call('kioskUnlock', pin),

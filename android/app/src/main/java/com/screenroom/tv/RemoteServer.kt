@@ -43,6 +43,11 @@ class RemoteServer(port: Int) : NanoHTTPD(port) {
                 r.addHeader("Cache-Control", "no-store")
                 return r
             }
+            // the profile characters, so the phone draws the same pictures as the TV
+            if (session.method == Method.GET && uri == "/avatars.js") {
+                val js = App.context.assets.open("web/renderer/avatars.js").bufferedReader().use { it.readText() }
+                return NanoHTTPD.newFixedLengthResponse(Code(200, "OK"), "text/javascript; charset=utf-8", js)
+            }
             if (!uri.startsWith("/api/")) return error(404, "not found")
 
             val pin = App.store.config.optString("remotePin")
@@ -58,6 +63,12 @@ class RemoteServer(port: Int) : NanoHTTPD(port) {
                 session.method == Method.GET && uri == "/api/info" -> return json(200, info())
                 session.method == Method.POST && uri == "/api/rescan" -> { App.rescanSoon(500); return json(200, JSONObject().put("ok", true)) }
                 session.method == Method.PUT && uri == "/api/upload" -> return upload(session)
+                // ---- profile pictures and movie night ----
+                session.method == Method.GET && uri == "/api/profiles" -> return json(200, profilesForPhone())
+                session.method == Method.GET && uri == "/api/photo" -> return sendFile(App.store.profiles.photoPath(param(session, "profile")))
+                session.method == Method.GET && uri == "/api/art" -> return sendFile(artFor(param(session, "id")))
+                session.method == Method.GET && uri == "/api/vote" -> return json(200, App.store.voteBlob ?: JSONObject().put("open", false))
+                session.method == Method.PUT && uri == "/api/avatar" -> return avatar(session)
             }
             if (session.method != Method.POST) return error(405, "method not allowed")
 
@@ -67,6 +78,8 @@ class RemoteServer(port: Int) : NanoHTTPD(port) {
                 "/api/player" -> onMain { PlayerActivity.current?.remote(body.optString("cmd")) }
                 "/api/open" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "open").put("key", body.optString("key")))
                 "/api/search" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "search").put("q", body.optString("q")))
+                "/api/vote" -> if (App.store.voteBlob?.optBoolean("open") == true) App.emit("remote", JSONObject().put("type", "vote")
+                    .put("profile", body.optString("profile").take(40)).put("choice", body.optString("choice").take(200)))
                 "/api/text" -> if (PlayerActivity.current == null) App.emit("remote", JSONObject().put("type", "text").put("text", body.optString("text").take(200)))
                 else -> return error(404, "not found")
             }
@@ -79,6 +92,61 @@ class RemoteServer(port: Int) : NanoHTTPD(port) {
     }
 
     private fun onMain(fn: () -> Unit) { App.main.post { fn() } }
+
+    private fun param(s: IHTTPSession, name: String): String =
+        (s.queryParameterString ?: "").split('&').firstOrNull { it.startsWith("$name=") }?.let { URLDecoder.decode(it.substring(name.length + 1), "UTF-8") } ?: ""
+
+    private fun sendFile(path: String?): Response {
+        val f = path?.let { java.io.File(it) }?.takeIf { it.isFile } ?: return error(404, "not found")
+        val type = when (f.extension.lowercase()) { "png" -> "image/png"; "webp" -> "image/webp"; "gif" -> "image/gif"; else -> "image/jpeg" }
+        val r = NanoHTTPD.newFixedLengthResponse(Code(200, "OK"), type, java.io.FileInputStream(f), f.length())
+        r.addHeader("Cache-Control", "max-age=300")
+        return r
+    }
+
+    private fun profilesForPhone(): JSONArray {
+        val list = App.store.profiles.list()
+        val out = JSONArray()
+        for (i in 0 until list.length()) {
+            val p = list.getJSONObject(i)
+            out.put(JSONObject().put("id", p.optString("id")).put("name", p.optString("name")).put("color", p.optString("color"))
+                .put("kids", p.optBoolean("kids")).put("avatar", p.optString("avatar")).put("hasPhoto", p.has("photo")).put("hasPin", p.optBoolean("hasPin")))
+        }
+        return out
+    }
+
+    /** Only the posters of the films being voted on can be fetched. */
+    private fun artFor(id: String): String? {
+        val blob = App.store.voteBlob ?: return null
+        val cands = blob.optJSONArray("candidates") ?: return null
+        if ((0 until cands.length()).none { cands.optJSONObject(it)?.optString("art") == id }) return null
+        val lib = App.store.library
+        for (k in lib.keys()) {
+            val e = lib.optJSONObject(k) ?: continue
+            if (e.optString("id") == id) return e.optString("art").ifEmpty { e.optString("backdrop") }.ifEmpty { null }
+        }
+        return null
+    }
+
+    private fun avatar(s: IHTTPSession): Response {
+        val len = s.headers["content-length"]?.toIntOrNull() ?: return error(411, "length required")
+        if (len > 12 * 1024 * 1024) return error(413, "That picture is too big.")
+        val id = param(s, "profile")
+        val st = App.store
+        val target = st.profiles.get(id) ?: return error(400, "Profile not found")
+        if (target.has("pinHash") && !st.profiles.checkPin(id, s.headers["x-profile-pin"] ?: "")) {
+            Thread.sleep(600)
+            return error(400, "That profile has a PIN — type it above the buttons.")
+        }
+        val buf = ByteArray(len)
+        var off = 0
+        while (off < len) { val n = s.inputStream.read(buf, off, len - off); if (n < 0) break; off += n }
+        val type = s.headers["content-type"] ?: ""
+        val ext = when { "png" in type -> "png"; "webp" in type -> "webp"; "gif" in type -> "gif"; else -> "jpg" }
+        val r = st.profiles.setPhoto(id, buf.copyOf(off), ext)
+        if (r.optBoolean("ok")) App.emit("config-changed", null)
+        return json(if (r.optBoolean("ok")) 200 else 400, r)
+    }
 
     private fun key(k: String) {
         val p = PlayerActivity.current

@@ -57,6 +57,31 @@ class Profiles(private val dir: File) {
             .put("kids", p.optBoolean("kids")).put("maxLevel", p.optInt("maxLevel", 1))
             .put("allowUnrated", p.optBoolean("allowUnrated")).put("hasPin", p.has("pinHash"))
             .put("preferredLang", p.optString("preferredLang")).put("subLang", p.optString("subLang"))
+            .also { o ->
+                val photo = photoFile(p)
+                val av = p.optString("avatar")
+                o.put("avatar", if (av == "photo" && photo == null) "" else av)
+                if (photo != null) o.put("photo", photo.absolutePath)
+            }
+    }
+
+    // ---- profile pictures: "" (initial), "char:<id>" (a character), or "photo" ----------------------------
+    private val avatarDir = File(dir, "avatars")
+    private fun photoFile(p: JSONObject): File? = p.optString("photo").takeIf { it.isNotEmpty() }?.let { File(avatarDir, it) }?.takeIf { it.isFile }
+    fun photoPath(id: String): String? = get(id)?.let { photoFile(it) }?.absolutePath
+
+    @Synchronized fun setPhoto(id: String, bytes: ByteArray, ext: String): JSONObject {
+        val p = get(id) ?: return fail("Profile not found")
+        if (bytes.isEmpty() || bytes.size > 12 * 1024 * 1024) return fail("That picture is too big.")
+        val e = ext.lowercase().let { if (it == "jpeg") "jpg" else it }
+        if (!e.matches(Regex("^(jpg|png|webp|gif)$"))) return fail("Use a JPEG, PNG or WebP picture.")
+        avatarDir.mkdirs()
+        photoFile(p)?.delete()
+        val name = "${p.optString("id")}-${System.currentTimeMillis()}.$e"
+        File(avatarDir, name).writeBytes(bytes)
+        p.put("photo", name).put("avatar", "photo")
+        save()
+        return ok().put("profile", public(p))
     }
 
     fun list(): JSONArray = JSONArray().also { a -> all().forEach { a.put(public(it)) } }
@@ -93,6 +118,13 @@ class Profiles(private val dir: File) {
         if (input.has("allowUnrated")) p.put("allowUnrated", input.optBoolean("allowUnrated"))
         if (input.has("preferredLang")) p.put("preferredLang", input.optString("preferredLang").take(8))
         if (input.has("subLang")) p.put("subLang", input.optString("subLang").take(8))
+        if (input.has("avatar")) {
+            val av = input.optString("avatar")
+            when {
+                av.isEmpty() || av.matches(Regex("^char:[a-z]{2,20}$")) -> p.put("avatar", av)
+                av == "photo" && photoFile(p) != null -> p.put("avatar", av)
+            }
+        }
         save()
         return ok().put("profile", public(p))
     }
@@ -111,6 +143,7 @@ class Profiles(private val dir: File) {
         val list = all()
         if (list.size <= 1) return fail("You can't delete the only profile.")
         if (list.none { it.optString("id") == id }) return fail("Profile not found")
+        get(id)?.let { photoFile(it)?.delete() }
         val keep = JSONArray()
         list.filter { it.optString("id") != id }.forEach { keep.put(it) }
         data.put("profiles", keep)

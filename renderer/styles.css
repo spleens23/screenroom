@@ -710,3 +710,78 @@ body.navmode .star:focus { outline: 3px solid #fff; outline-offset: 2px; border-
 .card .card-stars { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.7); color: #f5c518; font-size: 12px; font-weight: 700;
   padding: 2px 7px; border-radius: 10px; border: 1px solid rgba(245,197,24,.45); }
 body.big .star { font-size: 34px; } body.big .rating-chip { font-size: 16px; } body.big .card .card-stars { font-size: 14px; }
+
+/* ---- profile pictures ---- */
+.avatar.char, .avatar.photo { padding: 0; overflow: hidden; align-items: flex-end; }
+.avatar.char svg { width: 92%; height: 92%; display: block; margin: 0 auto; }
+.avatar.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.pic { background: none; border: 3px solid transparent; border-radius: 12px; padding: 3px; cursor: pointer; }
+.pic .avatar { width: 100%; height: auto; aspect-ratio: 1; font-size: 24px; border-radius: 8px; }
+.pic.on { border-color: #fff; }
+.pic:hover, .pic:focus { border-color: #888; outline: none; }
+body.navmode .pic:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+
+/* ---- the house: who's watched it, recommendations ---- */
+.card-who, .card-from { position: absolute; left: 6px; top: 32px; display: flex; align-items: center; gap: 0; z-index: 2; }
+.card-who .avatar { width: 22px; height: 22px; font-size: 12px; border-radius: 50%; border: 2px solid #141414; margin-right: -6px; }
+.card-who .more { font-size: 11px; margin-left: 10px; background: rgba(0,0,0,.7); padding: 1px 5px; border-radius: 8px; }
+.card-from { gap: 5px; background: rgba(0,0,0,.78); border-radius: 14px; padding: 2px 9px 2px 2px; font-size: 12px; font-weight: 600; }
+.card-from .avatar { width: 20px; height: 20px; font-size: 11px; border-radius: 50%; }
+.ep-who { display: inline-flex; margin-left: 8px; vertical-align: middle; }
+.ep-who .avatar { width: 20px; height: 20px; font-size: 11px; border-radius: 50%; border: 2px solid #181818; margin-right: -5px; }
+.ep-who .more { font-size: 11px; margin-left: 8px; color: #aaa; }
+.watched-by { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 14px; }
+.watched-by small { color: #aaa; }
+.rec-banner { display: flex; align-items: center; gap: 12px; background: linear-gradient(90deg, rgba(229,9,20,.25), rgba(229,9,20,.05)); border-left: 3px solid #e50914; padding: 10px 14px; border-radius: 6px; margin: 4px 0 14px; font-weight: 600; }
+.rec-banner > span { flex: 1; }
+.btn.small { padding: 6px 14px; font-size: 14px; }
+body.big .btn.small { padding: 8px 18px; font-size: 16px; }
+
+/* ---- sheets (Recommend, Movie night) ---- */
+.sheet { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; }
+.sheet-card { background: #181818; color: #eee; border-radius: 12px; padding: 26px 30px; width: min(620px, 94vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.sheet-card h2 { margin: 0 0 16px; font-size: 24px; }
+.sheet-card h3 { margin: 16px 0 8px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: #999; }
+.sheet .btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+.who-pick { display: flex; flex-wrap: wrap; gap: 14px; }
+.who-opt { background: none; border: 0; color: #ddd; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; cursor: pointer; width: 120px; }
+.who-opt .avatar.big { width: 96px; height: 96px; font-size: 44px; border: 4px solid transparent; }
+.who-pick.small .who-opt { width: 96px; }
+.who-pick.small .avatar.big { width: 70px; height: 70px; font-size: 32px; }
+.who-opt.on .avatar { border-color: #fff; }
+.who-opt.voted .avatar { box-shadow: 0 0 0 3px #46d369; }
+.who-opt small { color: #999; font-size: 12px; min-height: 1em; text-align: center; }
+.who-opt.on small { color: #fff; }
+.who-opt[disabled] { opacity: .35; cursor: default; }
+.who-opt:focus { outline: none; background: rgba(255,255,255,.1); }
+body.navmode .who-opt:focus .avatar { transform: scale(1.06); border-color: #fff; }
+.who-name { font-weight: 600; font-size: 15px; }
+#vote-btn { background: none; border: 0; padding: 0; width: 30px; height: 30px; color: #ddd; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+#vote-btn svg { width: 24px; height: 24px; }
+#vote-btn:hover, #vote-btn:focus { color: #f5c518; outline: none; }
+.sheet.movienight .sheet-card { width: min(1100px, 96vw); }
+.mn-head { display: flex; align-items: center; gap: 12px; }
+.mn-head h2 { margin: 0; }
+.mn-icon svg { width: 36px; height: 36px; color: #f5c518; display: block; }
+.mn-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.mn-bar h3 { margin: 0; }
+.mn-count { color: #aaa; flex: 1; }
+.mn-search { width: 220px; margin: 0; }
+.mn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-top: 14px; padding: 6px; }
+.mn-grid.vote { grid-template-columns: repeat(auto-fit, minmax(150px, 210px)); justify-content: center; gap: 22px; margin: 20px 0; }
+.mn-card { position: relative; width: auto !important; aspect-ratio: 2/3; height: auto !important; background-color: #2a2a2a; background-size: cover; background-position: center; }
+.mn-card .ttl { position: absolute; inset: auto 0 0 0; padding: 8px; font-size: 13px; }
+.mn-card.on { box-shadow: 0 0 0 4px #f5c518; }
+.mn-tick { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%; background: #f5c518; color: #000; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.mn-card.won { box-shadow: 0 0 0 5px #f5c518, 0 0 40px rgba(245,197,24,.6); transform: scale(1.08); }
+.mn-card.lost { opacity: .4; filter: grayscale(.6); }
+.mn-votes { position: absolute; inset: auto 0 0 0; background: rgba(0,0,0,.8); padding: 6px; text-align: center; font-weight: 700; }
+.mn-winner { font-size: 34px; font-weight: 800; text-align: center; margin: 14px 0 0; color: #f5c518; }
+.mn-voteinfo { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+.mn-qr { width: 110px; flex: none; background: #fff; border-radius: 8px; padding: 4px; }
+.mn-qr svg { width: 100%; height: auto; display: block; }
+.mn-countdown { color: #aaa; }
+.sheet-foot { position: sticky; bottom: -26px; background: #181818; padding: 12px 0; margin-bottom: -10px; }
+.photo-hint { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 12px; }
+.photo-hint .am-hint { margin: 0; }
