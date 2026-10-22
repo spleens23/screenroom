@@ -12,6 +12,7 @@ const system = require('./lib/system');
 const audio = require('./lib/audio');
 const { setupParlor } = require('./lib/parlor-ipc');
 const { Profiles } = require('./lib/profiles');
+const { Ratings } = require('./lib/ratings');
 const core = require('./lib/media-core');
 const qrcode = require('qrcode-generator');
 
@@ -162,7 +163,7 @@ function toolPaths() {
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
-    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), duplicates: (library.dups || []).length,
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, duplicates: (library.dups || []).length,
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
@@ -173,6 +174,7 @@ function snapshot() {
 
 // ---- USB drives + the folder uploads land in ------------------------------------------------
 let drives = [];
+let ratings = null;
 let parlorApi = null;
 let mediaRoot = null;
 
@@ -379,6 +381,7 @@ app.whenReady().then(async () => {
   powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
   config = { ...defaults, ...readJson(cfgFile(), {}) };
   profiles = new Profiles(dataDir());
+  ratings = new Ratings(dataDir());
   currentId = profiles.last().id;
   needPick = profiles.needsPicker();
   progress = profiles.loadProgress(currentId);
@@ -577,6 +580,12 @@ app.whenReady().then(async () => {
   // ---- profiles ----------------------------------------------------------------------------------
   const slow = () => new Promise((r) => setTimeout(r, 600)); // after a wrong PIN
   const canManage = () => !(currentProfile() || {}).kids;
+  // Star ratings: everyone sees everyone's (that's the point), each profile changes only its own.
+  ipcMain.handle('rate', (_e, key, stars) => {
+    const p = currentProfile();
+    if (!p || !ratings.set(key, p.id, stars)) return snapshot();
+    return snapshot();
+  });
   ipcMain.handle('profile-select', async (_e, id, pin) => {
     if (playing) return { ok: false, error: 'Stop playback first.' };
     if (!profiles.get(id)) return { ok: false, error: 'Profile not found' };
@@ -614,6 +623,7 @@ app.whenReady().then(async () => {
     const r = profiles.remove(id);
     if (!r.ok) return r;
     if (parlorApi) parlorApi.forget(id);
+    if (ratings) ratings.forget(id);
     if (id === currentId) { currentId = profiles.last().id; progress = profiles.loadProgress(currentId); needPick = profiles.needsPicker(); }
     return { ok: true, state: snapshot() };
   });

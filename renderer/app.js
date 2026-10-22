@@ -107,6 +107,39 @@
   const prog = (id) => S.progress[id];
   const isDone = (id) => !!(S.progress[id] && S.progress[id].done);
 
+  // ---- star ratings (shared by every profile) ----------------------------------------------------------
+  const rkey = (e) => (window.MediaCore && MediaCore.ratingKey ? MediaCore.ratingKey(e) : '');
+  /** [{ profile, stars, at }] for a title: only profiles that still exist. */
+  function ratingsFor(e) {
+    const r = (S.ratings || {})[rkey(e)] || {};
+    return (S.profiles || []).filter((p) => r[p.id]).map((p) => ({ profile: p, stars: r[p.id].stars, at: r[p.id].at }));
+  }
+  function avgRating(e) {
+    const list = ratingsFor(e);
+    if (!list.length) return null;
+    return { avg: list.reduce((s, x) => s + x.stars, 0) / list.length, count: list.length };
+  }
+  const starText = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+  /** "Your rating" (five stars to press; press your rating again to take it back) + what everyone else gave it. */
+  function ratingBlock(e) {
+    const me = S.profile && S.profile.id;
+    const mine = (ratingsFor(e).find((x) => x.profile.id === me) || {}).stars || 0;
+    const others = ratingsFor(e).filter((x) => x.profile.id !== me).sort((a, b) => b.at - a.at);
+    const stars = h('div', { class: 'stars', 'data-navrow': '1', role: 'radiogroup', 'aria-label': 'Your rating' },
+      [1, 2, 3, 4, 5].map((n) => h('button', { class: 'star' + (n <= mine ? ' on' : ''), title: n === mine ? 'Take back your rating' : `${n} star${n > 1 ? 's' : ''}`,
+        'data-n': n, onclick: async () => {
+          S = await api.rate(rkey(e), n === mine ? 0 : n);
+          renderModal(); renderKeepFocusQuiet();
+          const again = document.querySelector(`#modal .star[data-n="${n}"]`); again && again.focus({ preventScroll: true });
+        } }, '★')));
+    return h('div', { class: 'rating-box' },
+      h('div', { class: 'rating-mine' }, h('span', { class: 'rating-label' }, mine ? 'Your rating' : 'Rate it'), stars),
+      others.length ? h('div', { class: 'rating-others' }, others.map((x) =>
+        h('span', { class: 'rating-chip', title: `${x.profile.name}: ${x.stars} of 5` }, avatar(x.profile), h('span', { class: 'rs' }, starText(x.stars)), h('span', { class: 'rn' }, x.profile.name)))) : null);
+  }
+  // Redraw the page behind the info window (new average on the card) without moving the focus.
+  function renderKeepFocusQuiet() { const y = window.scrollY; const a = document.activeElement; render(); window.scrollTo(0, y); if (a && document.body.contains(a)) a.focus({ preventScroll: true }); }
+
   // What to watch next in a series: resume the latest episode, or move on to the one after a finished episode.
   function nextUp(series) {
     let last = null;
@@ -163,6 +196,10 @@
     const cont = continueList(all);
     if (cont.length) rows.push(['Continue Watching', cont]);
     rows.push(['Recently Added', [...all].sort((a, b) => b.mtime - a.mtime).slice(0, 20)]);
+    // Rated 4 stars or more by the people in this house (best first)
+    const faves = all.map((e) => ({ e, r: avgRating(e) })).filter((x) => x.r && x.r.avg >= 4)
+      .sort((a, b) => (b.r.avg - a.r.avg) || (b.r.count - a.r.count)).map((x) => x.e);
+    if (faves.length) rows.push(['House Favourites', faves.slice(0, 20)]);
     const shows = all.filter((e) => e.kind === 'series');
     const movies = all.filter((e) => e.kind === 'movie');
     if (shows.length && movies.length) { rows.push(['TV Shows', shows]); rows.push(['Movies', movies]); }
@@ -190,6 +227,7 @@
     }
     return h('button', { class: 'card', style: bg(entry.art), 'data-key': entry.key, title: entry.name, onclick: () => openEntry(entry.key, cont && cont.ep && cont.ep.id) },
       h('div', { class: 'badges' }, badges(entry.items).slice(0, 2)),
+      (() => { const a = avgRating(entry); return a ? h('div', { class: 'card-stars', title: `${a.count} rating${a.count > 1 ? 's' : ''}` }, `★ ${a.avg.toFixed(1).replace('.0', '')}`) : null; })(),
       h('div', { class: 'ttl' }, entry.name, sub ? h('span', { class: 'sub' }, sub) : null),
       pct ? h('div', { class: 'bar', style: `width:${pct}%` }) : null);
   }
@@ -229,6 +267,8 @@
     // the age rating read from the file(s), e.g. "TV-Y7" (what kids profiles go by)
     const rated = (e.items || []).map((i) => i.rating).filter(Boolean).sort((a, b) => b.level - a.level)[0];
     const out = bits.map((b) => h('span', {}, b));
+    const avg = avgRating(e);
+    if (avg) out.unshift(h('span', { class: 'avg-stars', title: `${avg.count} rating${avg.count > 1 ? 's' : ''} in this house` }, `★ ${avg.avg.toFixed(1).replace('.0', '')}`, h('small', {}, ` (${avg.count})`)));
     if (rated) out.push(h('span', { class: 'rating' }, rated.label));
     return out;
   }
@@ -371,6 +411,7 @@
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges([item])),
+          ratingBlock(e),
           descBlock(item.description || 'No description.'),
           item.audio.length ? h('div', { class: 'tracks' }, h('h3', {}, 'Audio'), trackEls) : null),
         h('div', { class: 'side' },
@@ -425,6 +466,7 @@
       h('div', { class: 'm-body' },
         h('div', {},
           h('div', { class: 'meta' }, metaLine(e), badges(e.items)),
+          ratingBlock(e),
           descBlock(e.description || ''),
           h('h3', { class: 'ep-title' }, 'Episodes'), select ? h('div', { class: 'ep-top' }, select) : null,
           h('div', { class: 'eps' }, epRows)),

@@ -39,6 +39,7 @@ class Store(private val ctx: Context) {
     }
 
     @Synchronized fun afterProfileDeleted(id: String) {
+        forgetRatings(id)
         if (id == currentId) {
             currentId = profiles.last().optString("id")
             progress = readObj(profiles.progressFile(currentId))
@@ -121,6 +122,25 @@ class Store(private val ctx: Context) {
         writeObj(profiles.progressFile(currentId), progress)
     }
 
+    // ---- star ratings, shared by every profile (see lib/ratings.js on the desktop) --------------------------
+    private val ratingsFile = File(dir, "ratings.json")
+    @Volatile private var ratings: JSONObject = readObj(ratingsFile)
+
+    @Synchronized fun rate(key: String, stars: Int) {
+        val k = key.take(300)
+        if (k.isEmpty() || stars !in 0..5) return
+        val entry = ratings.optJSONObject(k) ?: JSONObject()
+        if (stars > 0) entry.put(currentId, JSONObject().put("stars", stars).put("at", System.currentTimeMillis())) else entry.remove(currentId)
+        if (entry.length() == 0) ratings.remove(k) else ratings.put(k, entry)
+        writeObj(ratingsFile, ratings)
+    }
+
+    @Synchronized fun forgetRatings(pid: String) {
+        val keys = ratings.keys().asSequence().toList()
+        for (k in keys) { val e = ratings.optJSONObject(k) ?: continue; e.remove(pid); if (e.length() == 0) ratings.remove(k) }
+        writeObj(ratingsFile, ratings)
+    }
+
     // ---- playback problems (shown in Settings so they can be reported) ---------------------------------------
     private val problemsFile = File(dir, "playback-problems.json")
 
@@ -159,6 +179,7 @@ class Store(private val ctx: Context) {
             .put("profiles", profiles.list())
             .put("pickProfile", needPick)
             .put("playbackProblems", problems())
+            .put("ratings", ratings)
         if (!canManageAllFiles()) {
             s.put("storageWarning", "Screenroom can only see video files on drives, not subtitles, and uploads are kept inside the app. " +
                 "Run the setup script once (it grants full file access) to fix this.")

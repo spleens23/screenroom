@@ -144,6 +144,7 @@
     setProfilePin: async (id, newPin, pin) => withState(await call('profileSetPin', id, newPin, pin || '')),
     deleteProfile: async (id, pin) => withState(await call('profileDelete', id, pin || '')),
     clearProblems: async () => finish(await call('clearProblems')),
+    rate: async (key, stars) => finish(await call('rate', key, stars)),
     kioskStatus: () => call('kioskStatus'),
     kioskLock: (pin) => call('kioskLock', pin),
     kioskUnlock: (pin) => call('kioskUnlock', pin),

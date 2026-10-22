@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   state: () => ipcRenderer.invoke('state'),
+  rate: (key, stars) => ipcRenderer.invoke('rate', key, stars),
   scan: () => ipcRenderer.invoke('scan'),
   addDir: () => ipcRenderer.invoke('add-dir'),
   removeDir: (d) => ipcRenderer.invoke('remove-dir', d),
