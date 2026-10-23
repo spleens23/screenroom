@@ -67,9 +67,15 @@ jobs:
 
       # ---- 2. the automatic installer image ----------------------------------------------------------
       - name: Tools
+        timeout-minutes: 30
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends xorriso qemu-system-x86 qemu-utils ovmf ffmpeg socat imagemagick
+          # (the runner's package installs sometimes hang: no manual-page rebuild, network timeouts, retries)
+          sudo rm -f /var/lib/man-db/auto-update
+          A="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          for i in 1 2 3; do
+            sudo timeout 300 apt-get $A update -y && sudo timeout 600 apt-get $A install -y --no-install-recommends xorriso qemu-system-x86 qemu-utils ovmf ffmpeg socat imagemagick && break
+            echo "::warning::package install attempt $i failed, retrying"; sleep 10
+          done
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; echo "KVM available"; else echo "::warning::No KVM: the test install will be slow"; fi
 
       - uses: actions/cache@v4
