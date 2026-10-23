@@ -632,6 +632,29 @@ app.whenReady().then(async () => {
     try { update = JSON.parse(read('/var/lib/screenroom/update-status.json')); } catch {}
     return { appliance: isAppliance, version: app.getVersion(), host: `${os.hostname()}.local`, maintenance: maint.user ? maint : null, update };
   });
+  // A newer Screenroom on a plugged-in USB drive (the installer stick, or a screenroom_*.deb): no internet needed.
+  const usbUpdates = () => {
+    const out = [];
+    const cmp = (a, b) => { const x = String(a).split(/[.+~-]/).map(Number), y = String(b).split(/[.+~-]/).map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+    for (const d of drives) {
+      for (const dir of [path.join(d.mount, 'screenroom'), d.mount]) {
+        let names = [];
+        try { names = fs.readdirSync(dir); } catch { continue; }
+        for (const n of names) {
+          const m = n.match(/^screenroom_(.+)_amd64\.deb$/);
+          if (m && cmp(m[1], app.getVersion()) > 0) out.push({ mount: d.mount, label: d.label, version: m[1] });
+        }
+      }
+    }
+    return out.sort((a, b) => cmp(b.version, a.version));
+  };
+  ipcMain.handle('usb-updates', () => (process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance') ? usbUpdates() : []));
+  ipcMain.handle('usb-update', (_e, mount) => new Promise((resolve) => {
+    const d = drives.find((x) => x.mount === mount);
+    if (!d) return resolve({ ok: false, error: 'Drive not found' });
+    try { fs.writeFileSync(path.join(app.getPath('userData'), 'update-from'), d.mount + '\n'); } catch (e) { return resolve({ ok: false, error: e.message }); }
+    execFile('systemctl', ['start', '--no-block', 'screenroom-update.service'], (err) => resolve(err ? { ok: false, error: 'Could not start the update: ' + err.message.split('\n')[0] } : { ok: true }));
+  }));
   ipcMain.handle('appliance-update', () => new Promise((resolve) => {
     execFile('systemctl', ['start', '--no-block', 'screenroom-update.service'], (err) => resolve(err ? { ok: false, error: /Access denied|not authorized/i.test(err.message)
       ? 'This box isn\'t set up to let Screenroom install updates. Set it up again with the newest installer USB, or run "sudo screenroom-update" over the maintenance login.'

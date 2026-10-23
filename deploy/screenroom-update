@@ -15,15 +15,59 @@ status() { # state message [version]
   echo "$1: $2"
 }
 
-status checking "Checking for a newer version…"
 ARCH="$(dpkg --print-architecture)"
+CURV="$(dpkg-query -W -f='${Version}' screenroom 2>/dev/null || echo 0)"
+
+# ---- update from a USB stick (no internet needed) --------------------------------------------------------
+# Screenroom asks for this by writing the stick's folder into the TV user's settings ("update-from"). Only a
+# Screenroom package on a plugged-in drive (under /media, /run/media or /mnt) is accepted. The Screenroom
+# installer stick works: it carries the app and every package it needs.
+TVH="$(getent passwd "${TV_USER:-tv}" | cut -d: -f6)"
+REQ="${TVH:-/home/tv}/.config/screenroom/update-from"
+if [ -f "$REQ" ]; then
+  SRC="$(head -n1 "$REQ" | tr -d '\r')"
+  rm -f "$REQ"
+  SRC="$(readlink -f "$SRC" 2>/dev/null || true)"
+  case "$SRC" in /media/*|/run/media/*|/mnt/*) ;; *) status error "That USB drive can't be used for updates."; exit 1 ;; esac
+  status checking "Looking for Screenroom on the USB drive…"
+  BEST=""; BESTV=""
+  for f in "$SRC"/screenroom/screenroom_*_"$ARCH".deb "$SRC"/screenroom_*_"$ARCH".deb; do
+    [ -f "$f" ] || continue
+    [ "$(dpkg-deb -f "$f" Package 2>/dev/null)" = "screenroom" ] || continue
+    v="$(dpkg-deb -f "$f" Version 2>/dev/null)"
+    if [ -z "$BESTV" ] || dpkg --compare-versions "$v" gt "$BESTV"; then BEST="$f"; BESTV="$v"; fi
+  done
+  [ -n "$BEST" ] || { status error "No Screenroom update was found on the USB drive."; exit 1; }
+  if dpkg --compare-versions "$BESTV" le "$CURV"; then status current "Screenroom on the USB drive ($BESTV) isn't newer than this one ($CURV)." "$CURV"; exit 0; fi
+  status installing "Installing Screenroom $BESTV from the USB drive…" "$BESTV"
+  TMP="$(mktemp -d)"; cp "$BEST" "$TMP/" || { status error "Couldn't read the USB drive."; rm -rf "$TMP"; exit 1; }
+  # the installer stick's package collection: everything the new version needs, without internet
+  POOL="$SRC/screenroom/pool"; LIST=/etc/apt/sources.list.d/screenroom-usb.list
+  if [ -f "$POOL/Packages" ]; then
+    echo "deb [trusted=yes] file:$POOL ./" > "$LIST"
+    apt-get update >/dev/null 2>&1 || true   # (Debian's servers just fail quickly without internet)
+  fi
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y "$TMP/$(basename "$BEST")" >/var/log/screenroom-update.log 2>&1; then
+    # the box's other pieces (fonts, sound, helpers) from the stick too, while it's still listed
+    [ -f /opt/Screenroom/resources/deploy/box-refresh.sh ] && SCREENROOM_FROM_USB=1 bash /opt/Screenroom/resources/deploy/box-refresh.sh >>/var/log/screenroom-refresh.log 2>&1 || true
+    rm -f "$LIST"; rm -rf "$TMP"
+    status done "Updated to $BESTV from the USB drive. Restarting Screenroom…" "$BESTV"
+    sleep 2
+    pkill -TERM -f '/opt/Screenroom/screenroom' 2>/dev/null || true
+    exit 0
+  fi
+  rm -f "$LIST"; rm -rf "$TMP"
+  status error "Install from the USB drive failed (see /var/log/screenroom-update.log)." "$BESTV"
+  exit 1
+fi
+
+status checking "Checking for a newer version…"
 JSON="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$UPDATE_REPO/releases?per_page=30")" \
   || { status error "Couldn't reach GitHub. Check the internet connection."; exit 1; }
 URL="$(echo "$JSON" | jq -r --arg a "$ARCH" '[.[] | select(.draft|not) | .assets[] | select(.name | test("^screenroom_.*_" + $a + "\\.deb$"))] | .[0].browser_download_url // empty')"
 [ -n "$URL" ] || { status error "No Screenroom build for this computer was found on GitHub."; exit 1; }
 FILE="$(basename "$URL")"
 NEWV="$(echo "$FILE" | sed -E 's/^screenroom_(.*)_[^_]+\.deb$/\1/')"
-CURV="$(dpkg-query -W -f='${Version}' screenroom 2>/dev/null || echo 0)"
 if dpkg --compare-versions "$NEWV" le "$CURV"; then
   status current "Screenroom is up to date ($CURV)." "$CURV"
   exit 0

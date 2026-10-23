@@ -1250,6 +1250,19 @@
           clearInterval(polling); polling = setInterval(() => { if ($('#settings').hidden) clearInterval(polling); else draw(); }, 3000);
           setTimeout(draw, 800);
         } }, busy ? 'Updating…' : 'Check for updates')));
+      // a newer Screenroom on a plugged-in USB stick: update without internet
+      if (api.usbUpdates) {
+        const list = await api.usbUpdates().catch(() => []);
+        for (const x of list.slice(0, 1)) {
+          box.append(h('div', { class: 'btns' }, h('button', { class: 'btn primary', disabled: busy, onclick: async () => {
+            if (!(await askConfirm(`Update to ${x.version} from ${x.label}?`, 'No internet needed. Screenroom restarts by itself when it’s done; keep the USB drive plugged in until then.', 'Update', 'Cancel'))) return;
+            const r = await api.usbUpdate(x.mount);
+            if (!r.ok) { showNotice('Couldn’t update', r.error || 'Something went wrong.'); return; }
+            clearInterval(polling); polling = setInterval(() => { if ($('#settings').hidden) clearInterval(polling); else draw(); }, 3000);
+            setTimeout(draw, 800);
+          } }, `Update from USB drive (${x.version})`)));
+        }
+      }
       if (a.maintenance) {
         const secret = h('span', {}, '••••••••');
         box.append(h('p', { class: 'am-hint' }, 'Maintenance login for repairs from a computer on your network: ',

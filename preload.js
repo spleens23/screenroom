@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('api', {
   btRemove: (mac) => ipcRenderer.invoke('bt-remove', mac),
   applianceInfo: () => ipcRenderer.invoke('appliance-info'),
   applianceUpdate: () => ipcRenderer.invoke('appliance-update'),
+  usbUpdates: () => ipcRenderer.invoke('usb-updates'),
+  usbUpdate: (mount) => ipcRenderer.invoke('usb-update', mount),
   selectProfile: (id, pin) => ipcRenderer.invoke('profile-select', id, pin),
   showProfilePicker: () => ipcRenderer.invoke('profile-picker'),
   saveProfile: (profile, pin) => ipcRenderer.invoke('profile-save', profile, pin),

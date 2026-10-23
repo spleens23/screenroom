@@ -100,6 +100,8 @@ fi
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
+# the updater itself (Check for updates / Update from USB drive) comes along with each new version
+[ -f "$HERE/screenroom-update" ] && install -m 0755 "$HERE/screenroom-update" /usr/local/sbin/screenroom-update
 
 # ---- sound driver: Intel's regular one (works with plain ALSA on mini PCs and laptops alike) ----------------
 # Newer Intel laptops can also use the "SOF" driver, but it needs a sound server to switch the speakers on,
