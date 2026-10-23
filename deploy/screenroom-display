@@ -31,15 +31,24 @@ apply() {
   internal="$(echo "$q" | awk '/ connected/ && $1 ~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
   external="$(echo "$q" | awk '/ connected/ && $1 !~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
   [ -n "$internal" ] || return 0              # not a laptop: nothing to do
+  # Every other output is switched off, including one whose TV was just unplugged: left on, it kept the
+  # picture TV-sized and the laptop screen showed only its top-left corner, zoomed in.
+  others() { echo "$q" | awk -v keep="$1" '/ (connected|disconnected)/ && $1 != keep {printf "--output %s --off ", $1}'; }
   if [ -n "$external" ]; then
     mode="$(smooth_mode "$external")"
     if [ -n "$mode" ]; then
-      xrandr --output "$external" --mode "${mode% *}" --rate "${mode#* }" --primary --pos 0x0 --output "$internal" --off
+      # shellcheck disable=SC2046
+      xrandr --output "$external" --mode "${mode% *}" --rate "${mode#* }" --primary --pos 0x0 $(others "$external")
     else
-      xrandr --output "$external" --auto --primary --pos 0x0 --output "$internal" --off
+      # shellcheck disable=SC2046
+      xrandr --output "$external" --auto --primary --pos 0x0 $(others "$external")
     fi
   else
-    xrandr --output "$internal" --auto --primary --pos 0x0
+    # shellcheck disable=SC2046
+    xrandr --output "$internal" --auto --primary --pos 0x0 $(others "$internal")
+    # and shrink the picture back to the laptop screen's own size
+    size="$(echo "$q" | awk -v o="$internal" '$1 == o {f=1; next} f && /^ / && /\+/ {print $1; exit} f && !/^ / {exit}')"
+    [ -n "$size" ] && xrandr --fb "$size" 2>/dev/null
   fi
 }
 
