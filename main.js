@@ -66,7 +66,7 @@ async function soundFor() {
   try {
     if (!mpvIds) mpvIds = new Set((await listAudioDevices(findBinary('mpv', config.mpvPath))).map((d) => d.id));
     const r = await audio.resolve(choice, { passthrough: !!config.passthrough, mpvIds });
-    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false };
+    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false, lightVideo: true };
   } catch {
     return { audioDevice: choice.startsWith('bt:') ? '' : choice };
   }
@@ -161,6 +161,29 @@ function toolPaths() {
   };
 }
 
+// ---- playback problems (Settings): films that stuttered, with what the box was doing -------------------
+const problemsFile = () => path.join(dataDir(), 'playback-problems.json');
+function problems() { try { return JSON.parse(fs.readFileSync(problemsFile(), 'utf8')); } catch { return []; } }
+function noteStutter(statsFile) {
+  let lines = [];
+  try { lines = fs.readFileSync(statsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return; }
+  try { fs.unlinkSync(statsFile); } catch {}
+  const list = problems();
+  for (const s of lines) {
+    const drops = (s.dropped || 0) + (s.decoder_dropped || 0);
+    const mins = (s.watched || 0) / 60;
+    if (mins < 0.5 || drops < Math.max(24, mins * 6)) continue; // a few dropped frames now and then is normal
+    const bits = [`${drops} frames dropped in ${Math.round(mins)} min`];
+    bits.push(s.hwdec && s.hwdec !== 'no' ? `hardware decoding (${s.hwdec})` : 'decoded by the processor (no hardware decoding)');
+    if (s.w) bits.push(`${s.w}×${s.h} ${s.codec || ''}`.trim());
+    if (Number(s.fps) > 0) bits.push(`film ${Number(s.fps).toFixed(3).replace(/\.?0+$/, '')} fps`);
+    if (Number(s.display_fps) > 0) bits.push(`screen ${Math.round(Number(s.display_fps))} Hz`);
+    if (s.out_w) bits.push(`screen ${s.out_w}×${s.out_h}`);
+    list.unshift({ at: Date.now(), title: s.title || path.basename(s.path || ''), code: 'Stuttered', details: bits.join(' · ') });
+  }
+  try { fs.writeFileSync(problemsFile(), JSON.stringify(list.slice(0, 10))); } catch {}
+}
+
 // Laptop battery (Linux): { percent, charging } or null on a computer without one.
 function battery() {
   if (process.platform !== 'linux') return null;
@@ -191,6 +214,7 @@ function snapshot() {
     drives, mediaDir: mediaRoot,
     platform: process.platform,
     battery: battery(),
+    playbackProblems: problems(),
     mpvFound: !!findBinary('mpv', config.mpvPath),
     ffprobeFound: !!findBinary('ffprobe', config.ffprobePath),
   };
@@ -629,9 +653,10 @@ app.whenReady().then(async () => {
           else if (pos > 5) progress[pid] = { pos, dur: d, updated: Date.now() };
           save();
         },
-        onExit: ({ code, log }) => {
+        onExit: ({ code, log, stats }) => {
           playing = false;
           save();
+          noteStutter(stats);
           if (code !== 0 && code !== null && win) {
             win.webContents.send('playback-error', `mpv stopped unexpectedly (code ${code}). Details are in ${log}`);
           }
@@ -665,6 +690,7 @@ app.whenReady().then(async () => {
     return snapshot();
   });
 
+  ipcMain.handle('clear-problems', () => { try { fs.unlinkSync(problemsFile()); } catch {} return snapshot(); });
   ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
 
   // ---- profiles ----------------------------------------------------------------------------------

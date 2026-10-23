@@ -5,13 +5,39 @@
 # screen is left as it is.
 command -v xrandr >/dev/null || exit 0
 
+# The TV's own favourite mode can be 4K at only 30 Hz (laptop HDMI ports often can't do 4K at 60), which makes
+# films judder and stutter. Then use the sharpest mode that runs at 50-60 Hz instead (usually 1080p at 60 Hz).
+# Prints "WIDTHxHEIGHT RATE", or nothing when the TV's favourite mode is already smooth.
+smooth_mode() {
+  xrandr --query 2>/dev/null | awk -v out="$1" '
+    $1 == out { inside = 1; next }
+    inside && !/^ / { inside = 0 }
+    inside {
+      mode = $1; px = 0; split(mode, d, "x"); px = d[1] * d[2]
+      last = ""
+      for (i = 2; i <= NF; i++) {
+        r = $i; pref = (r ~ /\+/); gsub(/[*+]/, "", r)
+        if (r == "") { if (pref && last != "") prefRate = last + 0; continue }   # a lone "+" marks the rate before it
+        last = r
+        if (pref) { prefRate = r + 0 }
+        if (r + 0 >= 49 && px > best) { best = px; bestMode = mode; bestRate = r }
+      }
+    }
+    END { if (prefRate != "" && prefRate < 49 && bestMode != "") print bestMode " " bestRate }'
+}
+
 apply() {
   q="$(xrandr --query 2>/dev/null)" || return
   internal="$(echo "$q" | awk '/ connected/ && $1 ~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
   external="$(echo "$q" | awk '/ connected/ && $1 !~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
   [ -n "$internal" ] || return 0              # not a laptop: nothing to do
   if [ -n "$external" ]; then
-    xrandr --output "$external" --auto --primary --pos 0x0 --output "$internal" --off
+    mode="$(smooth_mode "$external")"
+    if [ -n "$mode" ]; then
+      xrandr --output "$external" --mode "${mode% *}" --rate "${mode#* }" --primary --pos 0x0 --output "$internal" --off
+    else
+      xrandr --output "$external" --auto --primary --pos 0x0 --output "$internal" --off
+    fi
   else
     xrandr --output "$internal" --auto --primary --pos 0x0
   fi

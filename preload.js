@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   clearInProgress: () => ipcRenderer.invoke('clear-in-progress'),
   soundTest: () => ipcRenderer.invoke('sound-test'),
   onBattery: (cb) => ipcRenderer.on('battery', (_e, b) => cb(b)),
+  clearProblems: () => ipcRenderer.invoke('clear-problems'),
   rate: (key, stars) => ipcRenderer.invoke('rate', key, stars),
   profilePhoto: (id, pin) => ipcRenderer.invoke('profile-photo', id, pin || ''),
   setVoteState: (blob) => ipcRenderer.invoke('vote-state', blob),

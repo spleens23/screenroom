@@ -5,7 +5,7 @@ local mp = require 'mp'
 local utils = require 'mp.utils'
 local options = require 'mp.options'
 
-local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '' }
+local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '', stats = '' }
 options.read_options(o, 'netflix')
 
 -- ---------------------------------------------------------------- constants
@@ -928,6 +928,23 @@ mp.register_event('file-loaded', function()
   if S.menu then close_menu() end
 end)
 
+-- How smoothly each film played (for Settings → Playback problems): dropped frames, how it was decoded,
+-- the film's frame rate and the screen's refresh rate. Written when a film ends or the player closes.
+local function write_stats()
+  if o.stats == '' or not S.loaded then return end
+  local n = function(p) return mp.get_property_number(p) end
+  local st = {
+    path = mp.get_property('path') or '', title = (meta_for(mp.get_property('path')).title or ''),
+    hwdec = mp.get_property('hwdec-current') or 'no', codec = mp.get_property('video-codec') or '',
+    w = n('video-params/w'), h = n('video-params/h'), fps = n('container-fps'), display_fps = n('display-fps'),
+    dropped = (n('frame-drop-count') or 0), decoder_dropped = (n('decoder-frame-drop-count') or 0),
+    delayed = (n('vo-delayed-frame-count') or 0), watched = n('time-pos') or 0,
+    out_w = n('osd-width'), out_h = n('osd-height'),
+  }
+  local f = io.open(o.stats, 'a')
+  if f then f:write(utils.format_json(st) .. '\n'); f:close() end
+end
+mp.add_hook('on_unload', 50, function() write_stats() end) -- (while the film's details can still be read)
 mp.register_event('end-file', function() S.loaded = false end)
 
 S.last_tick = now()
