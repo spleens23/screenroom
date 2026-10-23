@@ -43,10 +43,25 @@ apply() {
   fi
 }
 
-last=""
+# Watching for a TV being plugged in or out. Never with "xrandr --query" every few seconds: that re-reads every
+# screen's details over the HDMI cable each time, which made everything (picture, menus, music over HDMI) stutter.
+# Instead: wait for the kernel's "a screen was plugged/unplugged" events, or look at what X already knows.
+connected() { xrandr --current 2>/dev/null | awk '/ connected/ {print $1}' | tr '\n' ' '; }
+apply
+[ "${1:-}" = "--once" ] && exit 0
+last="$(connected)"
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm monitor --udev --subsystem-match=drm 2>/dev/null | while read -r line; do
+    case "$line" in *change*|*add*|*remove*)
+      sleep 2                          # let the TV finish waking up and say what it can do
+      now="$(xrandr --query 2>/dev/null | awk '/ connected/ {print $1}' | tr '\n' ' ')"
+      if [ "$now" != "$last" ]; then apply; last="$now"; fi ;;
+    esac
+  done
+fi
+# no udev events available: check what X knows (cheap, no re-reading of the screens) now and then
 while true; do
-  now="$(xrandr --query 2>/dev/null | awk '/ connected/ {print $1}' | tr '\n' ' ')"
+  sleep 5
+  now="$(connected)"
   if [ "$now" != "$last" ]; then apply; last="$now"; fi
-  [ "${1:-}" = "--once" ] && exit 0
-  sleep 3
 done
