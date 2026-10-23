@@ -99,9 +99,15 @@ install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-s
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
 
-# ---- laptops: sound chips that need Intel's SOF firmware (e.g. Pentium Silver / Celeron N-series) --------------
+# ---- sound driver: Intel's regular one (works with plain ALSA on mini PCs and laptops alike) ----------------
+# Newer Intel laptops can also use the "SOF" driver, but it needs a sound server to switch the speakers on,
+# which Screenroom doesn't run (so Dolby/DTS reach the receiver untouched). Takes effect after a restart.
+mkdir -p /etc/modprobe.d
+echo 'options snd-intel-dspcfg dsp_driver=1' > /etc/modprobe.d/screenroom-sound.conf
+
+# ---- extra packages (fonts for Japanese / Chinese / Korean titles…) ------------------------------------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-  for p in firmware-sof-signed alsa-ucm-conf x11-xserver-utils fonts-noto-cjk; do
+  for p in alsa-ucm-conf x11-xserver-utils fonts-noto-cjk; do
     dpkg -s "$p" >/dev/null 2>&1 || "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"
   done
 fi

@@ -1389,6 +1389,12 @@
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
           : 'Pick your HDMI / optical device for surround or passthrough.')), deviceSel),
+      !isAndroid && api.soundTest ? h('div', { class: 'btns' }, h('button', { class: 'btn secondary', 'data-key': 'sound-test', onclick: async (ev) => {
+        const b = ev.currentTarget; b.textContent = 'Playing a test sound…';
+        const r = await api.soundTest();
+        b.textContent = 'Test sound';
+        flash(r.ok ? `Test sound played on ${r.where}${r.notice ? ` (${r.notice})` : ''}. Didn't hear it? Check the volume, or pick another output above.` : `No sound on ${r.where || 'that output'}: ${r.error || 'it failed'}`);
+      } }, 'Test sound')) : null,
       toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote'),
       remoteBox,
       parlorUI ? h('h3', { id: 'set-parlor' }, 'Parlor (music)') : null,
@@ -1492,6 +1498,8 @@
       }
       return;
     }
+    // the big feature at the top of Home, and the menu bar: show the page from the very top (nothing cut off)
+    if (el.closest('.hero') || (el.closest('#nav') && window.scrollY > 0 && window.scrollY < innerHeight)) { window.scrollTo({ top: 0, behavior }); return; }
     if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior });
   }
   function defaultFocus(els) {
@@ -1542,6 +1550,30 @@
       // up/down inside the page only reach the top menu from the top of the page
       const rest = pool.filter((e) => !e.closest('#nav'));
       if (dir === 'down' || rest.some((e) => e !== cur && R(e).bottom <= a.top - 2)) pool = rest;
+    }
+    // Up/down go to the next line of things (the nearest one above / below), then to whatever on that line is
+    // closest sideways, so nothing gets skipped (Settings: a dropdown or button under a row of switches).
+    if (dir === 'up' || dir === 'down') {
+      const cands = [];
+      for (const el of pool) {
+        if (el === cur) continue;
+        const r = R(el);
+        const dy = r.top + r.height / 2 - ay;
+        if (dir === 'down' ? dy <= 2 || r.bottom <= a.bottom - 2 : dy >= -2 || r.top >= a.top + 2) continue;
+        const gapY = Math.max(0, r.top - a.bottom, a.top - r.bottom);
+        cands.push({ el, r, gapY });
+      }
+      if (!cands.length) return;
+      const nearest = Math.min(...cands.map((c) => c.gapY));
+      let pick = null, bestX = Infinity;
+      for (const c of cands) {
+        if (c.gapY > nearest + 24) continue;
+        const gapX = Math.max(0, c.r.left - a.right, a.left - c.r.right);
+        const d = gapX + Math.abs(c.r.left + c.r.width / 2 - ax) * 0.25 + c.gapY * 0.5;
+        if (d < bestX) { bestX = d; pick = c.el; }
+      }
+      if (pick) focusEl(pick);
+      return;
     }
     for (const el of pool) {
       if (el === cur) continue;

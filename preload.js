@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
   recommend: (to, item) => ipcRenderer.invoke('recommend', to, item),
   dismissRec: (id) => ipcRenderer.invoke('rec-dismiss', id),
   clearInProgress: () => ipcRenderer.invoke('clear-in-progress'),
+  soundTest: () => ipcRenderer.invoke('sound-test'),
   rate: (key, stars) => ipcRenderer.invoke('rate', key, stars),
   profilePhoto: (id, pin) => ipcRenderer.invoke('profile-photo', id, pin || ''),
   setVoteState: (blob) => ipcRenderer.invoke('vote-state', blob),

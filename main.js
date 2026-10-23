@@ -508,6 +508,21 @@ app.whenReady().then(async () => {
     const paired = ((await system.btStatus()).paired || []).map((d) => d.mac);
     return audio.listOutputs(paired, config.audioDevice || '');
   });
+  // Settings → Sound → Test sound: a short chime through the output a film would use now.
+  ipcMain.handle('sound-test', async () => {
+    const bin = findBinary('mpv', config.mpvPath);
+    if (!bin) return { ok: false, error: 'mpv is missing' };
+    const s = await soundFor();
+    const args = ['--no-config', '--no-video', '--really-quiet', '--msg-level=all=error', '--volume=80', '--length=1.6',
+      'av://lavfi:sine=frequency=660:sample_rate=48000', ...(s.audioDevice ? [`--audio-device=${s.audioDevice}`] : [])];
+    return new Promise((resolve) => {
+      execFile(bin, args, { timeout: 15000 }, (err, stdout, stderr) => {
+        const msg = String(stderr || stdout || '').trim().split('\n').filter(Boolean).slice(-2).join(' ');
+        const where = s.soundKind === 'bluetooth' ? 'the Bluetooth speaker' : s.soundKind === 'hdmi' ? 'the TV (HDMI)' : s.soundKind === 'analog' ? 'the headphone jack' : s.audioDevice ? s.audioDevice : 'the computer\'s speakers';
+        resolve(err || /error|fail|could not/i.test(msg) ? { ok: false, error: msg || String(err && err.message), where, notice: s.notice || '' } : { ok: true, where, notice: s.notice || '' });
+      });
+    });
+  });
   ipcMain.handle('remote-info', () => remoteInfo());
   // Linux appliance: Wi-Fi and Bluetooth (remotes, controllers)
   const linuxOnly = (fn) => async (...a) => (process.platform === 'linux' ? fn(...a) : { available: false, ok: false, message: 'Only on Linux' });
