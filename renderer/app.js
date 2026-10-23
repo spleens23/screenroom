@@ -938,20 +938,21 @@
   }
   api.onCopyProgress((p) => { copyState = p; drawCopy(); });
 
-  async function copyDrive(d, only) {
+  async function copyDrive(d, only, kind) {
     copyState = { label: d.label, index: 0, total: 0, bytesDone: 0, bytesTotal: 0, file: 'Looking for videos…' };
     drawCopy();
-    const r = await api.copyDrive(d.mount, only);
+    const r = await api.copyDrive(d.mount, only, kind);
     copyState = null; drawCopy();
     if (r.error) flash(r.error);
-    else flash(r.cancelled ? 'Copy cancelled' : `Copied ${r.copied} file${r.copied === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} were already there)` : ''}`);
+    else flash(r.cancelled ? 'Copy cancelled' : `Copied ${r.copied} file${r.copied === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} were already there)` : ''}${r.music ? ' into your music (Parlor)' : ''}`);
     S = await api.state(); render();
     if (!$('#settings').hidden) renderSettings();
   }
 
   // "Choose what to copy": walk the drive's folders with the remote and tick films, shows or single episodes.
   // OK ticks a line; a folder's "Open" button (to its right) goes inside it.
-  function chooseFiles(d) {
+  function chooseFiles(d, kind) {
+    const music = kind === 'music';
     const picked = new Map(); // rel -> size
     let rel = '';
     const ticked = (r) => [...picked.keys()].some((p) => r === p || r.startsWith(p + '/'));
@@ -962,14 +963,14 @@
       if (!picked.size) { flash('Tick what you want to copy first'); return; }
       const only = [...picked.keys()];
       closeSheet(true);
-      copyDrive(d, only);
+      copyDrive(d, only, kind);
     } });
     const drawFoot = () => { copyBtn.textContent = picked.size ? `Copy ${picked.size} selected (${fmtBytes(total())})` : 'Copy selected'; copyBtn.disabled = !picked.size; };
     async function open(r, focusRel) {
       rel = r;
       crumb.textContent = `${d.label}${rel ? ' › ' + rel.split('/').join(' › ') : ''}`;
       list.replaceChildren(h('p', { class: 'am-hint' }, 'Looking…'));
-      const res = await api.driveList(d.mount, rel);
+      const res = await api.driveList(d.mount, rel, kind);
       if (res.error) { list.replaceChildren(h('p', { class: 'am-hint' }, res.error)); return; }
       const rows = [];
       if (rel) rows.push(h('div', { class: 'fpick-row' }, h('button', { class: 'fpick-main up', 'data-rel': '..', onclick: () => open(rel.split('/').slice(0, -1).join('/'), rel) }, '‹  Back to ' + (rel.includes('/') ? rel.split('/').slice(-2, -1)[0] : d.label))));
@@ -985,12 +986,13 @@
             h('span', { class: 'fpick-box' }, on ? '✓' : ''),
             (() => { const i = h('span', { class: 'fpick-ico' }); i.innerHTML = e.dir
               ? '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5l2 2h8A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" fill="#e8b84a"/></svg>'
+              : music ? '<svg viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.8" stroke-linecap="round"><path d="M9 17.5V5.2l11-2.2v12.4M9 9.2l11-2.2"/><ellipse cx="6.3" cy="17.6" rx="2.7" ry="2.2"/><ellipse cx="17.3" cy="15.5" rx="2.7" ry="2.2"/></svg>'
               : '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="#bbb" stroke-width="1.8"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4" stroke="#bbb" stroke-width="1.5"/></svg>'; return i; })(),
             h('span', { class: 'fpick-name' }, e.name),
-            h('small', {}, e.dir ? `${e.count} file${e.count === 1 ? '' : 's'} · ${fmtBytes(e.size)}` : fmtBytes(e.size))),
+            h('small', {}, e.dir ? `${e.count} ${music ? 'song' : 'file'}${e.count === 1 ? '' : 's'} · ${fmtBytes(e.size)}` : fmtBytes(e.size))),
           e.dir ? h('button', { class: 'btn secondary small fpick-open', 'data-open': e.rel, onclick: () => open(e.rel) }, 'Open ›') : null));
       }
-      if (!res.entries.length) rows.push(h('p', { class: 'am-hint' }, 'No videos in this folder.'));
+      if (!res.entries.length) rows.push(h('p', { class: 'am-hint' }, music ? 'No songs in this folder.' : 'No videos in this folder.'));
       list.replaceChildren(...rows);
       const body = $('#sheet .sheet-body'); if (body) body.scrollTop = 0;
       const f = (focusRel && list.querySelector(`[data-rel="${CSS.escape(focusRel)}"]`)) || (list.querySelector('.fpick-main:not(.up):not([disabled])') || list.querySelector('.fpick-main:not([disabled])'));
@@ -1000,8 +1002,10 @@
     function redraw(focusRel) { if (!redrawing) { redrawing = true; open(rel, focusRel).finally(() => { redrawing = false; }); } drawFoot(); }
     drawFoot();
     const backUp = () => { if (!rel) return false; open(rel.split('/').slice(0, -1).join('/'), rel); return true; };
-    sheet('files', h('h2', {}, `Copy from ${d.label}`), crumb,
-      h('p', { class: 'am-hint' }, 'OK ticks a film, show, season or episode. “Open ›” goes into a folder. Ticked things are copied into your library, keeping their folders.'),
+    sheet('files', h('h2', {}, music ? `Copy music from ${d.label}` : `Copy from ${d.label}`), crumb,
+      h('p', { class: 'am-hint' }, music
+        ? `OK ticks an artist (their whole discography), an album or single songs. “Open ›” goes into a folder. Ticked music is copied into ${S.profile ? S.profile.name + '’s' : 'your'} music in the Parlor, keeping its artist and album folders.`
+        : 'OK ticks a film, show, season or episode. “Open ›” goes into a folder. Ticked things are copied into your library, keeping their folders.'),
       list,
       h('div', { class: 'btns sheet-foot' }, copyBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
     sheetBack = backUp;
@@ -1015,7 +1019,8 @@
       h('div', { class: 'drive-name' }, d.label, h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
       h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: () => copyDrive(d) }, 'Copy everything'),
-        api.driveList ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d) }, 'Choose what to copy…') : null,
+        api.driveList ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d) }, 'Choose films to copy…') : null,
+        api.driveList && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d, 'music') }, 'Choose music to copy…') : null,
         h('button', { class: 'btn secondary', onclick: async () => { const r = await api.ejectDrive(d.mount); if (!r.ok) flash(r.msg || 'Could not eject'); else flash(`${d.label} can be unplugged`); S = await api.state(); render(); if (!$('#settings').hidden) renderSettings(); } }, 'Eject')))));
   }
 
@@ -1940,6 +1945,17 @@
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
     if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); goHome(); return; }
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
+    // The remote's / laptop's volume buttons: the music's volume (films have their own, in the player)
+    if (api.musicCmd && (e.key === 'AudioVolumeUp' || e.key === 'AudioVolumeDown' || e.key === 'AudioVolumeMute')) {
+      e.preventDefault();
+      const cmd = e.key === 'AudioVolumeUp' ? 'volup' : e.key === 'AudioVolumeDown' ? 'voldown' : 'mute';
+      api.musicCmd(cmd).then(() => api.parlorState()).then((st) => {
+        const pl = st && st.player;
+        if (!pl || !pl.track) flash('Volume buttons change the music volume (nothing is playing)');
+        else flash(cmd === 'mute' ? (pl.muted ? 'Music muted' : 'Music on') : `Music volume ${pl.volume}%`);
+      }).catch(() => {});
+      return;
+    }
     if (api.musicCmd && (e.key === 'MediaPlayPause' || e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious')) {
       e.preventDefault(); api.musicCmd(e.key === 'MediaPlayPause' ? 'toggle' : e.key === 'MediaTrackNext' ? 'next' : 'prev'); return;
     }

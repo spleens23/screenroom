@@ -109,9 +109,18 @@ echo 'options snd-intel-dspcfg dsp_driver=1' > /etc/modprobe.d/screenroom-sound.
 
 # ---- extra packages (fonts for Japanese / Chinese / Korean titles…) ------------------------------------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
+  extra=()
   for p in alsa-ucm-conf x11-xserver-utils fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
-    dpkg -s "$p" >/dev/null 2>&1 || "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"
+    dpkg -s "$p" >/dev/null 2>&1 || extra+=("$p")
   done
+  if [ "${#extra[@]}" -gt 0 ]; then
+    # A box installed without internet has never fetched Debian's package lists: fetch them first if needed.
+    "${APT[@]}" install "${extra[@]}" >/dev/null 2>&1 || {
+      apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true
+      for p in "${extra[@]}"; do "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"; done
+    }
+    command -v fc-cache >/dev/null && fc-cache -f >/dev/null 2>&1 || true
+  fi
 fi
 if ! in_chroot; then
   /usr/local/bin/screenroom-audio-setup

@@ -508,21 +508,26 @@ app.whenReady().then(async () => {
   ipcMain.handle('drives', async () => { drives = await transfer.listDrives().catch(() => drives); return drives; });
 
   let copying = null;
-  ipcMain.handle('drive-list', async (_e, mount, rel) => {
+  ipcMain.handle('drive-list', async (_e, mount, rel, kind) => {
     const d = drives.find((x) => x.mount === mount);
     if (!d) return { error: 'Drive not found' };
-    try { return { entries: await transfer.listFolder(d.mount, String(rel || '')) }; } catch (e) { return { error: String(e.message || e) }; }
+    try { return { entries: await transfer.listFolder(d.mount, String(rel || ''), kind === 'music' ? 'music' : 'video') }; } catch (e) { return { error: String(e.message || e) }; }
   });
-  ipcMain.handle('drive-copy', async (_e, mount, only) => {
+  ipcMain.handle('drive-copy', async (_e, mount, only, kind) => {
     if (copying) return { error: 'A copy is already running' };
     const d = drives.find((x) => x.mount === mount);
-    if (!d || !mediaRoot) return { error: 'Drive not found' };
+    const music = kind === 'music';
+    // music goes into this profile's music folder (the Parlor), films and shows into the library folder
+    let dest = mediaRoot;
+    if (music) { try { dest = parlorApi && parlorApi.musicDestination(); } catch { dest = null; } if (!dest) return { error: 'Music can only be copied in a grown-up profile.' }; }
+    if (!d || !dest) return { error: 'Drive not found' };
     copying = { stop: false };
     try {
       const r = await transfer.copyTree({
-        from: d.mount, to: mediaRoot, cancel: copying, only: Array.isArray(only) ? only.map(String) : null,
+        from: d.mount, to: dest, kind: music ? 'music' : 'video', cancel: copying, only: Array.isArray(only) ? only.map(String) : null,
         onProgress: (p) => sendWin('copy-progress', { ...p, label: d.label }),
       });
+      if (music) { if (parlorApi) parlorApi.rescan().then(() => sendWin('parlor-updated', null)).catch(() => {}); return { ...r, music: true }; }
       doScan().then(() => sendWin('library-updated', snapshot())).catch(() => {});
       return r;
     } catch (e) { return { error: String(e.message || e) }; }
