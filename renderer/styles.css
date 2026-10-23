@@ -852,3 +852,7 @@ body.big #battery { font-size: 17px; } body.big #battery .batt { width: 34px; he
 .dlg-card .btn.danger { background: #e50914; color: #fff; }
 .dlg-card .btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
 body.big .dlg-card h2 { font-size: 30px; } body.big .dlg-card p { font-size: 20px; }
+/* Now Playing: the record + sleeve never get a frame of their own; outside big-cover mode the sleeve shows the
+   highlight, in big-cover mode nothing does (it comes back when the controls return) */
+#npfull .npf-stage:focus, #npfull .npf-stage:focus-visible, body.navmode #npfull .npf-stage:focus { outline: none !important; box-shadow: none !important; }
+#npfull.big .npf-stage .cover, #npfull.big .npf-stage .vinyl { outline: none !important; }
