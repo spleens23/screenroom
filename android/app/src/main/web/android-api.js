@@ -146,6 +146,7 @@
     deleteProfile: async (id, pin) => withState(await call('profileDelete', id, pin || '')),
     clearProblems: async () => finish(await call('clearProblems')),
     rate: async (key, stars) => finish(await call('rate', key, stars)),
+    clearInProgress: async () => finish(await call('clearInProgress')),
     recommend: async (to, item) => finish(await call('recommend', to, item)),
     dismissRec: async (id) => finish(await call('dismissRec', id)),
     setVoteState: (blob) => call('setVoteState', blob).catch(() => {}),

@@ -1302,7 +1302,46 @@
         renderSettings(); const again = $(`#settings input[data-key="${key}"]`); again && again.focus({ preventScroll: true });
       }, 'data-key': key }));
   }
+  // Redrawing Settings (after a toggle, a choice, a new device…) keeps the place in the list and the highlight
+  // where they were, instead of jumping back to the top.
   function renderSettings() {
+    const box = $('#settings');
+    const els = () => [...document.querySelectorAll('#settings-body ' + FOCUSABLE.split(', ').join(', #settings-body '))];
+    const a = document.activeElement;
+    const inside = a && a.closest && a.closest('#settings-body');
+    const key = inside ? (a.dataset.key || a.id || '') : '';
+    const label = inside ? (a.textContent || '').trim().slice(0, 40) : '';
+    const idx = inside ? els().indexOf(a) : -1;
+    const top = box.scrollTop;
+    // hold the old height while parts that load a moment later (sound devices, Wi-Fi…) fill back in,
+    // so the list can't shrink under the scroll position
+    const body = $('#settings-body');
+    body.style.minHeight = body.offsetHeight + 'px';
+    clearTimeout(renderSettings.t); renderSettings.t = setTimeout(() => { body.style.minHeight = ''; }, 2500);
+    renderSettingsNow();
+    box.scrollTop = top;
+    if (!inside || box.hidden) return;
+    const list = els();
+    const again = (key && list.find((e) => (e.dataset.key || e.id) === key)) || (label && list.find((e) => (e.textContent || '').trim().slice(0, 40) === label)) || list[Math.min(idx, list.length - 1)];
+    if (again) again.focus({ preventScroll: true });
+  }
+  // Continue Watching → Clear (press twice: the first press asks "Press again")
+  function clearProgressButton() {
+    let armed = null;
+    const b = h('button', { class: 'btn secondary', 'data-key': 'clear-progress', onclick: async () => {
+      if (!armed) {
+        b.textContent = 'Press again to clear';
+        armed = setTimeout(() => { armed = null; b.textContent = 'Clear Continue Watching'; }, 4000);
+        return;
+      }
+      clearTimeout(armed); armed = null;
+      S = await api.clearInProgress();
+      render(); flash('Continue Watching cleared');
+      b.textContent = 'Clear Continue Watching';
+    } }, 'Clear Continue Watching');
+    return b;
+  }
+  function renderSettingsNow() {
     if (S.profile && S.profile.kids) {
       $('#settings-body').replaceChildren(h('h2', {}, 'Settings'), h('h3', {}, 'Profiles'), profilesBlock());
       return;
@@ -1333,6 +1372,9 @@
       h('h2', {}, 'Settings'),
       api.saveProfile && S.profile ? h('h3', {}, 'Profiles') : null,
       api.saveProfile && S.profile ? profilesBlock() : null,
+      api.clearInProgress ? h('h3', {}, 'Continue Watching') : null,
+      api.clearInProgress ? h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, `Forget where ${S.profile ? S.profile.name : 'you'} stopped in films and episodes that aren't finished. Finished ones stay marked as watched.`),
+        h('div', { class: 'btns' }, clearProgressButton())) : null,
       !S.mpvFound ? h('div', { class: 'warn' }, 'mpv was not found, so playback will not work. Install it with “brew install mpv” (Mac) or “sudo apt install mpv” (Linux).') : null,
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg to scan your library.') : null,
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
@@ -1402,7 +1444,7 @@
   }
   document.querySelectorAll('#nav nav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setView(a.dataset.view); }));
   $('#search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
-  const openSettings = () => { renderSettings(); $('#settings').hidden = false; const f = $('#settings input, #settings button'); f && f.focus(); };
+  const openSettings = () => { renderSettingsNow(); $('#settings').hidden = false; $('#settings').scrollTop = 0; const f = $('#settings input, #settings button'); f && f.focus(); };
   const closeSettings = () => { $('#settings').hidden = true; $('#settings-btn').focus(); };
   const toggleSettings = () => { if ($('#settings').hidden) openSettings(); else closeSettings(); };
   $('#settings-btn').addEventListener('click', openSettings);

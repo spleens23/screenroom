@@ -126,6 +126,7 @@ class Bridge(private val activity: MainActivity) {
             "recommend" -> { st.recommend(a.optJSONArray(0) ?: JSONArray(), a.optJSONObject(1) ?: JSONObject()); st.snapshot() }
             "dismissRec" -> { st.dismissRec(a.optString(0)); st.snapshot() }
             "setVoteState" -> { st.voteBlob = a.optJSONObject(0); true }
+            "clearInProgress" -> { st.clearInProgress(); st.snapshot() }
             "rate" -> { st.rate(a.optString(0), a.optInt(1, 0)); st.snapshot() }
             "kioskStatus" -> Kiosk.status(activity)
             "kioskLock" -> Kiosk.lock(activity, a.optString(0, ""))

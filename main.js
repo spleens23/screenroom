@@ -616,6 +616,14 @@ app.whenReady().then(async () => {
     return snapshot();
   });
 
+  // Settings → Continue Watching → Clear: forget where this profile stopped in films and episodes it hasn't
+  // finished (what it finished stays marked as watched).
+  ipcMain.handle('clear-in-progress', () => {
+    for (const id of Object.keys(progress)) if (!progress[id].done) delete progress[id];
+    writeJson(progFile(), progress);
+    return snapshot();
+  });
+
   ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
 
   // ---- profiles ----------------------------------------------------------------------------------

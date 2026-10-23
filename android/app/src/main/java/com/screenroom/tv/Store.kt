@@ -123,6 +123,13 @@ class Store(private val ctx: Context) {
         writeObj(profiles.progressFile(currentId), progress)
     }
 
+    /** Forget where this profile stopped in things it hasn't finished (Continue Watching → Clear). */
+    @Synchronized fun clearInProgress() {
+        val keys = progress.keys().asSequence().toList()
+        for (k in keys) if (progress.optJSONObject(k)?.optBoolean("done") != true) progress.remove(k)
+        writeObj(profiles.progressFile(currentId), progress)
+    }
+
     // ---- star ratings, shared by every profile (see lib/ratings.js on the desktop) --------------------------
     private val ratingsFile = File(dir, "ratings.json")
     @Volatile private var ratings: JSONObject = readObj(ratingsFile)
