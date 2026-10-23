@@ -88,7 +88,7 @@
   async function play({ id, audioTrack, fromStart }) {
     const item = library.find((i) => i.id === id);
     if (!item) return { ok: false, error: 'That file is no longer in the library.' };
-    const queue = queueFor(item).map((i) => ({ id: i.id, path: i.path, duration: i.duration, ...playerMeta(i) }));
+    const queue = queueFor(item).map((i) => ({ id: i.id, path: i.path, duration: i.duration, ...playerMeta(i), fmt: MediaCore.formatBadges(i) }));
     return call('play', { queue, audioTrack: audioTrack || null, fromStart: !!fromStart });
   }
 

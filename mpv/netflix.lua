@@ -5,7 +5,7 @@ local mp = require 'mp'
 local utils = require 'mp.utils'
 local options = require 'mp.options'
 
-local o = { meta = '', font = '', accent = 'E50914', tv = 'no' }
+local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '' }
 options.read_options(o, 'netflix')
 
 -- ---------------------------------------------------------------- constants
@@ -374,6 +374,71 @@ local function draw_menu(k)
   end
 end
 
+-- ---------------------------------------------------------------- format badges (top right)
+-- ATMOS / DTS:X: is the track going out untouched ("Unaltered") or being turned into plain sound here?
+-- DOLBY VISION / HDR10 / HLG: is the picture reaching the screen as HDR, or toned down to SDR?
+local AMBER, GREEN = bgr('F5C518'), bgr('6BE38A')
+local function badge_list()
+  local m = meta_for(mp.get_property('path'))
+  local fmt = m.fmt or {}
+  local out = {}
+  local aid = mp.get_property_number('aid')
+  local kind = aid and fmt.audio and fmt.audio[tostring(aid)] or nil
+  if kind then
+    local name = (kind == 'atmos') and 'ATMOS' or 'DTS:X'
+    local f = (mp.get_property('audio-out-params/format') or '') .. ' ' .. (mp.get_property('audio-params/format') or '')
+    local ch = mp.get_property_number('audio-out-params/channel-count')
+    local note, warn = nil, false
+    if f:find('spdif') then note = 'Unaltered'
+    elseif o.passthru ~= 'yes' then note = 'Turn on Passthru'; warn = true
+    elseif o.sound == 'bluetooth' then note = 'Decoded for Bluetooth'; warn = true
+    elseif ch then note = 'Decoded to ' .. (channel_name(ch) or (ch .. 'ch')); warn = true end
+    out[#out + 1] = { name = name, note = note, warn = warn }
+  end
+  local v = fmt.video or ''
+  if v ~= '' then
+    local name = (v == 'dv') and 'DOLBY VISION' or (v == 'hlg') and 'HLG' or 'HDR10'
+    local g = mp.get_property('video-target-params/gamma')
+    if (not g or g == '') and o.hdrout == 'no' then g = 'sdr' end -- this screen setup can't receive HDR at all
+    local note, warn = nil, false
+    if g and g ~= '' and g ~= 'pq' and g ~= 'hlg' then note = 'Shown as SDR'; warn = true
+    elseif g and v == 'dv' then note = 'As HDR' end
+    out[#out + 1] = { name = name, note = note, warn = warn }
+  end
+  return out
+end
+
+local function text_w(s, fs)
+  local w = 0
+  for c in s:gmatch('.') do
+    if c:match('[A-Z0-9]') then w = w + 0.6 elseif c:match('[a-z]') then w = w + 0.45
+    elseif c == ' ' then w = w + 0.25 else w = w + 0.3 end
+  end
+  return math.floor(w * fs + 0.5)
+end
+
+local function draw_badges(k)
+  local list = badge_list()
+  local x = W - MARGIN
+  local y = 96
+  for i = #list, 1, -1 do
+    local b = list[i]
+    local nw = text_w(b.name, 30)
+    local tw = b.note and text_w('(' .. b.note .. ')', 24) or 0
+    local w = 28 + nw + (b.note and (10 + tw) or 0)
+    local x0 = x - w
+    shape(rect(x0, y - 26, w, 52), BLACK, 0.55 * k)
+    shape(rect(x0, y - 26, w, 2), WHITE, 0.85 * k); shape(rect(x0, y + 24, w, 2), WHITE, 0.85 * k)
+    shape(rect(x0, y - 26, 2, 52), WHITE, 0.85 * k); shape(rect(x0 + w - 2, y - 26, 2, 52), WHITE, 0.85 * k)
+    -- name and note as one line of text, so the spacing between them is the font's own
+    local col = b.warn and AMBER or (b.note == 'Unaltered' and GREEN or GRAY)
+    add(string.format('{\\an4\\pos(%.1f,%.1f)%s\\fs30\\bord0\\shad1\\4c&H000000&\\4a&H90&\\1a%s\\b1\\1c&H%s&}%s%s',
+      x0 + 14, y, FONT, alpha(k), WHITE, esc(b.name),
+      b.note and string.format('{\\b0\\fs24\\1c&H%s&}  (%s)', col, esc(b.note)) or ''))
+    x = x0 - 16
+  end
+end
+
 local function draw_controls(k)
   local m = meta_for(mp.get_property('path'))
   local pl = playlist_info()
@@ -390,6 +455,7 @@ local function draw_controls(k)
   if S.kbnav and S.focus == 'back' then shape(circle(MARGIN + 30, 96, 52), WHITE, 0.25 * k) end
   icon_back(MARGIN + 30, 96, 46, WHITE, k)
   hit(MARGIN - 20, 40, 120, 112, { onclick = quit_player })
+  draw_badges(k)
 
   -- progress bar
   local bx0, bx1 = MARGIN, W - MARGIN - 130

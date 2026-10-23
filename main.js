@@ -62,11 +62,11 @@ const isAppliance = () => process.platform === 'linux' && fs.existsSync('/etc/sc
 let mpvIds = null;
 async function soundFor() {
   const choice = config.audioDevice || '';
-  if (!isAppliance()) return { audioDevice: choice.startsWith('bt:') ? '' : choice };
+  if (!isAppliance()) return { audioDevice: choice.startsWith('bt:') ? '' : choice, soundKind: process.platform === 'darwin' ? 'mac' : '' };
   try {
     if (!mpvIds) mpvIds = new Set((await listAudioDevices(findBinary('mpv', config.mpvPath))).map((d) => d.id));
     const r = await audio.resolve(choice, { passthrough: !!config.passthrough, mpvIds });
-    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '' };
+    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false };
   } catch {
     return { audioDevice: choice.startsWith('bt:') ? '' : choice };
   }
@@ -271,9 +271,9 @@ function episodesFrom(item) {
 // Text the on-screen player shows for each file (title, S1:E2, episode name, synopsis).
 function metaFor(item) {
   if (item.tv) {
-    return { title: item.tv.series, sub: `S${item.tv.season}:E${item.tv.label}`, name: item.tv.name, desc: item.description || '' };
+    return { title: item.tv.series, sub: `S${item.tv.season}:E${item.tv.label}`, name: item.tv.name, desc: item.description || '', fmt: core.formatBadges(item) };
   }
-  return { title: item.title, sub: item.year ? String(item.year) : '', name: '', desc: item.description || '' };
+  return { title: item.title, sub: item.year ? String(item.year) : '', name: '', desc: item.description || '', fmt: core.formatBadges(item) };
 }
 
 // ---- phone remote ---------------------------------------------------------------

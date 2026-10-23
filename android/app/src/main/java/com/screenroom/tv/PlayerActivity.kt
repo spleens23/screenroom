@@ -12,7 +12,13 @@ import android.graphics.drawable.StateListDrawable
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.view.Display
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -37,6 +43,8 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -65,7 +73,7 @@ class PlayerActivity : Activity() {
         }
     }
 
-    private class Entry(val id: String, val path: String, val title: String, val sub: String, val name: String, val desc: String)
+    private class Entry(val id: String, val path: String, val title: String, val sub: String, val name: String, val desc: String, val fmt: JSONObject)
 
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
@@ -87,6 +95,7 @@ class PlayerActivity : Activity() {
     private lateinit var pauseSub: TextView
     private lateinit var pauseDesc: TextView
     private lateinit var spinner: ProgressBar
+    private lateinit var badgeRow: LinearLayout
 
     private var controlsShown = false
     private var lastInteraction = 0L
@@ -107,7 +116,8 @@ class PlayerActivity : Activity() {
         val q = req.optJSONArray("queue")
         if (q != null) for (i in 0 until q.length()) {
             val o = q.getJSONObject(i)
-            queue.add(Entry(o.getString("id"), o.getString("path"), o.optString("title"), o.optString("sub"), o.optString("name"), o.optString("desc")))
+            queue.add(Entry(o.getString("id"), o.getString("path"), o.optString("title"), o.optString("sub"), o.optString("name"), o.optString("desc"),
+                o.optJSONObject("fmt") ?: JSONObject()))
         }
         if (queue.isEmpty()) { finish(); return }
         initialAudio = if (req.has("audioTrack") && !req.isNull("audioTrack")) req.optInt("audioTrack") else null
@@ -234,6 +244,12 @@ class PlayerActivity : Activity() {
         }
         root.addView(topBar, lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
 
+        // Top right: ATMOS / DTS:X / DOLBY VISION / HDR10 badges, saying whether they reach the TV as they are
+        badgeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        root.addView(badgeRow, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(30); rightMargin = dp(48)
+        })
+
         // "You're watching" panel shown while paused
         pauseTitle = text(40f, true)
         pauseSub = text(20f, true)
@@ -313,6 +329,8 @@ class PlayerActivity : Activity() {
     private fun showControls(focus: View?) {
         controlsShown = true
         topBar.visibility = View.VISIBLE
+        badgeRow.visibility = View.VISIBLE
+        updateBadges()
         bottomBar.visibility = View.VISIBLE
         (focus ?: playBtn).requestFocus()
         poke()
@@ -321,6 +339,7 @@ class PlayerActivity : Activity() {
     private fun hideControls() {
         controlsShown = false
         topBar.visibility = View.GONE
+        badgeRow.visibility = View.GONE
         bottomBar.visibility = View.GONE
     }
 
@@ -494,11 +513,13 @@ class PlayerActivity : Activity() {
                 App.store.setProgress(prev, 0.0, o?.optDouble("dur", 0.0) ?: 0.0, true)
             }
             lastId = mediaItem?.mediaId
+            audioEncoding = null
             showTitles(player.currentMediaItemIndex)
+            updateBadges()
             nextCard.visibility = View.GONE
         }
 
-        override fun onTracksChanged(tracks: Tracks) { applyInitialAudio() }
+        override fun onTracksChanged(tracks: Tracks) { applyInitialAudio(); updateBadges() }
 
         override fun onPlayerError(error: PlaybackException) {
             val name = queue.getOrNull(player.currentMediaItemIndex)?.let { listOf(it.title, it.sub).filter { s -> s.isNotBlank() }.joinToString(" ") } ?: "this video"
@@ -509,6 +530,80 @@ class PlayerActivity : Activity() {
             App.emit("playback-error", "$msg. Details are in Settings → Playback problems.")
             finish()
         }
+    }
+
+    // ---- format badges ----------------------------------------------------------------------------------
+    // ATMOS / DTS:X: "Unaltered" when the track goes to the TV/soundbar as it is, otherwise why it doesn't.
+    // DOLBY VISION / HDR10 / HLG: plain when the TV shows it that way, otherwise what it's shown as.
+    private var audioEncoding: Int? = null
+    private var videoMime = ""
+    private val BITSTREAM = setOf(C.ENCODING_AC3, C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC, C.ENCODING_AC4, C.ENCODING_DOLBY_TRUEHD,
+        C.ENCODING_DTS, C.ENCODING_DTS_HD, C.ENCODING_DTS_UHD_P2)
+    private val amber = Color.parseColor("#F5C518")
+    private val green = Color.parseColor("#6BE38A")
+
+    private fun badge(name: String, note: String?, color: Int): TextView {
+        val sb = SpannableStringBuilder(name)
+        sb.setSpan(StyleSpan(Typeface.BOLD), 0, name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (note != null) {
+            val start = sb.length
+            sb.append("  ($note)")
+            sb.setSpan(ForegroundColorSpan(color), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sb.setSpan(RelativeSizeSpan(0.8f), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return text(16f).apply {
+            text = sb
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = GradientDrawable().apply { setColor(0x8C000000.toInt()); setStroke(dp(1), Color.WHITE); cornerRadius = dp(3).toFloat() }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hdrTypes(): IntArray = try { windowManager.defaultDisplay.hdrCapabilities?.supportedHdrTypes ?: IntArray(0) } catch (_: Throwable) { IntArray(0) }
+
+    private fun updateBadges() {
+        if (!::badgeRow.isInitialized || !::player.isInitialized) return
+        val fmt = queue.getOrNull(player.currentMediaItemIndex)?.fmt ?: JSONObject()
+        val out = ArrayList<TextView>()
+        // the audio track playing now, counted the way the library counts them (1, 2, 3…)
+        var n = 0; var sel: Format? = null; var selN = 0
+        for (g in player.currentTracks.groups) if (g.type == C.TRACK_TYPE_AUDIO) for (i in 0 until g.length) {
+            n++
+            if (g.isTrackSelected(i)) { sel = g.getTrackFormat(i); selN = n }
+        }
+        val kind = fmt.optJSONObject("audio")?.optString(selN.toString())?.takeIf { it.isNotEmpty() }
+            ?: when (sel?.sampleMimeType) { MimeTypes.AUDIO_E_AC3_JOC -> "atmos"; MimeTypes.AUDIO_DTS_X -> "dtsx"; else -> null }
+        if (sel != null && kind != null) {
+            val name = if (kind == "atmos") "ATMOS" else "DTS:X"
+            val enc = audioEncoding
+            val caps = AudioCapabilities.getCapabilities(this)
+            val (note, color) = when {
+                enc == null -> null to Color.LTGRAY
+                enc in BITSTREAM -> "Unaltered" to green
+                kind == "dtsx" -> "Decoded by Screenroom" to amber // DTS is always decoded here (most TVs can't take it)
+                !caps.supportsEncoding(C.ENCODING_E_AC3_JOC) && !caps.supportsEncoding(C.ENCODING_DOLBY_TRUEHD) -> "TV can't take Atmos" to amber
+                else -> "Decoded" to amber
+            }
+            out.add(badge(name, note, color))
+        }
+        val dvFile = fmt.optString("video") == "dv" || videoMime == MimeTypes.VIDEO_DOLBY_VISION || (videoInfo.startsWith("dvh") || videoInfo.startsWith("dvav"))
+        val v = if (dvFile) "dv" else fmt.optString("video").ifEmpty { if (" HDR10" in videoInfo) "hdr10" else if (" HLG" in videoInfo) "hlg" else "" }
+        if (v.isNotEmpty()) {
+            val types = hdrTypes()
+            val dvOn = videoMime == MimeTypes.VIDEO_DOLBY_VISION || videoDecoder.contains("dolby", true) || videoDecoder.contains("dovi", true)
+            val (name, note) = when (v) {
+                "dv" -> "DOLBY VISION" to when {
+                    dvOn && Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION in types -> null
+                    Display.HdrCapabilities.HDR_TYPE_HDR10 in types -> "As HDR10"
+                    else -> "Shown as SDR"
+                }
+                "hlg" -> "HLG" to (if (Display.HdrCapabilities.HDR_TYPE_HLG in types) null else "Shown as SDR")
+                else -> "HDR10" to (if (Display.HdrCapabilities.HDR_TYPE_HDR10 in types) null else "Shown as SDR")
+            }
+            out.add(badge(name, note, amber))
+        }
+        badgeRow.removeAllViews()
+        out.forEachIndexed { i, b -> badgeRow.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (i > 0) leftMargin = dp(10) }) }
     }
 
     // ---- what is decoding what (for "Playback problems" in Settings) ------------------------------------
@@ -534,9 +629,14 @@ class PlayerActivity : Activity() {
 
     @OptIn(UnstableApi::class)
     private val diag = object : AnalyticsListener {
-        override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: Format, reuse: DecoderReuseEvaluation?) { videoInfo = fmtVideo(format) }
+        override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: Format, reuse: DecoderReuseEvaluation?) {
+            videoInfo = fmtVideo(format); videoMime = format.sampleMimeType ?: ""; runOnUiThread { updateBadges() }
+        }
+        override fun onAudioTrackInitialized(t: AnalyticsListener.EventTime, config: AudioSink.AudioTrackConfig) {
+            audioEncoding = config.encoding; runOnUiThread { updateBadges() }
+        }
         override fun onAudioInputFormatChanged(t: AnalyticsListener.EventTime, format: Format, reuse: DecoderReuseEvaluation?) { audioInfo = audioLabel(format) }
-        override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { videoDecoder = decoderName }
+        override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { videoDecoder = decoderName; runOnUiThread { updateBadges() } }
         override fun onAudioDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { audioDecoder = decoderName }
         override fun onDroppedVideoFrames(t: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) { dropped += droppedFrames }
         override fun onMediaItemTransition(t: AnalyticsListener.EventTime, mediaItem: MediaItem?, reason: Int) { dropped = 0 }
