@@ -98,39 +98,48 @@ function applyTv() {
 // reporting its real resolution). Re-fit the full-screen window so it never covers only part of it.
 let refitTimer = null;
 let lastRefit = 0;
+let refitTries = 0; // the safety net gives up after a few tries (never a flickering loop)
+// Linux TV box: the screen Screenroom should fill (the TV when one is plugged into a laptop, else the laptop).
+const targetDisplay = () => { try { return screen.getPrimaryDisplay(); } catch { return null; } };
 function refit(_e, _display, changed) {
   // Only on the Linux TV box (a Mac changes its "work area" every time a window goes full screen, which used
-  // to start an endless full screen / windowed loop), only for a real change of the screen's size, and only
-  // when the window doesn't already cover the screen.
+  // to start an endless full screen / windowed loop), only for a real change of the screen, and only
+  // when the window doesn't already cover the screen it should.
   if (!isTv() || process.platform !== 'linux') return;
   if (Array.isArray(changed) && !changed.some((c) => c === 'bounds' || c === 'scaleFactor')) return;
-  if (Date.now() - lastRefit < 5000) return;
   clearTimeout(refitTimer);
   refitTimer = setTimeout(() => {
     if (!win || win.isDestroyed()) return;
-    const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
-    if (b.width === d.width && b.height === d.height && b.x === d.x && b.y === d.y) return;
-    lastRefit = Date.now();
+    const t = targetDisplay();
+    if (!t) return;
+    const b = win.getBounds(), d = t.bounds;
+    if (b.width === d.width && b.height === d.height && b.x === d.x && b.y === d.y) { refitTries = 0; applyZoom(); return; }
+    if (Date.now() - lastRefit < 1500) { refit(null, null, ['bounds']); return; } // settle, then try again
+    lastRefit = Date.now(); refitTries++;
+    // Plugging a TV in or out: move the window onto the right screen at its size, full screen again,
+    // and redo the text size for that screen (so nothing ends up tiny, huge or off the edge).
     win.setFullScreen(false);
     setTimeout(() => {
       if (!win || win.isDestroyed()) return;
+      win.setBounds(d);
       win.setFullScreen(true);
-      setTimeout(() => { applyZoom(); if (!win.isDestroyed()) win.webContents.invalidate(); }, 200);
-    }, 150);
-  }, 250);
+      setTimeout(() => { applyZoom(); if (!win.isDestroyed()) win.webContents.invalidate(); }, 300);
+      setTimeout(() => { applyZoom(); }, 1500);
+    }, 200);
+  }, 700);
 }
 function watchDisplay() {
   screen.on('display-metrics-changed', refit);
-  screen.on('display-added', refit);
-  screen.on('display-removed', refit);
-  // Safety net: a few seconds after start, make sure the window really matches the screen.
-  for (const ms of [1500, 4000, 9000]) {
-    setTimeout(() => {
-      if (!isTv() || !win || win.isDestroyed()) return;
-      const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
-      if (b.width !== d.width || b.height !== d.height) refit(null, null, ['bounds']);
-    }, ms);
-  }
+  screen.on('display-added', (...a) => { refitTries = 0; refit(...a); });
+  screen.on('display-removed', (...a) => { refitTries = 0; refit(...a); });
+  // Safety net: keep checking that the window really matches the screen it should fill (a TV plugged in or
+  // out without a clean screen event, a TV waking up and reporting its real size).
+  setInterval(() => {
+    if (!isTv() || process.platform !== 'linux' || !win || win.isDestroyed()) return;
+    const t = targetDisplay(); if (!t) return;
+    const b = win.getBounds(), d = t.bounds;
+    if ((b.width !== d.width || b.height !== d.height || b.x !== d.x || b.y !== d.y) && refitTries < 3) refit(null, null, ['bounds']);
+  }, 3000);
 }
 
 function createWindow() {

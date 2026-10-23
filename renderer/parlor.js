@@ -178,7 +178,7 @@ window.createParlor = function createParlor(ctx) {
         pl.tracks.length ? h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(pl.tracks), 0, ctxp) }, svg(ICON.shuffle), 'Shuffle') : null,
         h('button', { class: 'btn secondary', onclick: () => renamePlaylist(pl) }, 'Rename'),
         h('button', { class: 'btn secondary danger', onclick: async () => {
-          if (!confirm(`Delete the playlist "${pl.name}"? The songs stay in your library.`)) return;
+          if (!(await ctx.confirm(`Delete the playlist “${pl.name}”?`, 'The songs stay in your library.', 'Delete', 'Cancel', true))) return;
           const r = await api.playlistDelete(pl.id); P = r.state; go('playlists');
         } }, 'Delete')),
       pl.tracks.length ? songTable(pl.tracks, { context: ctxp, numbered: true, removable: async (i) => {

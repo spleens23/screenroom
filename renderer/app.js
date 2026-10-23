@@ -1,5 +1,10 @@
 (() => {
   const $ = (s) => document.querySelector(s);
+  // Leaving something out of a list on screen (cond ? x : null) must never show the word "null" there.
+  for (const fn of ['append', 'replaceChildren', 'prepend']) {
+    const orig = Element.prototype[fn];
+    Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((k) => k != null && k !== false)); };
+  }
   const main = $('#main');
   let S = { library: [], progress: {}, config: {}, mpvFound: true, ffprobeFound: true };
   let view = 'home';
@@ -803,9 +808,49 @@
   let filmPlaying = false;
   async function start(id, audioTrack, fromStart) {
     hideSaver();
+    if (filmPlaying) return; // a second press while the film is starting does nothing
     filmPlaying = true;
     const r = await api.play({ id, audioTrack, fromStart });
-    if (!r.ok) { filmPlaying = false; alert(r.error); }
+    if (!r.ok) {
+      if (/already playing/i.test(r.error || '')) return; // it's starting: just let it
+      filmPlaying = false;
+      showNotice('Couldn’t play this', r.error || 'Something went wrong.');
+    }
+  }
+
+  // ---- Screenroom's own pop-up questions (instead of the computer's small grey boxes): big, remote-friendly,
+  // Back = the safe answer.
+  let dlg = null; // { resolve, el }
+  function askConfirm(title, text, okLabel = 'OK', cancelLabel = 'Cancel', danger = false) {
+    return new Promise((resolve) => {
+      closeDialog(false);
+      const done = (v) => { closeDialog(); resolve(v); };
+      const cancel = h('button', { class: 'btn secondary', onclick: () => done(false) }, cancelLabel);
+      const ok = cancelLabel === null ? null : h('button', { class: 'btn primary' + (danger ? ' danger' : ''), onclick: () => done(true) }, okLabel);
+      const el = h('div', { id: 'dlg', class: 'dlg' }, h('div', { class: 'dlg-card', role: 'dialog' },
+        h('h2', {}, title), text ? h('p', {}, text) : null,
+        h('div', { class: 'btns' }, ok, cancel)));
+      document.body.append(el);
+      dlg = { resolve, el, cancel: () => done(false) };
+      document.body.classList.add('navmode');
+      (danger ? cancel : (ok || cancel)).focus({ preventScroll: true });
+    });
+  }
+  function showNotice(title, text) {
+    return new Promise((resolve) => {
+      closeDialog(false);
+      const okBtn = h('button', { class: 'btn primary', onclick: () => { closeDialog(); resolve(); } }, 'OK');
+      const el = h('div', { id: 'dlg', class: 'dlg' }, h('div', { class: 'dlg-card', role: 'alertdialog' }, h('h2', {}, title), text ? h('p', {}, text) : null, h('div', { class: 'btns' }, okBtn)));
+      document.body.append(el);
+      dlg = { resolve, el, cancel: () => { closeDialog(); resolve(); } };
+      okBtn.focus({ preventScroll: true });
+    });
+  }
+  function closeDialog() {
+    if (!dlg) return false;
+    const d = dlg; dlg = null;
+    d.el.remove();
+    return true;
   }
 
   // ---- laptop battery (top bar) ----------------------------------------------------------------------
@@ -1028,7 +1073,7 @@
           k.locked
             ? h('button', { class: 'btn secondary', onclick: () => act(api.kioskUnlock) }, 'Unlock')
             : h('button', { class: 'btn secondary', onclick: () => act(api.kioskLock) }, 'Lock to Screenroom'),
-          k.locked ? null : h('button', { class: 'btn secondary', onclick: () => { if (confirm('Give control of the box back to Android? Screenroom can then be uninstalled, and locking needs the setup script again.')) act(api.kioskRelease); } }, 'Release control')));
+          k.locked ? null : h('button', { class: 'btn secondary', onclick: () => { askConfirm('Give control back to Android?', 'Screenroom can then be uninstalled, and locking needs the setup script again.', 'Release control', 'Cancel', true).then((y) => { if (y) act(api.kioskRelease); }); } }, 'Release control')));
     }).catch(() => {});
     return box;
   }
@@ -1376,7 +1421,7 @@
         h('button', { class: 'btn primary', onclick: save }, 'Save'),
         h('button', { class: 'btn secondary', onclick: () => renderSettings() }, 'Cancel'),
         p && (S.profiles || []).length > 1 ? h('button', { class: 'btn secondary danger', onclick: async () => {
-          if (!confirm(`Delete ${p.name}? Their watch history goes too.`)) return;
+          if (!(await askConfirm(`Delete ${p.name}?`, 'Their watch history, ratings and playlists go too.', 'Delete', 'Cancel', true))) return;
           const r = await api.deleteProfile(p.id, authPin);
           if (!r.ok) { flash(r.error); return; }
           S = r.state; drawProfileButton(); render(); if (!S.pickProfile) renderSettings();
@@ -1528,8 +1573,8 @@
         S.appliance
           ? h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Restart Screenroom')
           : h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Quit Screenroom'),
-        canPower ? h('button', { class: 'btn secondary', onclick: () => { if (confirm('Restart this computer?')) api.power('reboot'); } }, 'Restart') : null,
-        canPower ? h('button', { class: 'btn secondary', onclick: () => { if (confirm('Shut down this computer?')) api.power('poweroff'); } }, 'Shut down') : null),
+        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Restart this computer?', 'Screenroom will be back in about a minute.', 'Restart', 'Cancel').then((y) => { if (y) api.power('reboot'); }); } }, 'Restart') : null,
+        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Shut down this computer?', 'Turn it on again with its power button.', 'Shut down', 'Cancel', true).then((y) => { if (y) api.power('poweroff'); }); } }, 'Shut down') : null),
     ].filter(Boolean));
   }
 
@@ -1562,7 +1607,8 @@
   const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function scopeEls() {
     let els;
-    if (osk) els = osk.el.querySelectorAll('.osk-key');
+    if (dlg) els = dlg.el.querySelectorAll(FOCUSABLE);
+    else if (osk) els = osk.el.querySelectorAll('.osk-key');
     else if ($('#pinpad') && !$('#pinpad').hidden) els = $('#pinpad').querySelectorAll(FOCUSABLE);
     else if ($('#sheet')) els = $('#sheet').querySelectorAll(FOCUSABLE);
     else if ($('#who') && !$('#who').hidden) els = $('#who').querySelectorAll(FOCUSABLE);
@@ -1718,6 +1764,7 @@
   }
   // Returns true if it did something (so a TV remote's Back can leave the app when there's nothing left to close).
   function goBack() {
+    if (dlg) { dlg.cancel(); return true; }
     if (osk) { closeOsk(); return true; }
     if (pinState) { pinState.cancel(); return true; }
     if ($('#sheet')) { if (sheetBack && sheetBack()) return true; closeSheet(); return true; }
@@ -2051,6 +2098,7 @@
       openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
       wantsKeyboard: () => oskAllowed() && !kbInUse(),
       isTvBox: () => !!S.appliance,
+      confirm: askConfirm,
       // the house: albums people recommended, and recommending one
       avatar,
       albumRecs: () => recsForMe(['album']),

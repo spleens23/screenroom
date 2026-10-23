@@ -842,3 +842,13 @@ body.big #battery { font-size: 17px; } body.big #battery .batt { width: 34px; he
 /* the spinning record gets its own graphics layer so it turns smoothly */
 .vinyl.out { will-change: transform; backface-visibility: hidden; }
 .fpick-ico svg { width: 22px; height: 22px; display: block; }
+
+/* Screenroom's own pop-up questions */
+.dlg { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; }
+.dlg-card { background: #1c1c1c; color: #eee; border-radius: 12px; padding: 30px 34px; width: min(560px, 92vw); box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+.dlg-card h2 { margin: 0 0 10px; font-size: 26px; }
+.dlg-card p { margin: 0 0 22px; color: #bbb; font-size: 17px; line-height: 1.45; }
+.dlg-card .btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.dlg-card .btn.danger { background: #e50914; color: #fff; }
+.dlg-card .btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
+body.big .dlg-card h2 { font-size: 30px; } body.big .dlg-card p { font-size: 20px; }
