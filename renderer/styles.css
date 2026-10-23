@@ -836,3 +836,9 @@ body.big #battery { font-size: 17px; } body.big #battery .batt { width: 34px; he
 /* screensaver */
 #saver { position: fixed; inset: 0; z-index: 2000; background: #000; cursor: none; overflow: hidden; }
 #saver .saver-logo { position: absolute; left: 0; top: 0; font-weight: 900; letter-spacing: .18em; font-size: clamp(26px, 3.4vw, 60px); white-space: nowrap; will-change: transform; text-shadow: 0 0 24px currentColor; }
+
+/* big-cover Now Playing: no highlight frame on the record and sleeve (it's still what Back / OK act on) */
+#npfull.big .npf-stage:focus .cover, body.navmode #npfull.big .npf-stage:focus .cover { outline: none; box-shadow: none; }
+/* the spinning record gets its own graphics layer so it turns smoothly */
+.vinyl.out { will-change: transform; backface-visibility: hidden; }
+.fpick-ico svg { width: 22px; height: 22px; display: block; }

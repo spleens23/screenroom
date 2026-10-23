@@ -21,6 +21,11 @@ const qrcode = require('qrcode-generator');
 // so the library cache, settings and watch history carry over.
 // Crisper text when the page is scaled up for a TV (fractional zoom blurs hinted glyphs on Linux).
 if (process.platform === 'linux') app.commandLine.appendSwitch('font-render-hinting', 'none');
+// TV box: draw the interface with the graphics chip (smoother spinning records and scrolling on small Intel PCs)
+if (process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance')) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+}
 
 app.setPath('userData', path.join(app.getPath('appData'), 'screenroom'));
 

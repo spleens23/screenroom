@@ -252,7 +252,7 @@
   const recommendButton = (e) => (others().length ? h('button', { class: 'btn secondary', onclick: () => {
     sheetClosed = () => { const b = $('#modal .rec-btn'); b && b.focus(); };
     recommendSheet({ kind: e.kind, key: rkey(e), name: e.name, entry: e });
-  } }, '➜ Recommend') : null);
+  } }, '→ Recommend') : null);
 
   // ---- movie night vote ------------------------------------------------------------------------------
   // Pick a few films, everyone votes (on the TV or on their phone through the phone remote), the winner plays.
@@ -318,7 +318,7 @@
       h('div', { class: 'mn-head' }, h('div', { class: 'mn-icon' }), h('h2', {}, 'Movie night')),
       h('h3', {}, 'Who’s voting?'), whoBox,
       h('div', { class: 'mn-bar' }, h('h3', {}, 'The choices'), count,
-        h('button', { class: 'btn secondary', onclick: () => { picked.splice(0, picked.length, ...suggestFilms([...voters], 4)); drawGrid(); if (!startBtn.disabled) startBtn.focus({ preventScroll: true }); flash(`Picked ${picked.length} films`); } }, '✨ Suggest for us'),
+        h('button', { class: 'btn secondary', onclick: () => { picked.splice(0, picked.length, ...suggestFilms([...voters], 4)); drawGrid(); if (!startBtn.disabled) startBtn.focus({ preventScroll: true }); flash(`Picked ${picked.length} films`); } }, 'Suggest for us'),
         search),
       grid,
       h('div', { class: 'btns sheet-foot' }, startBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
@@ -938,7 +938,9 @@
             redraw(e.rel);
           } },
             h('span', { class: 'fpick-box' }, on ? '✓' : ''),
-            h('span', { class: 'fpick-ico' }, e.dir ? '📁' : '🎞'),
+            (() => { const i = h('span', { class: 'fpick-ico' }); i.innerHTML = e.dir
+              ? '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5l2 2h8A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" fill="#e8b84a"/></svg>'
+              : '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="#bbb" stroke-width="1.8"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4" stroke="#bbb" stroke-width="1.5"/></svg>'; return i; })(),
             h('span', { class: 'fpick-name' }, e.name),
             h('small', {}, e.dir ? `${e.count} file${e.count === 1 ? '' : 's'} · ${fmtBytes(e.size)}` : fmtBytes(e.size))),
           e.dir ? h('button', { class: 'btn secondary small fpick-open', 'data-open': e.rel, onclick: () => open(e.rel) }, 'Open ›') : null));
@@ -1898,6 +1900,8 @@
     if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type === 'checkbox') { e.preventDefault(); t.click(); return; }
     if (e.key === 'Enter' && t.tagName === 'SELECT' && S.tv) { e.preventDefault(); cycleSelect(t); return; }
     if (e.key === 'Enter' && t === document.body) { e.preventDefault(); activate(); return; }
+    // OK on a highlighted line that isn't a button (a song in the Parlor): play it, like a click
+    if (e.key === 'Enter' && t.matches && t.matches('[tabindex]') && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && !t.onkeydown) { e.preventDefault(); t.click(); return; }
     if (e.key === 'ContextMenu' || e.key === 'F1' || e.key === 'Tab' && e.altKey) { e.preventDefault(); toggleSettings(); }
   });
 

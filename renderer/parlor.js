@@ -148,7 +148,7 @@ window.createParlor = function createParlor(ctx) {
           h('td', {}, t.artist), h('td', {}, t.album), h('td', { class: 'g' }, t.genre || ''),
           h('td', { class: 'x' }, removable
             ? h('button', { class: 'rowbtn', title: 'Remove from playlist', onclick: () => removable(i) }, '✕')
-            : h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([id]) }, '＋')));
+            : h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([id]) }, '+')));
       })));
   }
   function renderSongs() {
@@ -163,7 +163,7 @@ window.createParlor = function createParlor(ctx) {
   function renderPlaylists() {
     page('Playlists', grid([
       h('button', { class: 'card pcard newpl', 'data-key': 'pl:new', onclick: () => newPlaylist([]) },
-        h('div', { class: 'cover cover-blank list' }, h('span', {}, '＋')), h('div', { class: 'pcard-t' }, 'New Playlist'), h('div', { class: 'pcard-s' }, ' ')),
+        h('div', { class: 'cover cover-blank list' }, h('span', {}, '+')), h('div', { class: 'pcard-t' }, 'New Playlist'), h('div', { class: 'pcard-s' }, ' ')),
       ...P.playlists.map(playlistCard)]));
   }
   function renderPlaylist(id) {
@@ -183,7 +183,7 @@ window.createParlor = function createParlor(ctx) {
         } }, 'Delete')),
       pl.tracks.length ? songTable(pl.tracks, { context: ctxp, numbered: true, removable: async (i) => {
         const r = await api.playlistUpdate(pl.id, { removeAt: i }); P = r.state; render();
-      } }) : h('p', { class: 'pnote' }, 'Empty for now. Add songs with ＋ on any album or song.'));
+      } }) : h('p', { class: 'pnote' }, 'Empty for now. Add songs with + on any album or song.'));
   }
 
   function renderSearch(q) {
@@ -236,10 +236,10 @@ window.createParlor = function createParlor(ctx) {
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
-            h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '＋ Playlist'),
+            h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '+ Playlist'),
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: async () => { await api.musicCmd('enqueue', { trackIds: ids, next: true }); ctx.flash('Playing next'); } }, 'Play Next') : null,
             P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null,
-            ctx.recommend && ctx.canRecommend() ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '➜ Recommend') : null),
+            ctx.recommend && ctx.canRecommend() ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '→ Recommend') : null),
           albumRecBanner(a),
           P.canManage ? sharePanel(a) : null)),
       h('table', { class: 'songs tracks' }, h('tbody', {}, albumTracks(a).map((t, i) => {
@@ -250,7 +250,7 @@ window.createParlor = function createParlor(ctx) {
             h('td', { class: 'n' }, cur ? svg(ICON.play, 'ico tiny') : (t.track || i + 1)),
             h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
             h('td', { class: 't' }, mmss(t.duration)),
-            h('td', { class: 'x' }, h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '＋')))];
+            h('td', { class: 'x' }, h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '+')))];
       }).flat())));
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
@@ -311,7 +311,7 @@ window.createParlor = function createParlor(ctx) {
   function pickPlaylist(trackIds) {
     overlay('pick', h('h2', {}, `Add ${plural(trackIds.length, 'song')} to…`),
       h('div', { class: 'pick-list' },
-        h('button', { class: 'btn secondary', onclick: () => newPlaylist(trackIds) }, '＋ New Playlist…'),
+        h('button', { class: 'btn secondary', onclick: () => newPlaylist(trackIds) }, '+ New Playlist…'),
         ...P.playlists.map((pl) => h('button', { class: 'btn secondary', onclick: async () => {
           const r = await api.playlistUpdate(pl.id, { add: trackIds }); P = r.state; closeOverlay(); ctx.flash(`Added to ${pl.name}`);
           if (view === 'playlist:' + pl.id) render();
@@ -439,7 +439,8 @@ window.createParlor = function createParlor(ctx) {
     caption: h('div', { class: 'npf-caption' }),
   };
   F.close = h('button', { class: 'np-close', 'data-b': 'close', 'aria-label': 'Close', title: 'Close (Back)', onclick: () => closeFull() }, '✕');
-  F.bigBtn = h('button', { class: 'np-close np-big', 'data-b': 'big', title: 'Big cover', onclick: () => setBig(true) }, '⤢');
+  F.bigBtn = h('button', { class: 'np-close np-big', 'data-b': 'big', title: 'Big cover', onclick: () => setBig(true) });
+  F.bigBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
   F.barBtn = h('button', { class: 'npf-bar', 'data-b': 'bar', title: 'Left / right: skip 10 seconds',
     onclick: (e) => { const s = P.player; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX && s) api.musicCmd('seek', ((e.clientX - r.left) / r.width) * (s.dur || 0)); },
     onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); wakeFull(); api.musicCmd('seek', P.player.pos + (e.key === 'ArrowLeft' ? -10 : 10)); } } }, F.fill);
@@ -573,7 +574,7 @@ window.createParlor = function createParlor(ctx) {
       else box.append(h('p', {}, 'No music folders yet.'));
       if (P.suggestions.length) {
         box.append(h('p', { class: 'am-hint' }, 'Found on this box:'), h('div', { class: 'btns' }, P.suggestions.map((d) =>
-          h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '＋ ' + d))));
+          h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '+ ' + d))));
       }
       box.append(h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: async () => { const r = await api.parlorAddDir(); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error); } }, 'Add music folder…'),

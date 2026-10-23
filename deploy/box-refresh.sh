@@ -109,7 +109,7 @@ echo 'options snd-intel-dspcfg dsp_driver=1' > /etc/modprobe.d/screenroom-sound.
 
 # ---- extra packages (fonts for Japanese / Chinese / Korean titles…) ------------------------------------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-  for p in alsa-ucm-conf x11-xserver-utils fonts-noto-cjk; do
+  for p in alsa-ucm-conf x11-xserver-utils fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
     dpkg -s "$p" >/dev/null 2>&1 || "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"
   done
 fi
