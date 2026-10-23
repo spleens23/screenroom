@@ -968,16 +968,28 @@
 
 
   // ---- Linux appliance: Wi-Fi and Bluetooth --------------------------------------------------------
+  // Wi-Fi / Bluetooth panels redraw themselves after a search or pairing; put the remote's highlight back inside
+  // them (on the first result, or the same button) instead of losing it, which threw the page back to the top.
+  function refocusIn(box, want) {
+    if (!want) return;
+    const els = [...box.querySelectorAll('button:not([disabled]), input, select')];
+    const t = (want.sel && box.querySelector(want.sel)) || (want.label && els.find((e) => (e.textContent || '').trim() === want.label)) || els[0];
+    if (t) { document.body.classList.add('navmode'); focusEl(t); }
+  }
+
   function wifiBlock() {
     const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    let want = null;
     const draw = async (networks) => {
       const st = await api.wifiStatus();
       box.replaceChildren();
+      setTimeout(() => { refocusIn(box, want); want = null; }, 0);
       if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
       box.append(h('p', {}, st.wired ? 'Connected by network cable.' : st.wifiConnected ? `Connected to Wi-Fi: ${st.wifiNetwork}` : 'Not connected.'));
       if (!st.hasWifi) { box.append(h('p', { class: 'am-hint' }, 'This computer has no Wi-Fi adapter.')); return; }
       box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
         e.target.textContent = 'Searching…';
+        want = { sel: '.wifi-join input, .drives button' };
         const r = await api.wifiScan();
         if (!r.ok) { flash(r.error); draw(); return; }
         draw(r.networks);
@@ -989,6 +1001,7 @@
           h('div', { class: 'drive-name' }, n.ssid, h('small', {}, `${n.current ? 'Connected · ' : ''}${n.secure ? 'Password' : 'Open'} · signal ${n.signal}%`)));
         const go = async (pw) => {
           flash(`Connecting to ${n.ssid}…`);
+          want = { label: 'Find Wi-Fi networks' };
           const r = await api.wifiConnect(n.ssid, pw);
           flash(r.ok ? r.message : r.error);
           if (r.ok) draw();
@@ -1008,10 +1021,19 @@
   function bluetoothBlock() {
     const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
     const soundOn = (mac) => (S.config.audioDevice || '').toUpperCase() === `BT:${mac}`;
-    const useForSound = async (d) => { S = await api.setConfig({ audioDevice: `bt:${d.mac}` }); flash(`Sound will play on ${d.name}`); renderSettings(); };
+    // keep the Audio output dropdown above in step without redrawing all of Settings
+    const showChoice = (id, label) => {
+      const sel = document.querySelector('#settings select.dev-select');
+      if (!sel) return;
+      if (![...sel.options].some((o) => o.value === id)) sel.append(h('option', { value: id }, label));
+      sel.value = id;
+    };
+    const useForSound = async (d) => { S = await api.setConfig({ audioDevice: `bt:${d.mac}` }); showChoice(`bt:${d.mac}`, `Bluetooth: ${d.name}`); flash(`Sound will play on ${d.name}`); want = { label: 'Use the TV instead' }; draw(); };
+    let want = null;
     const draw = async (found) => {
       const st = await api.btStatus();
       box.replaceChildren();
+      setTimeout(() => { refocusIn(box, want); want = null; }, 0);
       if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
       if (!st.hasAdapter) { box.append(h('p', { class: 'am-hint' }, 'No Bluetooth adapter found. A USB Bluetooth dongle works too.')); return; }
       box.append(h('p', { class: 'am-hint' }, 'Remotes, game controllers, speakers and headphones. USB and 2.4 GHz dongle remotes work without pairing.'));
@@ -1022,30 +1044,33 @@
               .filter(Boolean).join(' · '))),
           d.audio && !d.connected ? h('button', { class: 'btn secondary', onclick: async (e) => {
             e.target.textContent = 'Connecting…';
+            want = { label: 'Pair a device' };
             const r = await api.btConnect(d.mac); flash(r.ok ? `${d.name} connected` : r.error); draw();
           } }, 'Connect') : null,
           d.audio && !soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: () => useForSound(d) }, 'Play sound here') : null,
           d.audio && soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: async () => {
-            S = await api.setConfig({ audioDevice: '' }); flash('Sound is back on Automatic (the TV)'); renderSettings();
+            S = await api.setConfig({ audioDevice: '' }); showChoice('', 'Automatic'); flash('Sound is back on Automatic'); want = { label: 'Play sound here' }; draw();
           } }, 'Use the TV instead') : null,
           h('button', { class: 'btn secondary', onclick: async () => {
             const r = await api.btRemove(d.mac);
-            if (r.ok) { S = await api.state(); flash(`Removed ${d.name}`); renderSettings(); } else flash(r.error);
+            if (r.ok) { S = await api.state(); flash(`Removed ${d.name}`); want = { label: 'Pair a device' }; draw(); } else flash(r.error);
           } }, 'Forget')))));
       }
       box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
         e.target.textContent = 'Searching… (put the device in pairing mode)';
+        want = { sel: '.bt-found button', label: 'Pair a device' };
         const r = await api.btScan();
         draw(r.devices || []);
       } }, 'Pair a device')));
       if (!found) return;
       if (!found.length) { box.append(h('p', { class: 'am-hint' }, 'Nothing found. Put it in pairing mode (often: hold the pairing or Bluetooth button until a light flashes) and search again.')); return; }
-      box.append(h('div', { class: 'drives' }, found.map((d) => h('div', { class: 'drive' },
+      box.append(h('div', { class: 'drives bt-found' }, found.map((d) => h('div', { class: 'drive' },
         h('div', { class: 'drive-name' }, d.name),
         h('button', { class: 'btn secondary', onclick: async (e) => {
-          e.target.textContent = 'Pairing…';
+          e.target.textContent = 'Pairing… (keep it in pairing mode)';
+          want = { label: 'Use the TV instead' };
           const r = await api.btPair(d.mac);
-          if (!r.ok) { flash(r.error); draw(); return; }
+          if (!r.ok) { flash(r.error); want = { sel: '.bt-found button', label: 'Pair a device' }; draw(found); return; }
           // A speaker you just paired is a speaker you want to hear: send sound to it straight away.
           if (r.audio) { await useForSound(d); return; }
           flash(`${d.name} is ready`); draw();
