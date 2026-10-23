@@ -856,3 +856,12 @@ body.big .dlg-card h2 { font-size: 30px; } body.big .dlg-card p { font-size: 20p
    highlight, in big-cover mode nothing does (it comes back when the controls return) */
 #npfull .npf-stage:focus, #npfull .npf-stage:focus-visible, body.navmode #npfull .npf-stage:focus { outline: none !important; box-shadow: none !important; }
 #npfull.big .npf-stage .cover, #npfull.big .npf-stage .vinyl { outline: none !important; }
+/* top bar on smaller screens (a laptop's own 1366×768 panel): the search box gives way first, so the profile
+   picture and Settings always stay on screen */
+#nav { gap: 16px; }
+#nav nav { flex-shrink: 1; min-width: 0; }
+.nav-right { gap: 12px; flex-shrink: 0; min-width: 0; }
+.nav-right > *:not(#search) { flex-shrink: 0; }
+#search { width: clamp(110px, 15vw, 230px); }
+@media (max-width: 1500px) { body.big #nav nav { gap: 16px; font-size: 16px; } body.big #pnav a { padding: 6px 10px; } }
+@media (max-width: 1250px) { #nav nav { gap: 12px; } #search { width: 110px; } }
