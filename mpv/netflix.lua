@@ -940,6 +940,8 @@ local function write_stats()
     dropped = (n('frame-drop-count') or 0), decoder_dropped = (n('decoder-frame-drop-count') or 0),
     delayed = (n('vo-delayed-frame-count') or 0), watched = n('time-pos') or 0,
     out_w = n('osd-width'), out_h = n('osd-height'),
+    audio = mp.get_property('audio-codec-name') or '', audio_out = mp.get_property('audio-out-params/format') or mp.get_property('audio-params/format') or '',
+    audio_dev = mp.get_property('audio-device') or '',
   }
   local f = io.open(o.stats, 'a')
   if f then f:write(utils.format_json(st) .. '\n'); f:close() end

@@ -178,11 +178,21 @@ function toolPaths() {
 // ---- playback problems (Settings): films that stuttered, with what the box was doing -------------------
 const problemsFile = () => path.join(dataDir(), 'playback-problems.json');
 function problems() { try { return JSON.parse(fs.readFileSync(problemsFile(), 'utf8')); } catch { return []; } }
-function noteStutter(statsFile) {
+function noteStutter(statsFile, logFile) {
   let lines = [];
   try { lines = fs.readFileSync(statsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return; }
   try { fs.unlinkSync(statsFile); } catch {}
   const list = problems();
+  // Sound sent untouched (passthrough) that kept cutting out: what the player's log says about the sound output
+  let log = '';
+  try { log = fs.readFileSync(logFile, 'utf8').slice(-400000); } catch {}
+  const underruns = (log.match(/underrun/gi) || []).length;
+  const aoErrors = log.split('\n').filter((l) => /\[ao(\/alsa)?\]|\[ad\]|spdif/i.test(l) && /error|fail|lost|reopen|underrun|xrun/i.test(l)).slice(-3);
+  const passthru = lines.find((s) => /spdif/i.test(s.audio_out || ''));
+  if (passthru && (underruns || aoErrors.length)) {
+    list.unshift({ at: Date.now(), title: passthru.title || path.basename(passthru.path || ''), code: 'Sound cut out',
+      details: [`${passthru.audio || 'audio'} sent untouched (${passthru.audio_out}) to ${passthru.audio_dev || 'the default output'}`, underruns ? `${underruns} sound underruns` : '', ...aoErrors.map((l) => l.replace(/^\[[^\]]*\]\s*/, '').slice(0, 160))].filter(Boolean).join(' · ') });
+  }
   for (const s of lines) {
     const drops = (s.dropped || 0) + (s.decoder_dropped || 0);
     const mins = (s.watched || 0) / 60;
@@ -711,7 +721,7 @@ app.whenReady().then(async () => {
         onExit: ({ code, log, stats }) => {
           playing = false;
           save();
-          noteStutter(stats);
+          noteStutter(stats, log);
           if (code !== 0 && code !== null && win) {
             win.webContents.send('playback-error', `mpv stopped unexpectedly (code ${code}). Details are in ${log}`);
           }
