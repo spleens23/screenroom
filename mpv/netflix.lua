@@ -417,10 +417,49 @@ local function text_w(s, fs)
   return math.floor(w * fs + 0.5)
 end
 
+-- Laptop battery (top right), read every 30 seconds; a warning when it runs low while not charging.
+local BATT_DIR = nil
+do
+  local base = '/sys/class/power_supply'
+  for _, n in ipairs(utils.readdir(base) or {}) do if n:match('^BAT') then BATT_DIR = base .. '/' .. n; break end end
+end
+local function read_file(p) local f = io.open(p, 'r'); if not f then return nil end; local t = f:read('*l'); f:close(); return t end
+local warned = 100
+local function poll_battery()
+  if not BATT_DIR then return end
+  local pct = tonumber(read_file(BATT_DIR .. '/capacity') or '')
+  if not pct then return end
+  local st = read_file(BATT_DIR .. '/status') or ''
+  S.batt = { pct = pct, charging = (st == 'Charging' or st == 'Full') }
+  if not S.batt.charging and pct <= 10 and pct < warned then warned = (pct <= 5) and 0 or 5; toast('Battery low: ' .. pct .. '% — plug in the charger') end
+  if S.batt.charging then warned = 100 end
+end
+if BATT_DIR then mp.add_periodic_timer(30, poll_battery); mp.add_timeout(0.5, poll_battery) end
+
+local function draw_battery(k, xr, y)
+  local b = S.batt
+  if not b then return xr end
+  local label = b.pct .. '%'
+  local col = (b.pct <= 15 and not b.charging) and bgr('FF5A5A') or WHITE
+  local bw, bh = 46, 24
+  local tx = xr - (#label * 17)
+  text(xr, y, label, 28, col, k, 6, true)
+  local bx = tx - 12 - bw - 6
+  shape(rect(bx, y - bh / 2, bw, 3), col, k); shape(rect(bx, y + bh / 2 - 3, bw, 3), col, k)
+  shape(rect(bx, y - bh / 2, 3, bh), col, k); shape(rect(bx + bw - 3, y - bh / 2, 3, bh), col, k)
+  shape(rect(bx + bw, y - 5, 5, 10), col, k)
+  shape(rect(bx + 6, y - bh / 2 + 6, (bw - 12) * b.pct / 100, bh - 12), col, k)
+  if b.charging then -- a little lightning bolt over the battery
+    local cx = bx + bw / 2
+    shape(poly({ { cx + 3, y - 14 }, { cx - 9, y + 2 }, { cx - 1, y + 2 }, { cx - 4, y + 14 }, { cx + 9, y - 3 }, { cx + 1, y - 3 } }), AMBER, k)
+  end
+  return bx - 24
+end
+
 local function draw_badges(k)
   local list = badge_list()
-  local x = W - MARGIN
   local y = 96
+  local x = draw_battery(k, W - MARGIN, y)
   for i = #list, 1, -1 do
     local b = list[i]
     local nw = text_w(b.name, 30)

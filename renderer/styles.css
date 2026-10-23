@@ -827,3 +827,12 @@ body.big .card.pcard:hover, body.big .card.pcard:focus { transform: scale(1.03);
 .fpick-ico { flex: none; }
 .fpick-open:focus { outline: 3px solid #fff; }
 body.big .fpick-main { font-size: 19px; padding: 14px 18px; }
+
+/* laptop battery in the top bar */
+#battery { display: inline-flex; align-items: center; gap: 5px; color: #ddd; font-size: 14px; font-weight: 600; margin-right: 4px; }
+#battery .batt { width: 28px; height: 15px; }
+#battery.low { color: #ff5a5a; }
+body.big #battery { font-size: 17px; } body.big #battery .batt { width: 34px; height: 18px; }
+/* screensaver */
+#saver { position: fixed; inset: 0; z-index: 2000; background: #000; cursor: none; overflow: hidden; }
+#saver .saver-logo { position: absolute; left: 0; top: 0; font-weight: 900; letter-spacing: .18em; font-size: clamp(26px, 3.4vw, 60px); white-space: nowrap; will-change: transform; text-shadow: 0 0 24px currentColor; }

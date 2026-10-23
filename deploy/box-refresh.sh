@@ -65,7 +65,9 @@ HandlePowerKey=suspend
 HandlePowerKeyLongPress=poweroff
 HandleSuspendKey=suspend
 HandleHibernateKey=ignore
-HandleLidSwitch=ignore
+HandleLidSwitch=suspend
+HandleLidSwitchExternalPower=suspend
+HandleLidSwitchDocked=ignore
 IdleAction=ignore
 EOF
 # Older Screenroom versions switched sleep off completely.

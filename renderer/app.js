@@ -613,6 +613,7 @@
     // big buttons and text: always on the TV, optional on a computer (Settings → Big buttons)
     document.body.classList.toggle('big', !!S.tv || !!(S.config && S.config.bigUi));
     drawProfileButton();
+    drawBattery(S.battery);
     const vb = $('#vote-btn');
     if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; }
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
@@ -799,10 +800,74 @@
     return node;
   }
 
+  let filmPlaying = false;
   async function start(id, audioTrack, fromStart) {
+    hideSaver();
+    filmPlaying = true;
     const r = await api.play({ id, audioTrack, fromStart });
-    if (!r.ok) alert(r.error);
+    if (!r.ok) { filmPlaying = false; alert(r.error); }
   }
+
+  // ---- laptop battery (top bar) ----------------------------------------------------------------------
+  function drawBattery(b) {
+    const el = $('#battery');
+    if (!el) return;
+    if (!b) { el.hidden = true; return; }
+    el.hidden = false;
+    const low = b.percent <= 15 && !b.charging;
+    el.className = low ? 'low' : '';
+    el.title = `Battery ${b.percent}%${b.charging ? ' (charging)' : ''}`;
+    el.innerHTML = `<svg viewBox="0 0 30 16" class="batt"><rect x="1" y="1.5" width="24" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>`
+      + `<rect x="26" y="5.5" width="2.6" height="5" rx="1" fill="currentColor"/><rect x="3.2" y="3.7" width="${(19.6 * b.percent / 100).toFixed(1)}" height="8.6" rx="1.5" fill="currentColor"/>`
+      + (b.charging ? '<path d="M14.5 2.5 9.5 9h4l-1.5 4.8L17.5 7h-4z" fill="#000" stroke="#fff" stroke-width=".8"/>' : '') + `</svg><span>${b.percent}%</span>`;
+  }
+  if (api.onBattery) api.onBattery((b) => { S.battery = b; drawBattery(b); });
+
+  // ---- screensaver: the Screenroom name bouncing around, changing colour at every edge (like the old DVD logo) ----
+  let lastInput = Date.now(), saver = null;
+  const SAVER_COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#ff6fb5'];
+  function showSaver() {
+    if (saver) return;
+    const logo = h('div', { class: 'saver-logo' }, 'SCREENROOM');
+    const el = h('div', { id: 'saver' }, logo);
+    document.body.append(el);
+    let x = Math.random() * (innerWidth - 400), y = Math.random() * (innerHeight - 120);
+    let vx = 140, vy = 110, ci = 0, last = performance.now();
+    logo.style.color = SAVER_COLORS[ci];
+    const step = (t) => {
+      if (!saver) return;
+      const dt = Math.min(0.1, (t - last) / 1000); last = t;
+      const w = logo.offsetWidth, hh = logo.offsetHeight;
+      x += vx * dt; y += vy * dt;
+      let hit = false;
+      if (x <= 0) { x = 0; vx = Math.abs(vx); hit = true; } else if (x + w >= innerWidth) { x = innerWidth - w; vx = -Math.abs(vx); hit = true; }
+      if (y <= 0) { y = 0; vy = Math.abs(vy); hit = true; } else if (y + hh >= innerHeight) { y = innerHeight - hh; vy = -Math.abs(vy); hit = true; }
+      if (hit) { ci = (ci + 1 + Math.floor(Math.random() * (SAVER_COLORS.length - 1))) % SAVER_COLORS.length; logo.style.color = SAVER_COLORS[ci]; }
+      logo.style.transform = `translate(${x}px, ${y}px)`;
+      saver.raf = requestAnimationFrame(step);
+    };
+    saver = { el, raf: requestAnimationFrame(step), shownAt: Date.now() };
+  }
+  function hideSaver() {
+    if (!saver) return false;
+    cancelAnimationFrame(saver.raf); saver.el.remove(); saver = null;
+    return true;
+  }
+  // Any key / click / mouse movement / remote button: wake up (that first press does nothing else).
+  const touched = (e) => {
+    lastInput = Date.now();
+    if (saver && Date.now() - saver.shownAt > 300) { hideSaver(); if (e && e.type !== 'mousemove') { e.preventDefault(); e.stopImmediatePropagation(); } }
+  };
+  window.addEventListener('keydown', touched, true);
+  window.addEventListener('mousedown', touched, true);
+  window.addEventListener('wheel', touched, true);
+  let lastMouse = null;
+  window.addEventListener('mousemove', (e) => { if (lastMouse && Math.abs(e.clientX - lastMouse[0]) + Math.abs(e.clientY - lastMouse[1]) > 12) touched(e); lastMouse = [e.clientX, e.clientY]; }, true);
+  setInterval(() => {
+    const mins = S && S.config && S.config.screensaverMin != null ? Number(S.config.screensaverMin) : 5;
+    if (!mins || filmPlaying || saver) return;
+    if (Date.now() - lastInput > mins * 60000) showSaver();
+  }, 5000);
 
 
   // ---- adding media: Wi-Fi + USB -----------------------------------------------------------
@@ -1420,6 +1485,10 @@
         b.textContent = 'Test sound';
         flash(r.ok ? `Test sound played on ${r.where}${r.notice ? ` (${r.notice})` : ''}. Didn't hear it? Check the volume, or pick another output above.` : `No sound on ${r.where || 'that output'}: ${r.error || 'it failed'}`);
       } }, 'Test sound')) : null,
+      h('label', { class: 'row-set' }, h('span', {}, 'Screensaver', h('small', {}, 'The Screenroom name bounces around the screen when nothing has been pressed for a while (not during a film).')),
+        h('select', { class: 'dev-select', 'data-key': 'screensaverMin', onchange: async (e) => { S = await api.setConfig({ screensaverMin: Number(e.target.value) }); } },
+          [[0, 'Off'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes'], [20, 'After 20 minutes'], [30, 'After 30 minutes']]
+            .map(([v, l]) => h('option', { value: v, selected: Number(S.config.screensaverMin != null ? S.config.screensaverMin : 5) === v }, l)))),
       toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote'),
       remoteBox,
       parlorUI ? h('h3', { id: 'set-parlor' }, 'Parlor (music)') : null,
@@ -1860,7 +1929,9 @@
 
   // Phone remote
   api.onRemote((m) => {
+    lastInput = Date.now();
     if (m.type === 'vote') { castVote(m.profile, m.choice); return; }
+    if (hideSaver() && m.type === 'key') return; // the first button press only wakes the screen
     if (m.type === 'key') {
       if (['up', 'down', 'left', 'right'].includes(m.key)) move(m.key);
       else if (m.key === 'ok') activate();
@@ -1943,7 +2014,7 @@
   });
 
   api.onPlaybackEnded((s) => {
-    S = s;
+    S = s; filmPlaying = false; lastInput = Date.now();
     const keep = open ? { ...open, focusEp: null } : null;
     renderKeepFocus();
     if (keep && !$('#modal').hidden) { open = keep; renderModal(); }

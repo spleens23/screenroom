@@ -35,7 +35,7 @@ const cfgFile = () => path.join(dataDir(), 'config.json');
 const progFile = () => profiles.progressFile(currentId);
 
 const defaults = {
-  dirs: [], passthrough: false, downmix: false, levelVolume: true, fullscreen: true, tvMode: false,
+  dirs: [], passthrough: false, downmix: false, levelVolume: true, screensaverMin: 5, fullscreen: true, tvMode: false,
   preferredLang: 'eng', subLang: '', audioDevice: '', mpvArgs: '', mpvPath: '', ffprobePath: '', ffmpegPath: '',
   remote: true, remotePort: 8686, remotePin: '',
 };
@@ -161,6 +161,28 @@ function toolPaths() {
   };
 }
 
+// Laptop battery (Linux): { percent, charging } or null on a computer without one.
+function battery() {
+  if (process.platform !== 'linux') return null;
+  try {
+    const dir = '/sys/class/power_supply';
+    const bats = fs.readdirSync(dir).filter((n) => /^BAT/i.test(n));
+    if (!bats.length) return null;
+    let now = 0, full = 0, pct = null, charging = false;
+    for (const b of bats) {
+      const rd = (f) => { try { return fs.readFileSync(path.join(dir, b, f), 'utf8').trim(); } catch { return ''; } };
+      const cap = Number(rd('capacity'));
+      const st = rd('status');
+      if (/Charging|Full/i.test(st)) charging = true;
+      const en = Number(rd('energy_now') || rd('charge_now')), ef = Number(rd('energy_full') || rd('charge_full'));
+      if (en && ef) { now += en; full += ef; } else if (!Number.isNaN(cap)) pct = cap;
+    }
+    const plugged = fs.readdirSync(dir).some((n) => { try { return fs.readFileSync(path.join(dir, n, 'type'), 'utf8').trim() === 'Mains' && fs.readFileSync(path.join(dir, n, 'online'), 'utf8').trim() === '1'; } catch { return false; } });
+    const percent = full ? Math.round((now / full) * 100) : pct;
+    return percent == null ? null : { percent: Math.max(0, Math.min(100, percent)), charging: charging || plugged };
+  } catch { return null; }
+}
+
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
@@ -168,6 +190,7 @@ function snapshot() {
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
+    battery: battery(),
     mpvFound: !!findBinary('mpv', config.mpvPath),
     ffprobeFound: !!findBinary('ffprobe', config.ffprobePath),
   };
@@ -436,6 +459,9 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
   setInterval(backgroundScan, 30 * 60 * 1000);
   setInterval(pollDrives, 5000);
+  // Laptops: battery level for the top bar (and the player reads it itself)
+  let lastBatt = '';
+  setInterval(() => { const b = battery(); const k = JSON.stringify(b); if (k !== lastBatt) { lastBatt = k; sendWin('battery', b); } }, 30000);
 
   ipcMain.handle('state', () => snapshot());
 
