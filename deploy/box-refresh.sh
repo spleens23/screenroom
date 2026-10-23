@@ -97,6 +97,14 @@ fi
 # ---- sound outputs switched on ------------------------------------------------------------------------
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
+install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
+
+# ---- laptops: sound chips that need Intel's SOF firmware (e.g. Pentium Silver / Celeron N-series) --------------
+if [ "$(dpkg --print-architecture)" = "amd64" ]; then
+  for p in firmware-sof-signed alsa-ucm-conf x11-xserver-utils; do
+    dpkg -s "$p" >/dev/null 2>&1 || "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"
+  done
+fi
 if ! in_chroot; then
   /usr/local/bin/screenroom-audio-setup
   alsactl store >/dev/null 2>&1 || true

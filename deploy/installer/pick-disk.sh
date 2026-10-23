@@ -27,7 +27,9 @@ CANDS=""
 for d in $(list-devices disk); do
   n="$(basename "$d")"
   [ -n "$CD_DEV" ] && [ "$d" = "$CD_DEV" ] && continue
-  case "$n" in sr*|loop*|ram*|fd*|zram*) continue ;; esac
+  case "$n" in sr*|loop*|ram*|fd*|zram*|mmcblk*boot*|mmcblk*rpmb) continue ;; esac
+  # an SD card in the laptop's card reader is never the system drive (built-in eMMC storage reports "MMC")
+  case "$n" in mmcblk*) [ "$(cat $SYS/block/$n/device/type 2>/dev/null)" = "SD" ] && { log "skip SD card $d"; continue; } ;; esac
   if readlink -f "$SYS/block/$n" | grep -q '/usb'; then log "skip USB drive $d"; continue; fi
   [ "$(cat $SYS/block/$n/removable 2>/dev/null)" = "1" ] && { log "skip removable $d"; continue; }
   CANDS="$CANDS $d"

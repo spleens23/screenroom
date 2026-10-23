@@ -21,6 +21,12 @@ XRES
 # Sound outputs on (a fresh install can leave the headphone jack / HDMI muted).
 [ -x /usr/local/bin/screenroom-audio-setup ] && /usr/local/bin/screenroom-audio-setup &
 
+# Laptops: use the TV when one is plugged in (the laptop's own screen switches off), the laptop screen otherwise.
+if [ -x /usr/local/bin/screenroom-display ]; then
+  /usr/local/bin/screenroom-display --once
+  /usr/local/bin/screenroom-display >/tmp/screenroom-display.log 2>&1 &
+fi
+
 # A tiny window manager so full-screen windows (Screenroom, then the mpv player) stack properly.
 openbox &
 

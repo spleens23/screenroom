@@ -109,7 +109,7 @@ optional() {
 }
 optional fonts-inter fonts-noto-core gvfs gvfs-backends cec-utils python3-evdev libva-drm2
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-  optional intel-media-va-driver i965-va-driver firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-intel-sound
+  optional intel-media-va-driver i965-va-driver firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-intel-sound firmware-sof-signed alsa-ucm-conf
 fi
 
 say "Installing Screenroom"

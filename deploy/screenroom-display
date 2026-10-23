@@ -1,0 +1,26 @@
+#!/bin/sh
+# Screenroom TV box: which screen to use. On a laptop, the TV (HDMI / DisplayPort / USB-C) wins whenever one is
+# plugged in and the laptop's own panel switches off; unplug the TV and the panel comes back on.
+# Runs in the background from screenroom-session and checks every few seconds. A desktop mini PC with one
+# screen is left as it is.
+command -v xrandr >/dev/null || exit 0
+
+apply() {
+  q="$(xrandr --query 2>/dev/null)" || return
+  internal="$(echo "$q" | awk '/ connected/ && $1 ~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
+  external="$(echo "$q" | awk '/ connected/ && $1 !~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
+  [ -n "$internal" ] || return 0              # not a laptop: nothing to do
+  if [ -n "$external" ]; then
+    xrandr --output "$external" --auto --primary --pos 0x0 --output "$internal" --off
+  else
+    xrandr --output "$internal" --auto --primary --pos 0x0
+  fi
+}
+
+last=""
+while true; do
+  now="$(xrandr --query 2>/dev/null | awk '/ connected/ {print $1}' | tr '\n' ' ')"
+  if [ "$now" != "$last" ]; then apply; last="$now"; fi
+  [ "${1:-}" = "--once" ] && exit 0
+  sleep 3
+done
