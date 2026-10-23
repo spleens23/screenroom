@@ -1559,6 +1559,7 @@
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
       isAndroid ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
       isAndroid ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
+      isAndroid || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
       isAndroid ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
       isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
       isAndroid || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
