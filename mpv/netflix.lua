@@ -850,6 +850,13 @@ mp.add_forced_key_binding('BS', 'nf_bs', esc_action)
 mp.add_forced_key_binding('GO_BACK', 'nf_goback', esc_action)
 mp.add_forced_key_binding('MBTN_BACK', 'nf_mback', esc_action)
 mp.add_forced_key_binding('HOMEPAGE', 'nf_home', function() quit_player() end)
+-- A remote's Menu button (or the right mouse button on a TV) opens Screenroom's audio & subtitles menu,
+-- which Back closes, instead of mpv's own pop-up menu.
+mp.add_forced_key_binding('MENU', 'nf_menukey', function() S.kbnav = true; S.last_act = now(); if S.menu then close_menu() else open_menu() end end)
+mp.add_forced_key_binding('CONTEXT_MENU', 'nf_ctxkey', function() S.kbnav = true; S.last_act = now(); if S.menu then close_menu() else open_menu() end end)
+if o.tv == 'yes' then mp.add_forced_key_binding('MBTN_RIGHT', 'nf_rclick', function() if S.menu then close_menu() else open_menu() end end) end
+-- other keys that open mpv's info screens / console: do nothing
+for _, k in ipairs({ 'i', 'I', '`', 'F8', 'F9', 'Ctrl+p', 'TAB' }) do mp.add_forced_key_binding(k, 'nf_off_' .. k, function() end) end
 -- Volume on the keyboard ([ ] or + -); a TV remote's own volume buttons work as usual.
 for _, b in ipairs({ { '+', 5 }, { '=', 5 }, { '-', -5 }, { 'VOLUME_UP', 5 }, { 'VOLUME_DOWN', -5 } }) do
   mp.add_forced_key_binding(b[1], 'nf_vol_' .. b[1], function()
