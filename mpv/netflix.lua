@@ -807,6 +807,10 @@ mp.add_forced_key_binding('ENTER', 'nf_enter', enter_action)
 mp.add_forced_key_binding('KP_ENTER', 'nf_kpenter', enter_action)
 mp.add_forced_key_binding('ESC', 'nf_esc', esc_action)
 mp.add_forced_key_binding('BS', 'nf_bs', esc_action)
+-- TV remotes: their Back button arrives as "go back" (or a mouse's back button), Home as "home page"
+mp.add_forced_key_binding('GO_BACK', 'nf_goback', esc_action)
+mp.add_forced_key_binding('MBTN_BACK', 'nf_mback', esc_action)
+mp.add_forced_key_binding('HOMEPAGE', 'nf_home', function() quit_player() end)
 -- Volume on the keyboard ([ ] or + -); a TV remote's own volume buttons work as usual.
 for _, b in ipairs({ { '+', 5 }, { '=', 5 }, { '-', -5 }, { 'VOLUME_UP', 5 }, { 'VOLUME_DOWN', -5 } }) do
   mp.add_forced_key_binding(b[1], 'nf_vol_' .. b[1], function()

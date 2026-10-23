@@ -204,10 +204,12 @@
     return el;
   }
   let sheetClosed = null;
+  let sheetBack = null; // a sheet's own Back (the file list goes up a folder first)
   function closeSheet(quiet) {
     const s = $('#sheet');
     if (!s) return false;
     s.remove();
+    sheetBack = null;
     const cb = sheetClosed; sheetClosed = null;
     if (cb && !quiet) cb();
     return true;
@@ -826,15 +828,72 @@
   }
   api.onCopyProgress((p) => { copyState = p; drawCopy(); });
 
-  async function copyDrive(d) {
+  async function copyDrive(d, only) {
     copyState = { label: d.label, index: 0, total: 0, bytesDone: 0, bytesTotal: 0, file: 'Looking for videos…' };
     drawCopy();
-    const r = await api.copyDrive(d.mount);
+    const r = await api.copyDrive(d.mount, only);
     copyState = null; drawCopy();
     if (r.error) flash(r.error);
     else flash(r.cancelled ? 'Copy cancelled' : `Copied ${r.copied} file${r.copied === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} were already there)` : ''}`);
     S = await api.state(); render();
     if (!$('#settings').hidden) renderSettings();
+  }
+
+  // "Choose what to copy": walk the drive's folders with the remote and tick films, shows or single episodes.
+  // OK ticks a line; a folder's "Open" button (to its right) goes inside it.
+  function chooseFiles(d) {
+    const picked = new Map(); // rel -> size
+    let rel = '';
+    const ticked = (r) => [...picked.keys()].some((p) => r === p || r.startsWith(p + '/'));
+    const list = h('div', { class: 'fpick' });
+    const crumb = h('div', { class: 'fpick-path' });
+    const total = () => [...picked.values()].reduce((s, x) => s + x, 0);
+    const copyBtn = h('button', { class: 'btn primary', onclick: () => {
+      if (!picked.size) { flash('Tick what you want to copy first'); return; }
+      const only = [...picked.keys()];
+      closeSheet(true);
+      copyDrive(d, only);
+    } });
+    const drawFoot = () => { copyBtn.textContent = picked.size ? `Copy ${picked.size} selected (${fmtBytes(total())})` : 'Copy selected'; copyBtn.disabled = !picked.size; };
+    async function open(r, focusRel) {
+      rel = r;
+      crumb.textContent = `${d.label}${rel ? ' › ' + rel.split('/').join(' › ') : ''}`;
+      list.replaceChildren(h('p', { class: 'am-hint' }, 'Looking…'));
+      const res = await api.driveList(d.mount, rel);
+      if (res.error) { list.replaceChildren(h('p', { class: 'am-hint' }, res.error)); return; }
+      const rows = [];
+      if (rel) rows.push(h('div', { class: 'fpick-row' }, h('button', { class: 'fpick-main up', 'data-rel': '..', onclick: () => open(rel.split('/').slice(0, -1).join('/'), rel) }, '‹  Back to ' + (rel.includes('/') ? rel.split('/').slice(-2, -1)[0] : d.label))));
+      for (const e of res.entries) {
+        const on = ticked(e.rel);
+        const inherited = on && !picked.has(e.rel);
+        rows.push(h('div', { class: 'fpick-row' + (on ? ' on' : '') },
+          h('button', { class: 'fpick-main', 'data-rel': e.rel, disabled: inherited ? 'disabled' : undefined, onclick: () => {
+            if (picked.has(e.rel)) picked.delete(e.rel);
+            else { for (const k of [...picked.keys()]) if (k.startsWith(e.rel + '/')) picked.delete(k); picked.set(e.rel, e.size); }
+            redraw(e.rel);
+          } },
+            h('span', { class: 'fpick-box' }, on ? '✓' : ''),
+            h('span', { class: 'fpick-ico' }, e.dir ? '📁' : '🎞'),
+            h('span', { class: 'fpick-name' }, e.name),
+            h('small', {}, e.dir ? `${e.count} file${e.count === 1 ? '' : 's'} · ${fmtBytes(e.size)}` : fmtBytes(e.size))),
+          e.dir ? h('button', { class: 'btn secondary small fpick-open', 'data-open': e.rel, onclick: () => open(e.rel) }, 'Open ›') : null));
+      }
+      if (!res.entries.length) rows.push(h('p', { class: 'am-hint' }, 'No videos in this folder.'));
+      list.replaceChildren(...rows);
+      const body = $('#sheet .sheet-body'); if (body) body.scrollTop = 0;
+      const f = (focusRel && list.querySelector(`[data-rel="${CSS.escape(focusRel)}"]`)) || (list.querySelector('.fpick-main:not(.up):not([disabled])') || list.querySelector('.fpick-main:not([disabled])'));
+      if (f) { document.body.classList.add('navmode'); focusEl(f); }
+    }
+    let redrawing = false;
+    function redraw(focusRel) { if (!redrawing) { redrawing = true; open(rel, focusRel).finally(() => { redrawing = false; }); } drawFoot(); }
+    drawFoot();
+    const backUp = () => { if (!rel) return false; open(rel.split('/').slice(0, -1).join('/'), rel); return true; };
+    sheet('files', h('h2', {}, `Copy from ${d.label}`), crumb,
+      h('p', { class: 'am-hint' }, 'OK ticks a film, show, season or episode. “Open ›” goes into a folder. Ticked things are copied into your library, keeping their folders.'),
+      list,
+      h('div', { class: 'btns sheet-foot' }, copyBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+    sheetBack = backUp;
+    open('');
   }
 
   function drivesBlock() {
@@ -843,7 +902,8 @@
     return h('div', { class: 'drives' }, list.map((d) => h('div', { class: 'drive' },
       h('div', { class: 'drive-name' }, d.label, h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: () => copyDrive(d) }, 'Copy to library'),
+        h('button', { class: 'btn secondary', onclick: () => copyDrive(d) }, 'Copy everything'),
+        api.driveList ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d) }, 'Choose what to copy…') : null,
         h('button', { class: 'btn secondary', onclick: async () => { const r = await api.ejectDrive(d.mount); if (!r.ok) flash(r.msg || 'Could not eject'); else flash(`${d.label} can be unplugged`); S = await api.state(); render(); if (!$('#settings').hidden) renderSettings(); } }, 'Eject')))));
   }
 
@@ -1278,6 +1338,7 @@
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
       isAndroid ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
       isAndroid ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
+      isAndroid ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
       isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
       isAndroid || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       isAndroid || S.tv ? null : toggle('Full screen', 'Screenroom and the player use the whole screen. (Also F11, or the green button on a Mac window.)', 'appFullscreen'),
@@ -1366,7 +1427,16 @@
     else els = document.querySelectorAll(`#nav ${FOCUSABLE.split(', ').join(', #nav ')}, #main ${FOCUSABLE.split(', ').join(', #main ')}, #npbar button`);
     return [...new Set(els)].filter(shown);
   }
+  // Pressing the arrows quickly or holding one down scrolls instantly, so the highlight never runs ahead of the
+  // screen; a single press on its own still glides.
+  let lastMoveAt = 0;
+  function scrollMode() {
+    const t = performance.now(), quick = t - lastMoveAt < 450;
+    lastMoveAt = t;
+    return quick ? 'auto' : 'smooth';
+  }
   function focusEl(el) {
+    const behavior = scrollMode();
     navFocus = true; // moving onto a text box with the remote doesn't pop up the keyboard (OK does)
     el.focus({ preventScroll: true });
     navFocus = false;
@@ -1376,11 +1446,11 @@
       const box = el.closest('.sheet-body');
       if (box) {
         const r = el.getBoundingClientRect(), c = box.getBoundingClientRect();
-        if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (c.top + c.height / 2), behavior: 'smooth' });
+        if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (c.top + c.height / 2), behavior });
       }
       return;
     }
-    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior });
   }
   function defaultFocus(els) {
     return els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card')) || els[0];
@@ -1393,7 +1463,9 @@
     if (!els.length) return;
     const cur = els.includes(document.activeElement) ? document.activeElement : null;
     if (!cur) { const d = defaultFocus(els); d && focusEl(d); return; }
-    const a = cur.getBoundingClientRect();
+    const rects = new Map();
+    const R = (e) => { let r = rects.get(e); if (!r) { r = e.getBoundingClientRect(); rects.set(e, r); } return r; };
+    const a = R(cur);
     const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
     let best = null, bestScore = Infinity;
     // Left/right inside a control strip (the music bar, player buttons) stays in that strip.
@@ -1406,12 +1478,20 @@
     if (!inBar(cur)) pool = pool.filter((e) => !inBar(e));
     // Left/right stay on the same line (the end of a row doesn't jump up to the menu or into another row).
     if (dir === 'left' || dir === 'right') {
-      const same = pool.filter((e) => { if (e === cur) return false; const r = e.getBoundingClientRect(); return r.bottom > a.top + 4 && r.top < a.bottom - 4; });
+      const same = pool.filter((e) => { if (e === cur) return false; const r = R(e); return r.bottom > a.top + 4 && r.top < a.bottom - 4; });
       const inNav = !!cur.closest('#nav');
       const sameSide = same.filter((e) => !!e.closest('#nav') === inNav);
-      const ahead = sameSide.filter((e) => { const r = e.getBoundingClientRect(); const dx = r.left + r.width / 2 - ax; return dir === 'right' ? dx > 2 : dx < -2; });
+      const ahead = sameSide.filter((e) => { const r = R(e); const dx = r.left + r.width / 2 - ax; return dir === 'right' ? dx > 2 : dx < -2; });
       if (ahead.length) pool = sameSide;
       else {
+        // In a pop-up with buttons along the bottom (Movie night): Left from the start of a line jumps to the main
+        // button (Start the vote), Right from the end of a line goes back up to the top.
+        const sh = cur.closest('#sheet');
+        if (sh && sh.querySelector('.sheet-foot') && !cur.closest('.sheet-foot')) {
+          if (dir === 'left') { const b = sh.querySelector('.sheet-foot .btn.primary:not([disabled])'); if (b) focusEl(b); return; }
+          else { const body = sh.querySelector('.sheet-body'); const first = els.find((e) => body && body.contains(e)); if (first && first !== cur) { body.scrollTo({ top: 0 }); focusEl(first); return; } }
+        }
+        if (sh && cur.closest('.sheet-foot') && dir === 'right') { const body = sh.querySelector('.sheet-body'); const first = els.find((e) => body && body.contains(e)); if (first) { body.scrollTo({ top: 0 }); focusEl(first); return; } }
         if (dir === 'left' && !inBar(cur)) { const bar = els.filter(inBar); const play = bar.find((e) => e.dataset.b === 'play') || bar[0]; if (play) { focusEl(play); return; } }
         return; // nothing further this way
       }
@@ -1419,11 +1499,11 @@
     if ((dir === 'up' || dir === 'down') && !cur.closest('#nav')) {
       // up/down inside the page only reach the top menu from the top of the page
       const rest = pool.filter((e) => !e.closest('#nav'));
-      if (dir === 'down' || rest.some((e) => e !== cur && e.getBoundingClientRect().bottom <= a.top - 2)) pool = rest;
+      if (dir === 'down' || rest.some((e) => e !== cur && R(e).bottom <= a.top - 2)) pool = rest;
     }
     for (const el of pool) {
       if (el === cur) continue;
-      const r = el.getBoundingClientRect();
+      const r = R(el);
       const dx = r.left + r.width / 2 - ax, dy = r.top + r.height / 2 - ay;
       const gapX = Math.max(0, r.left - a.right, a.left - r.right); // 0 when the two overlap horizontally
       const gapY = Math.max(0, r.top - a.bottom, a.top - r.bottom);
@@ -1450,11 +1530,26 @@
     if (el && el !== document.body && scopeEls().includes(el)) el.click();
     else move('down');
   }
+  // The remote's Home button: close whatever is open and go to the Screenroom home screen (top of the page).
+  function goHome() {
+    if (osk) closeOsk();
+    if (pinState) pinState.cancel();
+    closeSheet();
+    if (parlorUI) for (let i = 0; i < 6 && parlorUI.scope(); i++) parlorUI.back();
+    if (!$('#modal').hidden) closeModal();
+    if (!$('#settings').hidden) closeSettings();
+    if (mode === 'parlor') toggleMode();
+    query = ''; $('#search').value = '';
+    setView('home');
+    window.scrollTo(0, 0);
+    const f = main.querySelector('.hero .btn.primary, .card');
+    if (f) { document.body.classList.add('navmode'); focusEl(f); }
+  }
   // Returns true if it did something (so a TV remote's Back can leave the app when there's nothing left to close).
   function goBack() {
     if (osk) { closeOsk(); return true; }
     if (pinState) { pinState.cancel(); return true; }
-    if ($('#sheet')) { closeSheet(); return true; }
+    if ($('#sheet')) { if (sheetBack && sheetBack()) return true; closeSheet(); return true; }
     if ($('#who') && !$('#who').hidden) return true;
     if (parlorUI && parlorUI.scope()) { parlorUI.back(); return true; }
     if (!$('#modal').hidden) { closeModal(); return true; }
@@ -1625,7 +1720,7 @@
       e.preventDefault(); move(dir); return;
     }
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
-    if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); closeModal(); if (!$('#settings').hidden) closeSettings(); setView('home'); return; }
+    if (e.key === 'Home' || e.key === 'BrowserHome' || e.key === 'HomePage') { e.preventDefault(); goHome(); return; }
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
     if (api.musicCmd && (e.key === 'MediaPlayPause' || e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious')) {
       e.preventDefault(); api.musicCmd(e.key === 'MediaPlayPause' ? 'toggle' : e.key === 'MediaTrackNext' ? 'next' : 'prev'); return;
@@ -1671,7 +1766,7 @@
       if (['up', 'down', 'left', 'right'].includes(m.key)) move(m.key);
       else if (m.key === 'ok') activate();
       else if (m.key === 'back') { if (!goBack() && m.exitIfRoot && api.exitApp) api.exitApp(); }
-      else if (m.key === 'home') { closeModal(); if (!$('#settings').hidden) closeSettings(); setView('home'); }
+      else if (m.key === 'home') goHome();
       else if (m.key === 'settings') toggleSettings();
     } else if (m.type === 'open') {
       if (!$('#settings').hidden) closeSettings();

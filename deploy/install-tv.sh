@@ -107,7 +107,7 @@ optional() {
   apt-get install -y --no-install-recommends "${pkgs[@]}" && return 0
   for p in "${pkgs[@]}"; do apt-get install -y --no-install-recommends "$p" || echo "Skipped optional package $p"; done
 }
-optional fonts-inter fonts-noto-core gvfs gvfs-backends cec-utils python3-evdev libva-drm2
+optional fonts-inter fonts-noto-core fonts-noto-cjk gvfs gvfs-backends cec-utils python3-evdev libva-drm2
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
   optional intel-media-va-driver i965-va-driver firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-intel-sound firmware-sof-signed alsa-ucm-conf
 fi

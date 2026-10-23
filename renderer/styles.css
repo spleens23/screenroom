@@ -809,3 +809,21 @@ body.big { --pcard-w: 190px; }
 /* the highlighted album only grows a touch (the record sliding out shows which one it is) */
 .card.pcard:hover, .card.pcard:focus-visible, body.navmode .card.pcard:focus,
 body.big .card.pcard:hover, body.big .card.pcard:focus { transform: scale(1.03); }
+
+/* Choose what to copy (drive file list) */
+.sheet.files .sheet-card { width: min(900px, 94vw); height: 86vh; }
+.fpick-path { color: #aaa; margin: -8px 0 6px; font-size: 14px; }
+.fpick { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.fpick-row { display: flex; gap: 10px; align-items: center; }
+.fpick-main { flex: 1; display: flex; align-items: center; gap: 12px; text-align: left; background: #242424; border: 2px solid transparent; color: #eee; border-radius: 8px; padding: 10px 14px; font: inherit; font-size: 16px; cursor: pointer; min-width: 0; }
+.fpick-main small { color: #999; margin-left: auto; white-space: nowrap; padding-left: 12px; }
+.fpick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpick-main.up { color: #ccc; }
+.fpick-main:focus, .fpick-main:hover { outline: none; border-color: #fff; background: #2e2e2e; }
+.fpick-row.on .fpick-main { background: #1e3a24; }
+.fpick-main[disabled] { cursor: default; opacity: .75; }
+.fpick-box { width: 24px; height: 24px; border: 2px solid #888; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; flex: none; }
+.fpick-row.on .fpick-box { background: #46d369; border-color: #46d369; color: #000; }
+.fpick-ico { flex: none; }
+.fpick-open:focus { outline: 3px solid #fff; }
+body.big .fpick-main { font-size: 19px; padding: 14px 18px; }

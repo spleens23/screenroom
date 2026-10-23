@@ -101,7 +101,7 @@ install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
 
 # ---- laptops: sound chips that need Intel's SOF firmware (e.g. Pentium Silver / Celeron N-series) --------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-  for p in firmware-sof-signed alsa-ucm-conf x11-xserver-utils; do
+  for p in firmware-sof-signed alsa-ucm-conf x11-xserver-utils fonts-noto-cjk; do
     dpkg -s "$p" >/dev/null 2>&1 || "${APT[@]}" install "$p" >/dev/null 2>&1 || echo "Could not install $p"
   done
 fi
