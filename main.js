@@ -513,6 +513,19 @@ app.whenReady().then(async () => {
     if (!d) return { error: 'Drive not found' };
     try { return { entries: await transfer.listFolder(d.mount, String(rel || ''), kind === 'music' ? 'music' : 'video') }; } catch (e) { return { error: String(e.message || e) }; }
   });
+  // Before a sync: how much is new on the drive (the rest is already on this box and is skipped).
+  ipcMain.handle('drive-plan', async (_e, mount, kind) => {
+    const d = drives.find((x) => x.mount === mount);
+    if (!d) return { error: 'Drive not found' };
+    const music = kind === 'music';
+    let dest = mediaRoot;
+    if (music) { try { dest = parlorApi && parlorApi.musicDestination(); } catch { dest = null; } }
+    if (!dest) return { error: music ? 'Music can only be copied in a grown-up profile.' : 'No media folder is set up' };
+    try {
+      const p = await transfer.planCopy({ from: d.mount, to: dest, kind: music ? 'music' : 'video' });
+      return { newFiles: p.newFiles, newBytes: p.newBytes, existing: p.existing, free: await transfer.freeBytes(dest) };
+    } catch (e) { return { error: String(e.message || e) }; }
+  });
   ipcMain.handle('drive-copy', async (_e, mount, only, kind) => {
     if (copying) return { error: 'A copy is already running' };
     const d = drives.find((x) => x.mount === mount);

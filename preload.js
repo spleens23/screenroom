@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   drives: () => ipcRenderer.invoke('drives'),
   copyDrive: (mount, only, kind) => ipcRenderer.invoke('drive-copy', mount, only, kind),
   driveList: (mount, rel, kind) => ipcRenderer.invoke('drive-list', mount, rel, kind),
+  drivePlan: (mount, kind) => ipcRenderer.invoke('drive-plan', mount, kind),
   cancelCopy: () => ipcRenderer.invoke('drive-copy-cancel'),
   ejectDrive: (mount) => ipcRenderer.invoke('drive-eject', mount),
   onDrivesChanged: (cb) => ipcRenderer.on('drives-changed', (_e, m) => cb(m)),

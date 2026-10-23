@@ -50,8 +50,16 @@
       bySeries.get(key).push(it);
     }
     // The same movie in several qualities (DVD / Blu-ray / 4K) is one title with a Quality choice.
+    // the same file on a plugged-in drive and copied onto the box: one copy (the box's), not two "versions"
+    const onDrive = (it) => (S.drives || []).some((d) => it.path === d.mount || it.path.startsWith(d.mount + '/'));
     for (const g of MediaCore.groupMovies(items)) {
-      const vs = g.versions;
+      const bySize = new Map();
+      for (const v of g.versions) {
+        const k = `${v.size}|${MediaCore.basename(v.path).toLowerCase()}`;
+        const cur = bySize.get(k);
+        if (!cur || (onDrive(cur) && !onDrive(v))) bySize.set(k, v);
+      }
+      const vs = g.versions.filter((v) => [...bySize.values()].includes(v));
       const watching = vs.map((v) => ({ v, p: S.progress[v.id] })).filter((x) => x.p).sort((a, b) => b.p.updated - a.p.updated)[0];
       const it = watching ? watching.v : vs[0]; // the copy you were watching, else the best one
       const withArt = vs.find((v) => v.art) || {};
@@ -1012,13 +1020,28 @@
     open('');
   }
 
+  // "Sync": copy only what this box doesn't have yet (same file already here = skipped), after saying how much.
+  async function syncDrive(d, kind) {
+    const what = kind === 'music' ? 'songs' : 'files';
+    if (!api.drivePlan) return copyDrive(d, null, kind);
+    flash(`Checking what's new on ${d.label}…`);
+    const p = await api.drivePlan(d.mount, kind);
+    if (p.error) { showNotice('Can’t sync', p.error); return; }
+    if (!p.newFiles) { showNotice('Already in sync', `Everything on ${d.label} is already on this box${p.existing ? ` (${p.existing} ${what})` : ''}.`); return; }
+    const space = p.free != null && p.newBytes > p.free ? ` There isn't enough space: ${fmtBytes(p.free)} free.` : '';
+    const ok = await askConfirm(`Copy ${p.newFiles} new ${what}?`,
+      `${fmtBytes(p.newBytes)} from ${d.label}.${p.existing ? ` ${p.existing} ${what} are already on this box and are skipped.` : ''}${space}`, 'Copy', 'Cancel');
+    if (ok) copyDrive(d, null, kind);
+  }
+
   function drivesBlock() {
     const list = S.drives || [];
     if (!list.length) return h('p', { class: 'am-hint' }, 'Plug in a drive and its movies and shows appear in your library automatically. You can also copy them onto this box.');
     return h('div', { class: 'drives' }, list.map((d) => h('div', { class: 'drive' },
       h('div', { class: 'drive-name' }, d.label, h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: () => copyDrive(d) }, 'Copy everything'),
+        h('button', { class: 'btn secondary', onclick: () => syncDrive(d) }, 'Sync films to this box'),
+        api.drivePlan && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => syncDrive(d, 'music') }, 'Sync music') : null,
         api.driveList ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d) }, 'Choose films to copy…') : null,
         api.driveList && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d, 'music') }, 'Choose music to copy…') : null,
         h('button', { class: 'btn secondary', onclick: async () => { const r = await api.ejectDrive(d.mount); if (!r.ok) flash(r.msg || 'Could not eject'); else flash(`${d.label} can be unplugged`); S = await api.state(); render(); if (!$('#settings').hidden) renderSettings(); } }, 'Eject')))));
