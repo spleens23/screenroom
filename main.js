@@ -10,6 +10,7 @@ const remote = require('./lib/remote');
 const transfer = require('./lib/transfer');
 const system = require('./lib/system');
 const audio = require('./lib/audio');
+const cleanup = require('./lib/cleanup');
 const { setupParlor } = require('./lib/parlor-ipc');
 const { Profiles } = require('./lib/profiles');
 const { Ratings } = require('./lib/ratings');
@@ -342,6 +343,7 @@ function snapshot() {
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
+    canDelete: isAppliance() || !!process.env.SCREENROOM_TEST_DELETE,
     battery: battery(),
     playbackProblems: problems(),
     mpvFound: !!findBinary('mpv', config.mpvPath),
@@ -707,6 +709,63 @@ app.whenReady().then(async () => {
       const top = [home, ...['Music', 'Videos', 'Pictures', 'Downloads'].map((n) => path.join(home, n)), ...drives.map((d) => d.mount), mediaRoot].filter(Boolean).find((r) => dir === r);
       return { dir, name: path.basename(dir) || dir, parent: top || dir === '/' ? '' : path.dirname(dir), entries };
     } catch (e) { return { dir, name: path.basename(dir), parent: '', entries: [], error: 'This folder can\'t be opened.' }; }
+  });
+
+  // Settings → Free up space: films, shows and music stored on this box (USB drives are never touched).
+  const internalRoots = () => {
+    const onDrive = (p) => drives.some((d) => p === d.mount || cleanup.under(p, d.mount));
+    return [...new Set([...config.dirs, mediaRoot].filter(Boolean))].filter((d) => !onDrive(d));
+  };
+  const deletableItems = () => { const roots = internalRoots(); return library.filter((i) => roots.some((r) => cleanup.under(i.path, r))); };
+  const canDelete = () => isAppliance() || !!process.env.SCREENROOM_TEST_DELETE;
+  ipcMain.handle('delete-list', async () => {
+    if (!canDelete()) return { error: 'Only on the Screenroom box.' };
+    if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t delete anything.' };
+    const films = [], shows = new Map();
+    for (const i of deletableItems()) {
+      if (!i.tv) { films.push({ id: i.id, title: i.title, year: i.year, size: i.size || 0 }); continue; }
+      const key = i.tv.series;
+      const sh = shows.get(key.toLowerCase()) || { series: key, size: 0, count: 0, seasons: new Map() };
+      sh.size += i.size || 0; sh.count++;
+      const sn = i.tv.season || 0;
+      const se = sh.seasons.get(sn) || { season: sn, size: 0, count: 0 };
+      se.size += i.size || 0; se.count++;
+      sh.seasons.set(sn, se); shows.set(key.toLowerCase(), sh);
+    }
+    films.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }));
+    const showList = [...shows.values()].map((s) => ({ ...s, seasons: [...s.seasons.values()].sort((a, b) => a.season - b.season) }))
+      .sort((a, b) => a.series.localeCompare(b.series, undefined, { sensitivity: 'base' }));
+    const albums = parlorApi ? parlorApi.deletableAlbums() : [];
+    const free = await transfer.freeBytes(mediaRoot || os.homedir());
+    return { films, shows: showList, albums, free };
+  });
+  // what: { films: [id], shows: [{ series, seasons: [n] | null }], albums: [key] }
+  ipcMain.handle('delete-media', async (_e, what) => {
+    if (!canDelete()) return { error: 'Only on the Screenroom box.' };
+    if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t delete anything.' };
+    if (playing) return { error: 'Stop the film first.' };
+    const items = deletableItems();
+    const films = new Set((what && what.films) || []);
+    const files = [];
+    for (const i of items) {
+      if (!i.tv && films.has(i.id)) files.push(i.path);
+      if (i.tv) {
+        const pick = ((what && what.shows) || []).find((s) => s && String(s.series).toLowerCase() === i.tv.series.toLowerCase());
+        if (pick && (!Array.isArray(pick.seasons) || pick.seasons.includes(i.tv.season || 0))) files.push(i.path);
+      }
+    }
+    let removed = 0, freed = 0;
+    if (files.length) {
+      const r = await cleanup.removeMedia(files, internalRoots());
+      removed += r.removed; freed += r.freed;
+      await doScan();
+    }
+    if (parlorApi && what && Array.isArray(what.albums) && what.albums.length) {
+      const r = await parlorApi.deleteAlbums(what.albums);
+      removed += r.removed; freed += r.freed;
+    }
+    sendWin('library-updated', snapshot());
+    return { ok: true, removed, freed, free: await transfer.freeBytes(mediaRoot || os.homedir()), state: snapshot() };
   });
 
   ipcMain.handle('add-dir', async (_e, picked) => {

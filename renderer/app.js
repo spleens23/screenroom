@@ -1132,6 +1132,104 @@
       open('');
     });
   }
+  // Settings → Free up space: delete films, shows and music from the box's own storage (to make room for
+  // the next lot; USB drives are never touched).
+  function freeSpaceBlock() {
+    const free = h('p', { class: 'am-hint' }, 'Delete films, shows and music stored on this box, to make room for others. Copies on USB drives are never touched.');
+    api.deleteList().then((r) => { if (r && r.free != null) free.textContent = `${fmtBytes(r.free)} free on this box. Delete films, shows and music stored on it to make room for others (copies on USB drives are never touched).`; }).catch(() => {});
+    return h('div', { class: 'am-card' }, free,
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn secondary', 'data-key': 'del-video', onclick: () => deleteSheet('video') }, 'Delete films & shows…'),
+        h('button', { class: 'btn secondary', 'data-key': 'del-music', onclick: () => deleteSheet('music') }, 'Delete music…')));
+  }
+  async function deleteSheet(kind) {
+    const music = kind === 'music';
+    const res = await api.deleteList();
+    if (!res || res.error) { flash((res && res.error) || 'Could not list what’s on this box'); return; }
+    // ticked: 'f:<id>' films, 's:<series>' whole shows, 's:<series>|<season>' seasons, 'a:<key>' albums
+    const picked = new Map(); // key -> size
+    const open = new Set();   // shows / artists expanded
+    const list = h('div', { class: 'fpick' });
+    const total = () => [...picked.values()].reduce((n, x) => n + x, 0);
+    const delBtn = h('button', { class: 'btn primary danger', onclick: () => go() });
+    const drawFoot = () => { delBtn.textContent = picked.size ? `Delete ${picked.size} selected (${fmtBytes(total())})` : 'Delete selected'; delBtn.disabled = !picked.size; };
+    const tick = (key, size, children) => {
+      if (picked.has(key)) picked.delete(key);
+      else { for (const c of children || []) picked.delete(c); picked.set(key, size); }
+      draw(key);
+    };
+    const row = (key, label, sub, size, opts = {}) => {
+      const on = picked.has(key) || (opts.parent && picked.has(opts.parent));
+      return h('div', { class: 'fpick-row' + (on ? ' on' : '') + (opts.indent ? ' indent' : '') },
+        h('button', { class: 'fpick-main', 'data-k': key, disabled: opts.parent && picked.has(opts.parent) ? 'disabled' : undefined, onclick: () => tick(key, size, opts.children) },
+          h('span', { class: 'fpick-box' }, on ? '✓' : ''), h('span', { class: 'fpick-name' }, label), h('small', {}, [sub, fmtBytes(size)].filter(Boolean).join(' · '))),
+        opts.expand ? h('button', { class: 'btn secondary small fpick-open', 'data-open': key, onclick: () => { open.has(key) ? open.delete(key) : open.add(key); draw(key, true); } }, open.has(key) ? 'Close ‹' : opts.expand) : null);
+    };
+    const head = (t) => h('h3', { class: 'fpick-head' }, t);
+    function draw(focusKey, focusOpen) {
+      const rows = [];
+      if (!music) {
+        if (res.shows.length) rows.push(head('Shows'));
+        for (const sh of res.shows) {
+          const k = 's:' + sh.series;
+          const seasonKeys = sh.seasons.map((se) => `${k}|${se.season}`);
+          rows.push(row(k, sh.series, `${sh.count} episode${sh.count === 1 ? '' : 's'}`, sh.size, { expand: sh.seasons.length > 1 ? 'Seasons ›' : null, children: seasonKeys }));
+          if (open.has(k)) for (const se of sh.seasons) rows.push(row(`${k}|${se.season}`, se.season ? `Season ${se.season}` : 'Specials', `${se.count} episode${se.count === 1 ? '' : 's'}`, se.size, { indent: true, parent: k }));
+        }
+        if (res.films.length) rows.push(head('Films'));
+        for (const f of res.films) rows.push(row('f:' + f.id, f.title, f.year ? String(f.year) : '', f.size));
+        if (!res.films.length && !res.shows.length) rows.push(h('p', { class: 'am-hint' }, 'No films or shows are stored on this box.'));
+      } else {
+        const byArtist = new Map();
+        for (const a of res.albums) { const l = byArtist.get(a.artist) || []; l.push(a); byArtist.set(a.artist, l); }
+        for (const [artist, albums] of [...byArtist].sort((x, y) => x[0].localeCompare(y[0], undefined, { sensitivity: 'base' }))) {
+          const k = 'r:' + artist;
+          const keys = albums.map((a) => 'a:' + a.key);
+          const n = albums.reduce((x, a) => x + a.count, 0);
+          rows.push(row(k, artist, `${albums.length} album${albums.length === 1 ? '' : 's'} · ${n} song${n === 1 ? '' : 's'}`, albums.reduce((x, a) => x + a.size, 0), { expand: 'Albums ›', children: keys }));
+          if (open.has(k)) for (const a of albums) rows.push(row('a:' + a.key, a.title, `${a.year ? a.year + ' · ' : ''}${a.count} song${a.count === 1 ? '' : 's'}`, a.size, { indent: true, parent: k }));
+        }
+        if (!res.albums.length) rows.push(h('p', { class: 'am-hint' }, 'No music is stored on this box.'));
+      }
+      list.replaceChildren(...rows);
+      drawFoot();
+      const f = focusKey && list.querySelector(focusOpen ? `[data-open="${CSS.escape(focusKey)}"]` : `[data-k="${CSS.escape(focusKey)}"]`);
+      if (f) focusEl(f); else if (!focusKey) { const first = list.querySelector('.fpick-main'); if (first) { document.body.classList.add('navmode'); focusEl(first); } }
+    }
+    async function go() {
+      if (!picked.size) return;
+      const keys = [...picked.keys()];
+      const what = { films: [], shows: [], albums: [] };
+      for (const k of keys) {
+        if (k.startsWith('f:')) what.films.push(k.slice(2));
+        else if (k.startsWith('a:')) what.albums.push(k.slice(2));
+        else if (k.startsWith('r:')) { const artist = k.slice(2); for (const a of res.albums) if (a.artist === artist) what.albums.push(a.key); }
+        else if (k.startsWith('s:')) {
+          const [series, season] = k.slice(2).split('|');
+          let sh = what.shows.find((x) => x.series === series);
+          if (!sh) { sh = { series, seasons: season == null ? null : [] }; what.shows.push(sh); }
+          if (season != null && sh.seasons) sh.seasons.push(Number(season));
+        }
+      }
+      const ok = await askConfirm(`Delete ${picked.size} ${picked.size === 1 ? 'thing' : 'things'} (${fmtBytes(total())})?`,
+        'They’re deleted from this box for good (with their subtitles and covers). Copies on USB drives or other computers stay where they are.', 'Delete', 'Cancel', true);
+      if (!ok) { delBtn.focus(); return; }
+      closeSheet(true);
+      flash('Deleting…');
+      const r = await api.deleteMedia(what);
+      if (!r || r.error) { showNotice('Couldn’t delete', (r && r.error) || 'Something went wrong.'); return; }
+      if (r.state) S = r.state;
+      flash(`Deleted · ${fmtBytes(r.freed)} freed${r.free != null ? ` · ${fmtBytes(r.free)} free now` : ''}`);
+      if (!$('#settings').hidden) renderSettings();
+      render();
+    }
+    sheet('files', h('h2', {}, music ? 'Delete music' : 'Delete films & shows'),
+      h('p', { class: 'am-hint' }, `${res.free != null ? fmtBytes(res.free) + ' free now. ' : ''}OK ticks something to delete${music ? ' (an artist ticks all their albums)' : ' (a show ticks every season)'}; “${music ? 'Albums' : 'Seasons'} ›” shows what’s inside.`),
+      list,
+      h('div', { class: 'btns sheet-foot' }, delBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+    draw();
+  }
+
   async function addFilmFolder() {
     let dirs = null;
     if (isLinuxApp()) { const d = await pickPath({ title: 'Add a folder of films and shows', mode: 'folder' }); if (!d) return false; dirs = [d]; }
@@ -1708,6 +1806,8 @@
       parlorUI ? parlorUI.settingsBlock() : null,
       h('h3', {}, 'Add media'),
       addMediaPanel(),
+      S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? h('h3', {}, 'Free up space') : null,
+      S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? freeSpaceBlock() : null,
       h('h3', {}, 'Library folders'),
       h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
         h('div', { class: 'dir' }, d, h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),

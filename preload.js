@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('api', {
   setVoteState: (blob) => ipcRenderer.invoke('vote-state', blob),
   scan: () => ipcRenderer.invoke('scan'),
   addDir: (dirs) => ipcRenderer.invoke('add-dir', dirs || null),
+  deleteList: () => ipcRenderer.invoke('delete-list'),
+  deleteMedia: (what) => ipcRenderer.invoke('delete-media', what),
   removeDir: (d) => ipcRenderer.invoke('remove-dir', d),
   setConfig: (p) => ipcRenderer.invoke('set-config', p),
   play: (opts) => ipcRenderer.invoke('play', opts),
