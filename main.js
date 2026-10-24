@@ -71,7 +71,8 @@ async function soundFor() {
   try {
     if (!mpvIds) mpvIds = new Set((await listAudioDevices(findBinary('mpv', config.mpvPath))).map((d) => d.id));
     const r = await audio.resolve(choice, { passthrough: !!config.passthrough, mpvIds });
-    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false, lightVideo: true };
+    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false, lightVideo: true,
+      pcmChannels: r.kind === 'hdmi' || r.kind === 'other' ? audio.hdmiPcmChannels() : null };
   } catch {
     return { audioDevice: choice.startsWith('bt:') ? '' : choice };
   }

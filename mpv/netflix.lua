@@ -389,7 +389,9 @@ local function badge_list()
     local f = (mp.get_property('audio-out-params/format') or '') .. ' ' .. (mp.get_property('audio-params/format') or '')
     local ch = mp.get_property_number('audio-out-params/channel-count')
     local note, warn = nil, false
-    if f:find('spdif') then note = 'Unaltered'
+    local codec = (mp.get_property('audio-codec-name') or ''):lower():gsub('-', '')
+    if f:find('spdif') and codec ~= '' and not f:gsub('-', ''):find(codec, 1, true) then note = 'Sent as Dolby Digital 5.1'; warn = true
+    elseif f:find('spdif') then note = 'Unaltered'
     elseif o.passthru ~= 'yes' then note = 'Turn on Passthru'; warn = true
     elseif o.sound == 'bluetooth' then note = 'Decoded for Bluetooth'; warn = true
     elseif ch then note = 'Decoded to ' .. (channel_name(ch) or (ch .. 'ch')); warn = true end
