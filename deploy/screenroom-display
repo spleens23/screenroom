@@ -58,6 +58,9 @@ apply() {
 connected() { xrandr --current 2>/dev/null | awk '/ connected/ {print $1}' | tr '\n' ' '; }
 apply
 [ "${1:-}" = "--once" ] && exit 0
+# Not a laptop (no built-in screen): nothing to watch for. (Staying out of the way matters: a TV or receiver
+# re-announcing itself, e.g. when Dolby Atmos starts, must not set off any screen re-reading here.)
+xrandr --current 2>/dev/null | grep -qE '^(eDP|LVDS|DSI)[^ ]* ' || exit 0
 last="$(connected)"
 if command -v udevadm >/dev/null 2>&1; then
   udevadm monitor --udev --subsystem-match=drm 2>/dev/null | while read -r line; do

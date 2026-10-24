@@ -106,6 +106,7 @@ function refit(_e, _display, changed) {
   // to start an endless full screen / windowed loop), only for a real change of the screen, and only
   // when the window doesn't already cover the screen it should.
   if (!isTv() || process.platform !== 'linux') return;
+  if (playing) return; // never during a film (the check every few seconds catches up afterwards)
   if (Array.isArray(changed) && !changed.some((c) => c === 'bounds' || c === 'scaleFactor')) return;
   clearTimeout(refitTimer);
   refitTimer = setTimeout(() => {
