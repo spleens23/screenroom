@@ -627,6 +627,71 @@ local function draw_toast()
   text(W / 2, 152, S.toast, 30, WHITE, k, 5, true)
 end
 
+-- ---------------------------------------------------------------- power menu (the computer's power button)
+-- Screenroom's own Sleep / Restart / Turn off menu, over the film (the film pauses while it's open).
+local POWER = {
+  { label = 'Sleep', cmd = 'suspend' },
+  { label = 'Restart', cmd = 'reboot' },
+  { label = 'Turn off', cmd = 'poweroff' },
+  { label = 'Cancel' },
+}
+S.power, S.prow = false, 1
+local POWER_KEYS = {}
+local function close_power()
+  if not S.power then return end
+  S.power = false
+  for _, n in ipairs(POWER_KEYS) do mp.remove_key_binding(n) end
+  POWER_KEYS = {}
+end
+local function power_choose(i)
+  local e = POWER[i or S.prow]
+  close_power()
+  if not e or not e.cmd then return end
+  if e.cmd ~= 'suspend' then quit_player() end -- saves where you were before the computer goes off
+  mp.command_native_async({ name = 'subprocess', args = { 'systemctl', e.cmd }, playback_only = false, detach = true }, function() end)
+end
+local function draw_power()
+  if not S.power then return end
+  local pw, rowh = 560, 76
+  local ph = 120 + #POWER * rowh + 30
+  local px, py = W / 2 - pw / 2, H / 2 - ph / 2
+  shape(rect(0, 0, W, H), BLACK, 0.55)
+  shape(rect(px, py, pw, ph), PANEL, 0.97)
+  hit(px, py, pw, ph, { panel = true })
+  text(px + 50, py + 64, 'Power', 40, WHITE, 1, 4, true)
+  for i, e in ipairs(POWER) do
+    local ry = py + 110 + (i - 1) * rowh
+    local spec = { onclick = function() S.prow = i; power_choose(i) end }
+    hit(px + 30, ry, pw - 60, rowh - 10, spec)
+    local on = (i == S.prow) or in_rect(spec, S.mx, S.my)
+    if on then shape(rect(px + 30, ry, pw - 60, rowh - 10), WHITE, 1) end
+    text(px + 60, ry + (rowh - 10) / 2, e.label, 32, on and BLACK or WHITE, 1, 4, true)
+  end
+end
+local function open_power()
+  if S.power then close_power(); return end
+  if S.menu then close_menu() end
+  mp.set_property_native('pause', true)
+  S.power, S.prow = true, 1
+  local function mv(d) return function() S.prow = clamp(S.prow + d, 1, #POWER) end end
+  local binds = {
+    { 'UP', 'nf_p_up', mv(-1) }, { 'DOWN', 'nf_p_down', mv(1) },
+    { 'LEFT', 'nf_p_left', function() end }, { 'RIGHT', 'nf_p_right', function() end },
+    { 'GAMEPAD_DPAD_UP', 'nf_p_gup', mv(-1) }, { 'GAMEPAD_DPAD_DOWN', 'nf_p_gdown', mv(1) },
+    { 'ENTER', 'nf_p_enter', function() power_choose() end }, { 'KP_ENTER', 'nf_p_kpenter', function() power_choose() end },
+    { 'GAMEPAD_ACTION_DOWN', 'nf_p_ga', function() power_choose() end },
+    { 'ESC', 'nf_p_esc', close_power }, { 'BS', 'nf_p_bs', close_power }, { 'GO_BACK', 'nf_p_back', close_power },
+    { 'MBTN_BACK', 'nf_p_mback', close_power }, { 'GAMEPAD_ACTION_RIGHT', 'nf_p_gb', close_power },
+    { 'POWER', 'nf_p_power', close_power },
+  }
+  for _, b in ipairs(binds) do
+    mp.add_forced_key_binding(b[1], b[2], b[3], { repeatable = (b[1] == 'UP' or b[1] == 'DOWN') })
+    POWER_KEYS[#POWER_KEYS + 1] = b[2]
+  end
+end
+mp.register_script_message('nf-power', open_power)
+mp.register_script_message('nf-toast', function(t) toast(t or '') end)
+
 local function render()
   local w, h = mp.get_osd_size()
   if w and h and w > 0 and h > 0 then
@@ -644,7 +709,7 @@ local function render()
   S.fade = S.fade + (target - S.fade) * clamp(dt * 12, 0, 1)
   if math.abs(target - S.fade) < 0.01 then S.fade = target end
 
-  local pshow = S.loaded and S.paused and S.pause_t and (t - S.pause_t > 0.9) and not S.menu and S.drag == nil
+  local pshow = S.loaded and S.paused and S.pause_t and (t - S.pause_t > 0.9) and not S.menu and not S.power and S.drag == nil
   local ptarget = pshow and 1 or 0
   S.pfade = S.pfade + (ptarget - S.pfade) * clamp(dt * 8, 0, 1)
   if math.abs(ptarget - S.pfade) < 0.01 then S.pfade = ptarget end
@@ -660,6 +725,7 @@ local function render()
   if S.pfade > 0 then draw_pause_overlay(S.pfade) end
   if S.fade > 0 then draw_controls(S.fade) end
   if S.loaded then draw_next_card() end
+  draw_power()
   draw_toast()
 
   if #lines == 0 then
@@ -744,6 +810,7 @@ local function mouse_down()
     return
   end
   if S.menu then close_menu(); return end
+  if S.power then close_power(); return end
   if S.fade > 0.5 and (S.my > H - 330 or S.my < 180) then return end
   toggle_pause()
 end

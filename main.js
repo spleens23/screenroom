@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { scan, loadCached } = require('./lib/library');
 const { play, findBinary, control, listAudioDevices } = require('./lib/player');
 const remote = require('./lib/remote');
@@ -218,6 +218,66 @@ async function btWatchNow() {
   // (no message when the box starts up with the speaker switched off)
   await setSoundOutput('', btWasOn ? `${(c && c.name) || 'The Bluetooth speaker'} disconnected: sound is back on Automatic` : '');
   btWasOn = false;
+}
+
+// ---- the computer's own buttons (TV box / laptop): power button menu, laptop brightness keys --------------
+// deploy/screenroom-keys.py watches them (logind leaves a short press of the power button to us) and prints a
+// line per press.
+let lastResume = 0;
+function backlight() {
+  const dir = '/sys/class/backlight';
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return null; }
+  const type = (n) => { try { return fs.readFileSync(path.join(dir, n, 'type'), 'utf8').trim(); } catch { return ''; } };
+  const rank = { firmware: 0, platform: 1, raw: 2 };
+  names.sort((a, b) => (rank[type(a)] ?? 3) - (rank[type(b)] ?? 3));
+  return names[0] ? { name: names[0], dir: path.join(dir, names[0]) } : null;
+}
+function stepBrightness(up) {
+  const b = backlight();
+  if (!b) return;
+  const rd = (f) => Number(fs.readFileSync(path.join(b.dir, f), 'utf8'));
+  let max, cur;
+  try { max = rd('max_brightness'); cur = rd('brightness'); } catch { return; }
+  if (!max) return;
+  const pctNow = (cur / max) * 100;
+  // 5% steps; never all the way to black (a laptop screen at 0 looks switched off)
+  const pct = Math.max(2, Math.min(100, up ? Math.floor(pctNow / 5 + 1.0001) * 5 : Math.ceil(pctNow / 5 - 1.0001) * 5));
+  const val = Math.max(1, Math.round((pct / 100) * max));
+  try { fs.writeFileSync(path.join(b.dir, 'brightness'), String(val)); }
+  catch {
+    // not allowed to write it directly (the box's setup hasn't run since this version): ask the login manager
+    execFile('busctl', ['call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', b.name, String(val)], () => {});
+  }
+  const msg = `Brightness ${Math.round(pct)}%`;
+  if (playing) control(['script-message', 'nf-toast', msg]);
+  else sendWin('brightness', Math.round(pct));
+}
+function onPowerButton() {
+  if (Date.now() - lastResume < 4000) return; // the press that woke the computer up
+  if (playing) control(['script-message', 'nf-power']);
+  else { if (win && !win.isDestroyed()) win.focus(); sendWin('power-menu'); }
+}
+function startKeys() {
+  const script = ['/usr/local/bin/screenroom-keys', path.join(process.resourcesPath || '', 'deploy', 'screenroom-keys.py'), path.join(__dirname, 'deploy', 'screenroom-keys.py')]
+    .find((f) => { try { return fs.statSync(f).isFile(); } catch { return false; } });
+  if (!script) return;
+  let child;
+  try { child = spawn('python3', [script], { stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return; }
+  let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const w = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (w === 'power') onPowerButton();
+      else if (w === 'brightness_up' || w === 'brightness_down') stepBrightness(w === 'brightness_up');
+    }
+  });
+  child.on('error', () => {});
+  // stopped (python3-evdev missing, crashed): try again in a while
+  child.on('exit', () => setTimeout(startKeys, 30000));
+  app.on('will-quit', () => { try { child.kill(); } catch {} });
 }
 
 // ---- playback problems (Settings): films that stuttered, with what the box was doing -------------------
@@ -530,6 +590,8 @@ app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(
 app.whenReady().then(async () => {
   // Going to sleep (power button or Settings): pause the film so it's where you left it when the box wakes.
   powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
+  powerMonitor.on('resume', () => { lastResume = Date.now(); });
+  if (isAppliance()) startKeys();
   config = { ...defaults, ...readJson(cfgFile(), {}) };
   profiles = new Profiles(dataDir());
   ratings = new Ratings(dataDir());
@@ -612,7 +674,50 @@ app.whenReady().then(async () => {
     return r;
   });
 
-  ipcMain.handle('add-dir', async () => {
+  // Screenroom's own folder / picture browser (Linux: instead of the system's file dialog).
+  // dir '' = the starting places (home folders, plugged-in drives); mode 'folder' or 'image'.
+  ipcMain.handle('browse', async (_e, dir, mode) => {
+    const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+    if (!dir) {
+      const home = os.homedir();
+      const places = [];
+      const add = (p, label, kind) => { if (isDir(p) && !places.some((x) => x.path === p)) places.push({ name: label, path: p, dir: true, kind }); };
+      for (const d of drives) add(d.mount, d.label, 'drive');
+      if (mediaRoot) add(mediaRoot, 'Screenroom library', 'folder');
+      add(path.join(home, 'Music'), 'Music', 'folder');
+      add(path.join(home, 'Videos'), 'Videos', 'folder');
+      add(path.join(home, 'Pictures'), 'Pictures', 'folder');
+      add(path.join(home, 'Downloads'), 'Downloads', 'folder');
+      add(home, 'Home folder', 'home');
+      return { dir: '', entries: places };
+    }
+    try {
+      const IMG = /\.(jpe?g|png|webp|gif)$/i;
+      const list = await fs.promises.readdir(dir, { withFileTypes: true });
+      const entries = [];
+      for (const d of list) {
+        if (d.name.startsWith('.') || d.name === 'lost+found' || d.name === '$RECYCLE.BIN' || d.name === 'System Volume Information') continue;
+        const full = path.join(dir, d.name);
+        const folder = d.isDirectory() || (d.isSymbolicLink() && isDir(full));
+        if (folder) entries.push({ name: d.name, path: full, dir: true });
+        else if (mode === 'image' && IMG.test(d.name)) entries.push({ name: d.name, path: full, dir: false });
+      }
+      entries.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : a.dir ? -1 : 1));
+      const home = os.homedir();
+      const top = [home, ...['Music', 'Videos', 'Pictures', 'Downloads'].map((n) => path.join(home, n)), ...drives.map((d) => d.mount), mediaRoot].filter(Boolean).find((r) => dir === r);
+      return { dir, name: path.basename(dir) || dir, parent: top || dir === '/' ? '' : path.dirname(dir), entries };
+    } catch (e) { return { dir, name: path.basename(dir), parent: '', entries: [], error: 'This folder can\'t be opened.' }; }
+  });
+
+  ipcMain.handle('add-dir', async (_e, picked) => {
+    if (Array.isArray(picked)) {
+      const ok = picked.filter((d) => typeof d === 'string' && d && fs.existsSync(d));
+      if (!ok.length) return snapshot();
+      config.dirs = [...new Set([...config.dirs, ...ok])];
+      writeJson(cfgFile(), config);
+      await doScan();
+      return snapshot();
+    }
     // Start where removable drives are mounted, if we can find it.
     const me = os.userInfo().username;
     const defaultPath = [`/media/${me}`, `/run/media/${me}`, '/media', '/mnt', os.homedir()].find((d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } });
@@ -861,12 +966,16 @@ app.whenReady().then(async () => {
     return r.ok ? { ...r, state: snapshot() } : r;
   });
   // A photo from a file (Mac / Linux with a mouse); on the TV the phone remote sends one instead.
-  ipcMain.handle('profile-photo', async (_e, id, pin) => {
+  ipcMain.handle('profile-photo', async (_e, id, pin, file) => {
     const err = await authorize(id, pin);
     if (err) return { ok: false, error: err };
-    const r = await dialog.showOpenDialog(win, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
-    if (r.canceled || !r.filePaths[0]) return { ok: true, state: snapshot() };
-    const f = r.filePaths[0];
+    let f = typeof file === 'string' && file ? file : null;
+    if (f && !/\.(jpe?g|png|webp|gif)$/i.test(f)) return { ok: false, error: 'Pick a JPEG, PNG, WebP or GIF picture' };
+    if (!f) {
+      const r = await dialog.showOpenDialog(win, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
+      if (r.canceled || !r.filePaths[0]) return { ok: true, state: snapshot() };
+      f = r.filePaths[0];
+    }
     const res = profiles.setPhoto(id, fs.readFileSync(f), path.extname(f).slice(1));
     return res.ok ? { ...res, state: snapshot() } : res;
   });

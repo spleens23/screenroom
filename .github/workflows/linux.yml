@@ -177,7 +177,7 @@ jobs:
           PIN="$($SSH sudo jq -r .remotePin /home/tv/.config/screenroom/config.json 2>/dev/null || true)"
           check "library shows the test show"           "curl -fsS --max-time 10 -H 'x-pin: $PIN' http://localhost:8686/api/library | grep -q 'Test Show'"
           check "maintenance login created"             "$SSH sudo test -s /etc/screenroom/maintenance"
-          check "power button: press sleeps, hold = off" "$SSH 'grep -q HandlePowerKey=suspend /etc/systemd/logind.conf.d/50-screenroom.conf && grep -q HandlePowerKeyLongPress=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf && ! systemctl is-enabled suspend.target 2>/dev/null | grep -q masked'"
+          check "power button: press = menu, hold = off" "$SSH 'grep -q HandlePowerKey=ignore /etc/systemd/logind.conf.d/50-screenroom.conf && grep -q HandlePowerKeyLongPress=poweroff /etc/systemd/logind.conf.d/50-screenroom.conf && ! systemctl is-enabled suspend.target 2>/dev/null | grep -q masked'"
           check "TV user may put the box to sleep"     "$SSH \"sudo -u tv sh -c 'pkcheck --action-id org.freedesktop.login1.suspend --process \\\$\\\$'\""
           check "TV session never ends (no login screen)" "$SSH '! grep -q break /usr/local/bin/screenroom-session'"
           check "sound outputs switched on (none muted)" "$SSH 'amixer -c 0 scontents' > /tmp/mix; grep -q Playback /tmp/mix && ! grep -q '\[off\]' /tmp/mix"

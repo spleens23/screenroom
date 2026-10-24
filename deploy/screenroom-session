@@ -27,6 +27,11 @@ if [ -x /usr/local/bin/screenroom-display ]; then
   /usr/local/bin/screenroom-display >/tmp/screenroom-display.log 2>&1 &
 fi
 
+# The mouse pointer only shows while a mouse / touchpad is actually being moved (never on the TV otherwise).
+if command -v unclutter >/dev/null; then
+  unclutter --start-hidden --timeout 2 --hide-on-touch >/dev/null 2>&1 &
+fi
+
 # A tiny window manager so full-screen windows (Screenroom, then the mpv player) stack properly.
 openbox &
 

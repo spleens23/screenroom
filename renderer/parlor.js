@@ -24,6 +24,8 @@ window.createParlor = function createParlor(ctx) {
     pause: '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
     next: '<svg viewBox="0 0 24 24"><path d="M4 5l9 7-9 7zM13 5l9 7-9 7z"/></svg>',
     prev: '<svg viewBox="0 0 24 24"><path d="M20 5l-9 7 9 7zM11 5l-9 7 9 7z"/></svg>',
+    rew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path fill="none" d="M4.5 3.5v4.2h4.2"/><text x="12.4" y="15.2" text-anchor="middle" font-size="7.5" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">10</text></svg>',
+    fwd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path fill="none" d="M19.5 3.5v4.2h-4.2"/><text x="11.6" y="15.2" text-anchor="middle" font-size="7.5" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">10</text></svg>',
     shuffle: '<svg viewBox="0 0 24 24"><path d="M3 7h4l10 10h4M17 13l4 4-4 4M3 17h4l3-3M14 10l3-3h4M17 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   };
 
@@ -359,7 +361,15 @@ window.createParlor = function createParlor(ctx) {
       r.error ? h('p', { class: 'pnote small' }, r.error) : null,
       tiles.length ? h('div', { class: 'cover-picks' }, tiles) : h('p', { class: 'pnote small' }, 'No covers found for this album.'),
       h('div', { class: 'btns' },
-        !ctx.isTvBox() ? h('button', { class: 'btn secondary', onclick: () => pick(null) }, 'Choose a picture…') : null,
+        h('button', { class: 'btn secondary', onclick: async () => {
+          if (ctx.isLinux && ctx.isLinux()) {
+            closeOverlay();
+            const f = await ctx.pickPath({ title: `Cover for ${a.title}`, mode: 'image' });
+            if (f) pick({ path: f });
+            return;
+          }
+          pick(null);
+        } }, 'Choose a picture…'),
         h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
   }
 
@@ -381,18 +391,31 @@ window.createParlor = function createParlor(ctx) {
   // The bar and the full view are built once and then only updated (rebuilding them several times a second
   // made buttons miss clicks).
   const pct = (s) => (s.dur ? Math.min(100, (s.pos / s.dur) * 100) : 0);
+  // Skip back / forward 10 seconds in the song (buttons, the remote's rewind / fast-forward keys, the progress bar)
+  // (quick presses add up: the song's position only reaches us a moment later)
+  let skipTo = null;
+  const skip = (d) => {
+    const s = P && P.player;
+    if (!s || !s.track) return;
+    const from = skipTo && Date.now() - skipTo.at < 1500 && skipTo.id === s.track.id ? skipTo.pos : (s.pos || 0);
+    const pos = Math.max(0, Math.min((s.dur || 0) - 1, from + d));
+    skipTo = { pos, at: Date.now(), id: s.track.id };
+    api.musicCmd('seek', pos);
+  };
   const bar = h('div', { id: 'npbar', hidden: true, 'data-navrow': '1' });
   const B = {
     art: h('button', { class: 'npb-art', 'data-b': 'art', title: 'Now Playing', onclick: () => openFull() }),
     prev: h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
     play: h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') }),
     next: h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
+    rew: h('button', { class: 'npb', 'data-b': 'rew', title: 'Back 10 seconds', onclick: () => skip(-10) }, svg(ICON.rew, 'ico skip')),
+    fwd: h('button', { class: 'npb', 'data-b': 'fwd', title: 'Forward 10 seconds', onclick: () => skip(10) }, svg(ICON.fwd, 'ico skip')),
     title: h('div', { class: 'lcd-t' }), sub: h('div', { class: 'lcd-s' }),
     pos: h('span', {}), fill: h('div', {}), left: h('span', {}),
   };
   B.lcd = h('button', { class: 'lcd', 'data-b': 'lcd', title: 'Now Playing', onclick: () => openFull() },
     B.title, B.sub, h('div', { class: 'lcd-p' }, B.pos, h('div', { class: 'lcd-bar' }, B.fill), B.left));
-  bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, B.play, B.next), B.lcd);
+  bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, B.rew, B.play, B.fwd, B.next), B.lcd);
   document.body.append(bar);
   // A "Now Playing" button in the top bar, on both sides of the app: always one press of Back away
   // (Back jumps to the top bar), so the music is easy to reach with a remote from anywhere.
@@ -443,11 +466,13 @@ window.createParlor = function createParlor(ctx) {
   F.bigBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
   F.barBtn = h('button', { class: 'npf-bar', 'data-b': 'bar', title: 'Left / right: skip 10 seconds',
     onclick: (e) => { const s = P.player; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX && s) api.musicCmd('seek', ((e.clientX - r.left) / r.width) * (s.dur || 0)); },
-    onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); wakeFull(); api.musicCmd('seek', P.player.pos + (e.key === 'ArrowLeft' ? -10 : 10)); } } }, F.fill);
+    onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); wakeFull(); skip(e.key === 'ArrowLeft' ? -10 : 10); } } }, F.fill);
   F.play = h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') });
   F.ctrl = h('div', { class: 'npf-ctrl', 'data-navrow': '1' },
     h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
+    h('button', { class: 'npb', 'data-b': 'rew', title: 'Back 10 seconds', onclick: () => skip(-10) }, svg(ICON.rew, 'ico skip')),
     F.play,
+    h('button', { class: 'npb', 'data-b': 'fwd', title: 'Forward 10 seconds', onclick: () => skip(10) }, svg(ICON.fwd, 'ico skip')),
     h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
     h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', P.player.volume - 10) }, '−'),
     F.vol,
@@ -471,10 +496,14 @@ window.createParlor = function createParlor(ctx) {
   }
   // In big-cover mode the first key / click only brings the controls back.
   full.addEventListener('keydown', (e) => {
-    if (full.classList.contains('big') && !['MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious'].includes(e.key)) {
+    if (full.classList.contains('big') && !['MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious', 'MediaRewind', 'MediaFastForward'].includes(e.key)) {
       e.preventDefault(); e.stopPropagation(); setBig(false); const b = F.play; b.focus({ preventScroll: true }); return;
     }
     wakeFull();
+    // Up from the buttons goes to the progress bar (where left / right skip 10 seconds), down from it back to Play.
+    const a = document.activeElement;
+    if (e.key === 'ArrowUp' && a && a.closest('.npf-ctrl')) { e.preventDefault(); e.stopPropagation(); F.barBtn.focus({ preventScroll: true }); return; }
+    if (e.key === 'ArrowDown' && a === F.barBtn) { e.preventDefault(); e.stopPropagation(); F.play.focus({ preventScroll: true }); }
   }, true);
   full.addEventListener('mousemove', () => { if (!full.classList.contains('big')) wakeFull(); });
 
@@ -577,7 +606,11 @@ window.createParlor = function createParlor(ctx) {
           h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '+ ' + d))));
       }
       box.append(h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: async () => { const r = await api.parlorAddDir(); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error); } }, 'Add music folder…'),
+        h('button', { class: 'btn secondary', onclick: async () => {
+          let dir = null;
+          if (ctx.isLinux && ctx.isLinux()) { dir = await ctx.pickPath({ title: 'Add a music folder', mode: 'folder' }); if (!dir) return; }
+          const r = await api.parlorAddDir(dir); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error);
+        } }, 'Add music folder…'),
         P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Scanning…'; P = await api.parlorRescan(); draw(); } }, 'Rescan music') : null));
       const noArt = P.albums.filter((a) => !a.art).length;
       if (noArt && api.parlorCoversAuto) {

@@ -554,7 +554,7 @@
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg (brew install ffmpeg / apt install ffmpeg).') : null,
       addMediaPanel(),
       h('p', { class: 'am-hint' }, 'Already have the files on this computer or a mounted drive?'),
-      h('button', { class: 'btn primary', onclick: async () => { setScanning(true); S = await api.addDir(); setScanning(false); render(); } }, 'Choose folders…')));
+      h('button', { class: 'btn primary', onclick: async () => { if (await addFilmFolder()) render(); } }, 'Choose folders…')));
   }
 
   let heroKey = null;
@@ -854,6 +854,70 @@
       okBtn.focus({ preventScroll: true });
     });
   }
+  // A list to pick from, in a pop-up (the power menu, and every dropdown on the TV box): OK picks, Back cancels.
+  // Resolves with the chosen value, or undefined.
+  function askChoice(title, choices, current, text) {
+    return new Promise((resolve) => {
+      closeDialog(false);
+      const done = (v) => { closeDialog(); resolve(v); };
+      const items = choices.map((c) => h('button', { class: 'choice' + (c.value === current ? ' on' : '') + (c.danger ? ' danger' : ''), onclick: () => done(c.value) },
+        h('span', { class: 'choice-tick' }, c.value === current ? '✓' : ''), h('span', { class: 'choice-label' }, c.label)));
+      const el = h('div', { id: 'dlg', class: 'dlg', onmousedown: (ev) => { if (ev.target === el) done(undefined); } },
+        h('div', { class: 'dlg-card choices', role: 'dialog' }, h('h2', {}, title), text ? h('p', {}, text) : null, h('div', { class: 'choice-list' }, items)));
+      document.body.append(el);
+      dlg = { resolve, el, cancel: () => done(undefined) };
+      document.body.classList.add('navmode');
+      const f = items[Math.max(0, current == null ? 0 : choices.findIndex((c) => c.value === current))];
+      if (f) focusEl(f);
+    });
+  }
+  // A dropdown (<select>) as one of our own pop-ups instead of the system's menu.
+  async function openSelect(sel) {
+    if (!sel.options.length || sel.disabled) return;
+    // the setting's name: the first words of the text next to it ("Screensaver", "Audio output", "Age"…)
+    const box = sel.closest('label') || sel.parentElement;
+    const sp = box && [...box.children].find((c) => c !== sel && c.tagName !== 'SELECT' && c.textContent.trim());
+    const first = sp && [...sp.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+    const label = sel.getAttribute('aria-label') || (first && first.textContent.trim()) || 'Choose';
+    const choices = [...sel.options].filter((o) => !o.disabled && !o.hidden).map((o) => ({ value: o.value, label: o.textContent }));
+    const v = await askChoice(label.length > 50 ? 'Choose' : label, choices, sel.value);
+    if (sel.isConnected) sel.focus({ preventScroll: true });
+    if (v === undefined || v === sel.value) return;
+    sel.value = v;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  // The computer's power button (TV box / laptop): Sleep, Restart or Turn off.
+  let powerOpen = false;
+  async function powerMenu() {
+    if (powerOpen) { if (dlg) dlg.cancel(); return; }
+    powerOpen = true;
+    try {
+      if (osk) closeOsk();
+      const v = await askChoice('Power', [
+        { value: 'suspend', label: 'Sleep' },
+        { value: 'reboot', label: 'Restart' },
+        { value: 'poweroff', label: 'Turn off' },
+        { value: '', label: 'Cancel' },
+      ], null, 'Holding the power button for 5 seconds also turns it off.');
+      if (v) { if (v !== 'suspend') flash(v === 'reboot' ? 'Restarting…' : 'Turning off…'); const r = await api.power(v); if (r && r.ok === false) flash(r.error); }
+    } finally { powerOpen = false; }
+  }
+  // Laptop brightness keys: a small level bar at the top of the screen.
+  let brightTimer = null;
+  function showBrightness(pct) {
+    let el = $('#bright-osd');
+    if (!el) {
+      el = h('div', { id: 'bright-osd' }, h('span', { class: 'bo-ico' }), h('div', { class: 'bo-bar' }, h('div', { class: 'bo-fill' })), h('span', { class: 'bo-pct' }));
+      el.querySelector('.bo-ico').innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>';
+      document.body.append(el);
+    }
+    el.querySelector('.bo-fill').style.width = pct + '%';
+    el.querySelector('.bo-pct').textContent = pct + '%';
+    el.classList.add('show');
+    clearTimeout(brightTimer);
+    brightTimer = setTimeout(() => el.classList.remove('show'), 1600);
+  }
+
   function closeDialog() {
     if (!dlg) return false;
     const d = dlg; dlg = null;
@@ -1018,6 +1082,61 @@
       h('div', { class: 'btns sheet-foot' }, copyBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
     sheetBack = backUp;
     open('');
+  }
+
+  // Screenroom's own folder / picture browser (Linux), instead of the system's file dialog.
+  // opts: { title, mode: 'folder' | 'image', hint }. Resolves with the chosen path, or null.
+  const isLinuxApp = () => S.platform === 'linux';
+  function pickPath(opts) {
+    const mode = opts.mode || 'folder';
+    return new Promise((resolve) => {
+      let cur = { dir: '', parent: '' };
+      let chosen = null;
+      const list = h('div', { class: 'fpick' });
+      const crumb = h('div', { class: 'fpick-path' });
+      const ICON_DIR = '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5l2 2h8A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" fill="#e8b84a"/></svg>';
+      const ICON_DRIVE = '<svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.8"><rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="17" cy="12" r="1.2" fill="#ccc"/></svg>';
+      const ICON_HOME = '<svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.8" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8.5a.5.5 0 0 1-.5.5H15v-6H9v6H4.5a.5.5 0 0 1-.5-.5z"/></svg>';
+      const ico = (svg) => { const i = h('span', { class: 'fpick-ico' }); i.innerHTML = svg; return i; };
+      const useBtn = h('button', { class: 'btn primary', onclick: () => { if (cur.dir) { chosen = cur.dir; closeSheet(); } } }, 'Use this folder');
+      async function open(dir, focusPath) {
+        const res = await api.browse(dir, mode);
+        cur = res;
+        crumb.textContent = res.dir ? res.dir : 'Choose where to look';
+        if (mode === 'folder') { useBtn.disabled = !res.dir; useBtn.textContent = res.dir ? `Use “${res.name}”` : 'Use this folder'; }
+        const rows = [];
+        if (res.dir) rows.push(h('div', { class: 'fpick-row' }, h('button', { class: 'fpick-main up', 'data-path': '..', onclick: () => open(res.parent, res.dir) }, '‹  Back to ' + (res.parent ? res.parent.split('/').pop() || res.parent : 'the start'))));
+        for (const e of res.entries) {
+          const isImg = !e.dir;
+          const main = h('button', { class: 'fpick-main', 'data-path': e.path, onclick: () => { if (isImg) { chosen = e.path; closeSheet(); } else open(e.path); } },
+            isImg ? h('span', { class: 'fpick-thumb' }, h('img', { src: fileUrl(e.path), alt: '', loading: 'lazy' })) : ico(e.kind === 'drive' ? ICON_DRIVE : e.kind === 'home' ? ICON_HOME : ICON_DIR),
+            h('span', { class: 'fpick-name' }, e.name),
+            h('small', {}, isImg ? 'OK uses this picture' : e.kind === 'drive' ? 'USB drive' : 'Open ›'));
+          rows.push(h('div', { class: 'fpick-row' }, main,
+            mode === 'folder' && e.dir ? h('button', { class: 'btn secondary small fpick-open', onclick: () => { chosen = e.path; closeSheet(); } }, 'Choose') : null));
+        }
+        if (res.error) rows.push(h('p', { class: 'am-hint' }, res.error));
+        else if (!res.entries.length) rows.push(h('p', { class: 'am-hint' }, res.dir ? (mode === 'image' ? 'No pictures or folders here.' : 'No folders inside this one.') : 'Nothing to show. Plug in a USB drive and try again.'));
+        list.replaceChildren(...rows);
+        const body = $('#sheet .sheet-body'); if (body) body.scrollTop = 0;
+        const f = (focusPath && list.querySelector(`[data-path="${CSS.escape(focusPath)}"]`)) || list.querySelector('.fpick-main:not(.up)') || list.querySelector('.fpick-main');
+        if (f) { document.body.classList.add('navmode'); focusEl(f); }
+      }
+      sheet('files', h('h2', {}, opts.title || (mode === 'image' ? 'Choose a picture' : 'Choose a folder')), crumb,
+        h('p', { class: 'am-hint' }, opts.hint || (mode === 'image' ? 'OK opens a folder or uses a picture. Back goes up a folder.' : 'OK opens a folder; “Choose” (or the button below) picks it. Back goes up a folder.')),
+        list,
+        h('div', { class: 'btns sheet-foot' }, mode === 'folder' ? useBtn : null, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+      sheetBack = () => { if (!cur.dir) return false; open(cur.parent, cur.dir); return true; };
+      const from = document.activeElement;
+      sheetClosed = () => { if (from && from.isConnected && from !== document.body) from.focus({ preventScroll: true }); resolve(chosen); };
+      open('');
+    });
+  }
+  async function addFilmFolder() {
+    let dirs = null;
+    if (isLinuxApp()) { const d = await pickPath({ title: 'Add a folder of films and shows', mode: 'folder' }); if (!d) return false; dirs = [d]; }
+    setScanning(true); S = await api.addDir(dirs); setScanning(false);
+    return true;
   }
 
   // "Sync": copy only what this box doesn't have yet (same file already here = skipped), after saying how much.
@@ -1412,8 +1531,10 @@
     drawPics();
     const photoHint = !p ? h('p', { class: 'am-hint' }, 'Save the profile first to give it a photo.')
       : h('div', { class: 'photo-hint' },
-        S.appliance || S.platform === 'android' ? null : h('button', { class: 'btn secondary', onclick: async () => {
-          const r = await api.profilePhoto(p.id, authPin);
+        S.platform === 'android' ? null : h('button', { class: 'btn secondary', onclick: async () => {
+          let file = null;
+          if (isLinuxApp()) { file = await pickPath({ title: 'Choose a photo', mode: 'image', hint: 'A picture from a USB drive or this computer. OK opens a folder or uses a picture; Back goes up a folder.' }); if (!file) return; }
+          const r = await api.profilePhoto(p.id, authPin, file);
           if (!r.ok) { flash(r.error); return; }
           if (r.profile) { d.photo = r.profile.photo; d.avatar = 'photo'; S = r.state; drawPics(); drawPreview(); drawProfileButton(); }
         } }, 'Choose a photo…'),
@@ -1591,7 +1712,7 @@
       h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
         h('div', { class: 'dir' }, d, h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.addDir(); setScanning(false); renderSettings(); render(); } }, 'Add folder…'),
+        h('button', { class: 'btn secondary', onclick: async () => { if (await addFilmFolder()) { renderSettings(); render(); } } }, 'Add folder…'),
         h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.scan(); setScanning(false); renderSettings(); render(); } }, 'Rescan')),
       S.duplicates ? h('div', { class: 'am-hint' }, `${S.duplicates} duplicate episode file${S.duplicates === 1 ? ' was' : 's were'} hidden (the same episode found twice; the best quality copy is kept).`) : null,
       S.platform === 'linux' && api.wifiStatus ? h('h3', {}, 'Wi-Fi') : null,
@@ -1677,8 +1798,8 @@
     navFocus = false;
     // (things in fixed bars / overlays are always on screen: scrolling them "into view" would shift the whole page)
     // In a pop-up (Movie night, Recommend) only the pop-up's own list scrolls, keeping the focused film in the middle.
-    if (el.closest('#sheet')) {
-      const box = el.closest('.sheet-body');
+    if (el.closest('#sheet') || el.closest('.choice-list')) {
+      const box = el.closest('.sheet-body, .choice-list');
       if (box) {
         const r = el.getBoundingClientRect(), c = box.getBoundingClientRect();
         if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (c.top + c.height / 2), behavior });
@@ -1779,6 +1900,7 @@
     if (best) focusEl(best);
   }
   // TV remote on a dropdown (Quality, Audio output...): OK moves to the next choice.
+  const ownSelects = () => S.platform === 'linux' || S.tv || S.platform === 'android';
   function cycleSelect(sel) {
     if (!sel.options.length) return;
     sel.selectedIndex = (sel.selectedIndex + 1) % sel.options.length;
@@ -1786,7 +1908,7 @@
   }
   function activate() {
     const el = document.activeElement;
-    if (el && el.tagName === 'SELECT') { cycleSelect(el); return; }
+    if (el && el.tagName === 'SELECT') { openSelect(el); return; }
     if (isTextInput(el) && oskAllowed()) { openOsk(el); return; }
     if (el && el !== document.body && scopeEls().includes(el)) el.click();
     else move('down');
@@ -1978,7 +2100,7 @@
     if (dir) {
       // with a mouse/keyboard a focused dropdown uses up/down itself; on a TV the arrows always move on
       // (OK steps through the choices instead)
-      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !S.tv) return;
+      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !S.tv && !ownSelects()) return;
       e.preventDefault(); move(dir); return;
     }
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
@@ -1995,12 +2117,18 @@
       }).catch(() => {});
       return;
     }
+    // The remote's rewind / fast-forward: 10 seconds back / forward in the song
+    if (api.musicCmd && (e.key === 'MediaRewind' || e.key === 'MediaFastForward')) {
+      e.preventDefault();
+      api.parlorState().then((st) => { const pl = st && st.player; if (pl && pl.track) api.musicCmd('seek', Math.max(0, (pl.pos || 0) + (e.key === 'MediaRewind' ? -10 : 10))); }).catch(() => {});
+      return;
+    }
     if (api.musicCmd && (e.key === 'MediaPlayPause' || e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious')) {
       e.preventDefault(); api.musicCmd(e.key === 'MediaPlayPause' ? 'toggle' : e.key === 'MediaTrackNext' ? 'next' : 'prev'); return;
     }
     if (e.key === 'F11' && !S.tv && S.platform !== 'android') { e.preventDefault(); api.setConfig({ appFullscreen: !S.config.appFullscreen }).then((s) => { S = s; if (!$('#settings').hidden) renderSettings(); }); return; }
     if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type === 'checkbox') { e.preventDefault(); t.click(); return; }
-    if (e.key === 'Enter' && t.tagName === 'SELECT' && S.tv) { e.preventDefault(); cycleSelect(t); return; }
+    if ((e.key === 'Enter' || e.key === ' ') && t.tagName === 'SELECT' && ownSelects()) { e.preventDefault(); openSelect(t); return; }
     if (e.key === 'Enter' && t === document.body) { e.preventDefault(); activate(); return; }
     // OK on a highlighted line that isn't a button (a song in the Parlor): play it, like a click
     if (e.key === 'Enter' && t.matches && t.matches('[tabindex]') && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && !t.onkeydown) { e.preventDefault(); t.click(); return; }
@@ -2092,6 +2220,13 @@
     flashTimer = setTimeout(() => { el.hidden = true; }, 9000);
   }
   api.onPlaybackError(flash);
+  if (api.onPowerMenu) api.onPowerMenu(() => { hideSaver(); powerMenu(); });
+  if (api.onBrightness) api.onBrightness((p) => { hideSaver(); showBrightness(p); });
+  // Dropdowns open our own pop-up list on Linux (the system's menu looks out of place) and on any TV.
+  window.addEventListener('mousedown', (e) => {
+    const t = e.target && e.target.closest && e.target.closest('select');
+    if (t && ownSelects() && e.button === 0) { e.preventDefault(); t.focus({ preventScroll: true }); openSelect(t); }
+  }, true);
   if (api.onNotice) api.onNotice(flash);
   // full screen switched from the window itself (green button / menu): keep Settings in step
   if (api.onConfigChanged) api.onConfigChanged((s) => {
@@ -2162,6 +2297,7 @@
       recommend: (item) => recommendSheet(item),
       dismissRecs: async (ids) => { for (const id of ids) S = await api.dismissRec(id); },
       setSheetClosed: (fn) => { sheetClosed = fn; },
+      pickPath: (o) => pickPath(o), isLinux: () => isLinuxApp(),
     });
     const b = $('#parlor-btn');
     b.hidden = false;

@@ -57,11 +57,12 @@ UNIT
   in_chroot || systemctl restart bluealsa.service >/dev/null 2>&1 || true
 fi
 
-# ---- power button: press = sleep, hold 5 seconds = turn off -------------------------------------------
+# ---- power button: a press opens Screenroom's power menu (Sleep / Restart / Turn off; the app watches the
+# button itself, see screenroom-keys), holding it 5 seconds still turns the computer off ----------------------
 mkdir -p /etc/systemd/logind.conf.d
 cat > /etc/systemd/logind.conf.d/50-screenroom.conf <<'EOF'
 [Login]
-HandlePowerKey=suspend
+HandlePowerKey=ignore
 HandlePowerKeyLongPress=poweroff
 HandleSuspendKey=suspend
 HandleHibernateKey=ignore
@@ -79,6 +80,11 @@ ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{bDeviceClass}=
 ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", DRIVER=="usbhid", ATTR{bInterfaceProtocol}=="01", RUN+="/bin/sh -c 'echo enabled > /sys%p/../power/wakeup'"
 ACTION=="add", SUBSYSTEM=="pci", ATTR{class}=="0x0c0330", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
 EOF
+# Laptops: the brightness keys (Screenroom sets the screen's brightness itself; no desktop does it for us).
+cat > /etc/udev/rules.d/90-screenroom-backlight.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+EOF
+for b in /sys/class/backlight/*/brightness; do [ -e "$b" ] && chgrp video "$b" 2>/dev/null && chmod g+w "$b" 2>/dev/null; done
 # Let the app put the box to sleep (Settings -> Power -> Sleep).
 TVU="$(sed -n 's/.*subject.user == "\([^"]*\)".*/\1/p' /etc/polkit-1/rules.d/50-screenroom.rules 2>/dev/null | head -1)"
 TVU="${TVU:-tv}"
@@ -100,6 +106,7 @@ fi
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
+[ -f "$HERE/screenroom-keys.py" ] && install -m 0755 "$HERE/screenroom-keys.py" /usr/local/bin/screenroom-keys
 # the updater itself (Check for updates / Update from USB drive) comes along with each new version
 [ -f "$HERE/screenroom-update" ] && install -m 0755 "$HERE/screenroom-update" /usr/local/sbin/screenroom-update
 
@@ -112,7 +119,7 @@ echo 'options snd-intel-dspcfg dsp_driver=1' > /etc/modprobe.d/screenroom-sound.
 # ---- extra packages (fonts for Japanese / Chinese / Korean titles…) ------------------------------------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
   extra=()
-  for p in alsa-ucm-conf x11-xserver-utils fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
+  for p in alsa-ucm-conf x11-xserver-utils python3-evdev unclutter-xfixes fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
     dpkg -s "$p" >/dev/null 2>&1 || extra+=("$p")
   done
   if [ "${#extra[@]}" -gt 0 ]; then
