@@ -889,3 +889,7 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 #search { width: clamp(110px, 15vw, 230px); }
 @media (max-width: 1500px) { body.big #nav nav { gap: 16px; font-size: 16px; } body.big #pnav a { padding: 6px 10px; } }
 @media (max-width: 1250px) { #nav nav { gap: 12px; } #search { width: 110px; } }
+
+/* pieces only the 1990s theme shows (theme-90s.css) */
+.card .box3d, .card .sticker, .card .shine { display: none; }
+#fx { display: none; }

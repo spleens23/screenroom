@@ -107,6 +107,11 @@ install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-s
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
 [ -f "$HERE/screenroom-keys.py" ] && install -m 0755 "$HERE/screenroom-keys.py" /usr/local/bin/screenroom-keys
+# the 1990s theme's on-screen display lettering, for players that can't be pointed at Screenroom's own font folder
+if [ -d "$HERE/../mpv/fonts" ]; then
+  mkdir -p /usr/local/share/fonts/screenroom && cp -f "$HERE"/../mpv/fonts/*.ttf /usr/local/share/fonts/screenroom/ 2>/dev/null
+  command -v fc-cache >/dev/null && fc-cache -f /usr/local/share/fonts/screenroom >/dev/null 2>&1 || true
+fi
 # the updater itself (Check for updates / Update from USB drive) comes along with each new version
 [ -f "$HERE/screenroom-update" ] && install -m 0755 "$HERE/screenroom-update" /usr/local/sbin/screenroom-update
 

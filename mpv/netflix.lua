@@ -5,7 +5,7 @@ local mp = require 'mp'
 local utils = require 'mp.utils'
 local options = require 'mp.options'
 
-local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '', stats = '' }
+local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '', stats = '', theme = '' }
 options.read_options(o, 'netflix')
 
 -- ---------------------------------------------------------------- constants
@@ -18,6 +18,15 @@ local function bgr(hex) return hex:sub(5, 6) .. hex:sub(3, 4) .. hex:sub(1, 2) e
 local ACCENT = bgr(o.accent)
 local WHITE, GRAY, BLACK, PANEL = 'FFFFFF', 'B3B3B3', '000000', '181818'
 local FONT = (o.font ~= '') and ('\\fn' .. o.font) or ''
+-- 1990s theme: a VCR's on-screen display. White squarish lettering with a black edge, outlined boxes; pop-ups
+-- in the VCR's menu blue.
+local T90 = (o.theme == '1990s')
+local TEXT_EDGE = '\\bord0\\shad1\\4c&H000000&\\4a&H90&'
+if T90 then
+  FONT = '\\fnShare Tech Mono'
+  PANEL = 'B42212' -- (blue, in mpv's BGR order)
+  TEXT_EDGE = '\\bord2.5\\3c&H000000&\\shad0'
+end
 
 -- ---------------------------------------------------------------- state
 local W, H = 1920, 1080     -- virtual ASS canvas (height fixed at 1080, width follows window aspect)
@@ -95,8 +104,8 @@ local function esc(s) return (tostring(s or ''):gsub('[\\{}]', ''):gsub('\n', ' 
 
 local function text(x, y, str, fs, color, op, an, bold, extra)
   if op <= 0.003 or str == '' then return end
-  add(string.format('{\\an%d\\pos(%.1f,%.1f)%s\\fs%d\\bord0\\shad1\\4c&H000000&\\4a&H90&\\1c&H%s&\\1a%s\\b%d%s}%s',
-    an or 7, x, y, FONT, fs, color or WHITE, alpha(op), bold and 1 or 0, extra or '', esc(str)))
+  add(string.format('{\\an%d\\pos(%.1f,%.1f)%s\\fs%d%s\\1c&H%s&\\1a%s\\3a%s\\b%d%s}%s',
+    an or 7, x, y, FONT, fs, TEXT_EDGE, color or WHITE, alpha(op), alpha(op), (bold and not T90) and 1 or 0, extra or '', esc(str)))
 end
 
 local function gradient(y0, y1, op0, op1, k)
@@ -366,9 +375,10 @@ local function draw_menu(k)
       local spec = { onclick = function() S.col, S.row = ci, idx; apply_entry(ci, e) end, menu_item = { ci, idx } }
       hit(cx, ry, colw, rowh - 4, spec)
       local hovered = in_rect(spec, S.mx, S.my)
-      if focused or hovered then shape(rect(cx - 12, ry, colw + 24, rowh - 4), WHITE, 0.14 * k) end
-      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, WHITE, k) end
-      text(cx + 54, ry + (rowh - 4) / 2, trunc(e.label, 22), 30, e.selected and WHITE or GRAY, k, 4, e.selected)
+      local lit = T90 and (focused or hovered)
+      if focused or hovered then shape(rect(cx - 12, ry, colw + 24, rowh - 4), WHITE, (T90 and 1 or 0.14) * k) end
+      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, lit and PANEL or WHITE, k) end
+      text(cx + 54, ry + (rowh - 4) / 2, trunc(T90 and e.label:upper() or e.label, 22), 30, lit and PANEL or ((e.selected or T90) and WHITE or GRAY), k, 4, e.selected, lit and '\\bord0' or '')
       if e.sub ~= '' then text(cx + colw, ry + (rowh - 4) / 2, trunc(e.sub, 26), 22, GRAY, k * 0.8, 6, false) end
     end
   end
@@ -480,7 +490,101 @@ local function draw_badges(k)
   end
 end
 
+-- ---------------------------------------------------------------- the 1990s theme's controls
+-- Like a VCR / home player's on-screen display: what's playing, the audio and subtitle, top left; the time
+-- played and the running time over an outlined progress box; outlined buttons that say what they do (the one
+-- you're on fills in white).
+local function outline_box(x, y, w, h, k, fill)
+  local r = rect(x, y, w, h)
+  add(string.format('{\\an7\\pos(0,0)\\bord7\\shad0\\3c&H000000&\\1a&HFF&\\3a%s\\p1}%s{\\p0}', alpha(k), r))
+  add(string.format('{\\an7\\pos(0,0)\\bord4\\shad0\\3c&HF4F4F4&\\1c&HF4F4F4&\\1a%s\\3a%s\\p1}%s{\\p0}', fill and alpha(k) or '&HFF&', alpha(k), r))
+end
+local function audio_line()
+  local t = mp.get_property_native('current-tracks/audio') or {}
+  local bits = {}
+  local lang = t.lang and t.lang ~= '' and t.lang:upper() or nil
+  bits[#bits + 1] = (t.title and t.title ~= '' and t.title:upper()) or lang or 'TRACK ' .. tostring(t.id or 1)
+  if lang and t.title and t.title ~= '' then bits[#bits + 1] = lang end
+  if t.codec then bits[#bits + 1] = tostring(t.codec):upper():gsub('-', ' ') end
+  local ch = t['demux-channel-count']
+  if ch then bits[#bits + 1] = ch .. 'CH' end
+  for _, b in ipairs(badge_list()) do
+    if (b.name == 'ATMOS' or b.name == 'DTS:X') and b.note then bits[#bits + 1] = b.name .. ' ' .. b.note:upper() end
+  end
+  return 'AUDIO: ' .. table.concat(bits, ' ')
+end
+local function sub_line()
+  local t = mp.get_property_native('current-tracks/sub')
+  if not t then return 'SUBTITLE: (NONE)' end
+  local name = (t.title and t.title ~= '' and t.title) or (t.lang and t.lang ~= '' and t.lang) or ('TRACK ' .. tostring(t.id))
+  return 'SUBTITLE: ' .. tostring(name):upper()
+end
+local function draw_controls_90s(k)
+  local m = meta_for(mp.get_property('path'))
+  local pl = playlist_info()
+  local pos = S.scrub or S.pos
+  local dur = S.dur
+  local frac = (dur > 0) and clamp(pos / dur, 0, 1) or 0
+  local x0 = MARGIN + 10
+  -- what's playing
+  local ep = ((m.sub and m.sub ~= '') and (m.sub .. '  ') or '') .. (m.name or '')
+  local state = S.paused and 'PAUSE' or 'PLAY'
+  text(x0, 64, state .. '  ' .. trunc((m.title or ''):upper(), 40) .. (ep ~= '' and ('  ' .. trunc(ep:upper(), 30)) or ''), 42, WHITE, k, 7, false)
+  text(x0, 120, audio_line(), 36, WHITE, k, 7, false)
+  text(x0, 168, sub_line(), 36, WHITE, k, 7, false)
+  draw_battery(k, W - MARGIN, 90)
+
+  -- time played, running time, the progress box
+  local bx0, bx1 = MARGIN, W - MARGIN
+  local bw = bx1 - bx0
+  local by, bh = H - 238, 66
+  text(bx0 + 4, by - 14, fmt_time(pos), 38, WHITE, k, 1, false)
+  text(bx1 - 4, by - 14, fmt_time(dur), 38, WHITE, k, 3, false)
+  outline_box(bx0, by, bw, bh, k, false)
+  if frac > 0 then shape(rect(bx0 + 12, by + 12, (bw - 24) * frac, bh - 24), 'D4CDC9', k) end
+  local bar_focus = S.kbnav and S.focus == 'bar'
+  if bar_focus then text(W / 2, by - 14, 'LEFT / RIGHT: 10 SECONDS', 30, WHITE, k, 2, false) end
+  hit(bx0, by - 10, bw, bh + 20, {
+    is_bar = true,
+    ondrag = function(mx)
+      S.scrub = clamp((mx - bx0) / bw, 0, 1) * dur
+      mp.commandv('seek', string.format('%.2f', S.scrub), 'absolute+keyframes')
+    end,
+    onrelease = function()
+      if S.scrub then mp.commandv('seek', string.format('%.2f', S.scrub), 'absolute+exact') end
+      S.scrub = nil
+    end,
+  })
+  if bar_focus then
+    shape(rect(bx0 - 10, by - 10, bw + 20, 4), 'F4F4F4', k); shape(rect(bx0 - 10, by + bh + 6, bw + 20, 4), 'F4F4F4', k)
+  end
+
+  -- buttons
+  local cy, bhh = H - 112, 62
+  local function button(x, label, key, onclick, right)
+    local w = 44 + #label * 19
+    if right then x = x - w end
+    local spec = { onclick = onclick }
+    hit(x, cy, w, bhh, spec)
+    local on = (S.kbnav and S.focus == key) or in_rect(spec, S.mx, S.my)
+    outline_box(x, cy, w, bhh, k, on)
+    text(x + w / 2, cy + bhh / 2, label, 34, on and '1A1A1A' or WHITE, k, 5, false, on and '\\bord0' or '')
+    return right and (x - 22) or (x + w + 22)
+  end
+  local x = bx0
+  x = button(x, 'REW', 'rew', function() seek_by(-SKIP) end)
+  x = button(x, S.paused and 'PLAY' or 'PAUSE', 'play', toggle_pause)
+  x = button(x, 'FF', 'fwd', function() seek_by(SKIP) end)
+  if pl.next then x = button(x, 'NEXT EPISODE', 'next', play_next) end
+  x = button(x, 'AUDIO / SUBTITLE', 'subs', function() if S.menu then close_menu() else open_menu() end end)
+  local xr = bx1
+  xr = button(xr, 'STOP', 'stop', quit_player, true)
+  if o.tv ~= 'yes' then button(xr, 'FULL SCREEN', 'full', toggle_fullscreen, true) end
+  if S.menu then draw_menu(k) end
+end
+
 local function draw_controls(k)
+  if T90 then return draw_controls_90s(k) end
   local m = meta_for(mp.get_property('path'))
   local pl = playlist_info()
   local has_next = pl.next ~= nil
@@ -623,6 +727,7 @@ local function draw_toast()
   if not S.toast or t > S.toast_until then return end
   local k = clamp((S.toast_until - t) / 0.3, 0, 1)
   local w = 60 + #S.toast * 17
+  if T90 then text(MARGIN + 10, H / 2, S.toast:upper(), 40, WHITE, k, 4, false); return end
   shape(rect(W / 2 - w / 2, 120, w, 64), PANEL, 0.92 * k)
   text(W / 2, 152, S.toast, 30, WHITE, k, 5, true)
 end
@@ -722,7 +827,7 @@ local function render()
   end
 
   lines, hits = {}, {}
-  if S.pfade > 0 then draw_pause_overlay(S.pfade) end
+  if S.pfade > 0 and not T90 then draw_pause_overlay(S.pfade) end
   if S.fade > 0 then draw_controls(S.fade) end
   if S.loaded then draw_next_card() end
   draw_power()
@@ -845,10 +950,19 @@ local function focus_rows()
   if playlist_info().next then buttons[#buttons + 1] = 'next' end
   buttons[#buttons + 1] = 'subs'
   if o.tv ~= 'yes' then buttons[#buttons + 1] = 'full' end
+  if T90 then
+    local b = { 'rew', 'play', 'fwd' }
+    if playlist_info().next then b[#b + 1] = 'next' end
+    b[#b + 1] = 'subs'
+    if o.tv ~= 'yes' then b[#b + 1] = 'full' end
+    b[#b + 1] = 'stop'
+    return { { 'bar' }, b }
+  end
   return { { 'back' }, { 'bar' }, buttons }
 end
 local FOCUS_ACT = {
   back = function() quit_player() end,
+  stop = function() quit_player() end,
   bar = function() toggle_pause() end,
   play = function() toggle_pause() end,
   rew = function() seek_by(-SKIP) end,
@@ -874,9 +988,9 @@ local function nav(dir)
   if dir == 'left' or dir == 'right' then
     c = clamp(c + (dir == 'left' and -1 or 1), 1, #rows[r])
   else
-    if r == 3 then S.lastcol = c end
+    if r == #rows then S.lastcol = c end
     r = clamp(r + (dir == 'up' and -1 or 1), 1, #rows)
-    c = (r == 3) and clamp(S.lastcol, 1, #rows[3]) or 1
+    c = (r == #rows) and clamp(S.lastcol, 1, #rows[#rows]) or 1
   end
   S.focus = rows[r][c]
 end

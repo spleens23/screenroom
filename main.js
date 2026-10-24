@@ -336,6 +336,12 @@ function battery() {
   } catch { return null; }
 }
 
+// The look: each profile picks its own theme, unless "same theme for every profile" is ticked.
+function themeNow() {
+  if (config.themeAll) return { theme: config.theme === '1990s' ? '1990s' : '2020s', fx: !!config.retroFx };
+  const p = currentProfile();
+  return { theme: p && p.theme === '1990s' ? '1990s' : '2020s', fx: !!(p && p.retroFx) };
+}
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
@@ -344,6 +350,7 @@ function snapshot() {
     drives, mediaDir: mediaRoot,
     platform: process.platform,
     canDelete: isAppliance() || !!process.env.SCREENROOM_TEST_DELETE,
+    theme: themeNow().theme, retroFx: themeNow().fx,
     battery: battery(),
     playbackProblems: problems(),
     mpvFound: !!findBinary('mpv', config.mpvPath),
@@ -805,6 +812,22 @@ app.whenReady().then(async () => {
     return snapshot();
   });
 
+  // Settings → Theme. all: true = this look for every profile (and the profile picker); false = just this profile.
+  ipcMain.handle('set-theme', (_e, { theme, fx, all } = {}) => {
+    if (all === true && !config.themeAll) {
+      // ticking the box: everyone gets the look this profile has now
+      const t = themeNow();
+      config.theme = t.theme; config.retroFx = t.fx;
+    }
+    if (all != null) config.themeAll = !!all;
+    if (config.themeAll) {
+      if (theme != null) config.theme = theme === '1990s' ? '1990s' : '2020s';
+      if (fx != null) config.retroFx = !!fx;
+    } else if (currentId) profiles.setTheme(currentId, theme, fx);
+    writeJson(cfgFile(), config);
+    return snapshot();
+  });
+
   ipcMain.handle('audio-devices', async () => {
     if (!isAppliance()) return listAudioDevices(findBinary('mpv', config.mpvPath));
     const paired = ((await system.btStatus()).paired || []).map((d) => d.mac);
@@ -915,7 +938,7 @@ app.whenReady().then(async () => {
     try {
       playing = true;
       const sound = await soundFor();
-      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath() }, {
+      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath(), theme: themeNow().theme }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };
