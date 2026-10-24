@@ -177,6 +177,49 @@ function toolPaths() {
   };
 }
 
+// ---- Bluetooth speakers follow their connection (TV box) ------------------------------------------------
+// A speaker that connects (from Settings, or by switching it on) becomes the sound output; when the chosen
+// speaker switches off or goes out of range, sound goes back to Automatic. Music (and a film) move over live.
+const btSeen = new Map(); // mac -> connected, as of the last look
+let btGone = 0, btLooking = false, btWasOn = false, btTriedStart = false;
+async function setSoundOutput(id, message) {
+  config.audioDevice = id;
+  writeJson(cfgFile(), config);
+  sendWin('config-changed', snapshot());
+  if (message) sendWin('notice', message);
+  const s = await soundFor();
+  // A film moves off a speaker that went away straight away; onto a speaker only from the next film (it may be
+  // sending Dolby / DTS untouched, which a speaker can't take).
+  if (playing) { if (!id.startsWith('bt:')) control(['set', 'audio-device', s.audioDevice || 'auto']); }
+  else if (parlorApi && parlorApi.switchDevice) parlorApi.switchDevice(s.audioDevice || '');
+}
+async function btWatch() {
+  if (btLooking || audio.btIsBusy()) return;
+  btLooking = true;
+  try { await btWatchNow(); } finally { btLooking = false; }
+}
+async function btWatchNow() {
+  if (audio.btIsBusy()) return;
+  const paired = ((await system.btStatus()).paired || []).filter((d) => d.audio);
+  if (audio.btIsBusy()) return; // a connect started while we were looking
+  const choice = (config.audioDevice || '').toUpperCase();
+  const chosen = choice.startsWith('BT:') ? choice.slice(3) : '';
+  const now = paired.find((d) => d.connected && btSeen.get(d.mac) === false && d.mac !== chosen);
+  for (const d of paired) btSeen.set(d.mac, d.connected);
+  if (now) { btGone = 0; btWasOn = true; await setSoundOutput(`bt:${now.mac}`, playing ? `${now.name} connected: sound plays there from the next film` : `${now.name} connected: sound plays there now`); return; }
+  if (!chosen) { btGone = 0; return; }
+  const c = paired.find((d) => d.mac === chosen);
+  if (c && c.connected) { btGone = 0; btWasOn = true; btTriedStart = true; return; }
+  // The box just started and the speaker sound was on isn't connected: try once to reconnect it first.
+  if (!btTriedStart && c) { btTriedStart = true; await audio.btEnsureConnected(c.mac).catch(() => {}); return; }
+  // two looks in a row (about 8 seconds) so a speaker that's only reconnecting doesn't flip the sound back and forth
+  if (++btGone < 2) return;
+  btGone = 0;
+  // (no message when the box starts up with the speaker switched off)
+  await setSoundOutput('', btWasOn ? `${(c && c.name) || 'The Bluetooth speaker'} disconnected: sound is back on Automatic` : '');
+  btWasOn = false;
+}
+
 // ---- playback problems (Settings): films that stuttered, with what the box was doing -------------------
 const problemsFile = () => path.join(dataDir(), 'playback-problems.json');
 function problems() { try { return JSON.parse(fs.readFileSync(problemsFile(), 'utf8')); } catch { return []; } }
@@ -509,6 +552,7 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
   setInterval(backgroundScan, 30 * 60 * 1000);
   setInterval(pollDrives, 5000);
+  if (isAppliance()) setInterval(() => { btWatch().catch(() => {}); }, 4000);
   // Laptops: battery level for the top bar (and the player reads it itself)
   let lastBatt = '';
   setInterval(() => { const b = battery(); const k = JSON.stringify(b); if (k !== lastBatt) { lastBatt = k; sendWin('battery', b); } }, 30000);
@@ -624,9 +668,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('wifi-scan', linuxOnly(() => system.wifiScan()));
   ipcMain.handle('wifi-connect', linuxOnly((_e, ssid, pw) => system.wifiConnect(ssid, pw)));
   ipcMain.handle('bt-status', linuxOnly(() => system.btStatus()));
-  ipcMain.handle('bt-scan', linuxOnly(() => system.btScan()));
-  ipcMain.handle('bt-pair', linuxOnly((_e, mac) => system.btPair(mac)));
-  ipcMain.handle('bt-connect', linuxOnly((_e, mac) => system.btConnect(mac)));
+  const btBusyWhile = (fn) => async (...a) => { audio.btBusy(120000); try { return await fn(...a); } finally { audio.btBusy(0); } };
+  ipcMain.handle('bt-scan', linuxOnly(btBusyWhile(() => system.btScan())));
+  ipcMain.handle('bt-pair', linuxOnly(btBusyWhile((_e, mac) => system.btPair(mac))));
+  // Connecting a speaker means you want to hear it: sound goes there (the Connect button in Settings).
+  ipcMain.handle('bt-connect', linuxOnly(btBusyWhile(async (_e, mac) => {
+    const r = await system.btConnect(mac);
+    if (r.ok) {
+      const i = await audio.btInfo(mac);
+      if (i && i.audio) { btSeen.set(i.mac, true); btWasOn = true; await setSoundOutput(`bt:${i.mac}`); r.sound = true; }
+    }
+    return r;
+  })));
   ipcMain.handle('bt-remove', linuxOnly(async (_e, mac) => {
     const r = await system.btRemove(mac);
     // Forgetting the speaker that sound was going to: back to Automatic.

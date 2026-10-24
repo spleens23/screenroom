@@ -1185,7 +1185,9 @@
           d.audio && !d.connected ? h('button', { class: 'btn secondary', onclick: async (e) => {
             e.target.textContent = 'Connecting…';
             want = { label: 'Pair a device' };
-            const r = await api.btConnect(d.mac); flash(r.ok ? `${d.name} connected` : r.error); draw();
+            const r = await api.btConnect(d.mac);
+            if (r.sound) { S = await api.state(); showChoice(`bt:${d.mac}`, `Bluetooth: ${d.name}`); want = { label: 'Use the TV instead' }; }
+            flash(r.ok ? (r.sound ? `${d.name} connected: sound plays there now` : `${d.name} connected`) : r.error); draw();
           } }, 'Connect') : null,
           d.audio && !soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: () => useForSound(d) }, 'Play sound here') : null,
           d.audio && soundOn(d.mac) ? h('button', { class: 'btn secondary', onclick: async () => {
@@ -2090,6 +2092,7 @@
     flashTimer = setTimeout(() => { el.hidden = true; }, 9000);
   }
   api.onPlaybackError(flash);
+  if (api.onNotice) api.onNotice(flash);
   // full screen switched from the window itself (green button / menu): keep Settings in step
   if (api.onConfigChanged) api.onConfigChanged((s) => {
     S = s; drawProfileButton();

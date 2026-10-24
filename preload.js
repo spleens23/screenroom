@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('api', {
   onPlaybackError: (cb) => ipcRenderer.on('playback-error', (_e, m) => cb(m)),
   onPlaybackEnded: (cb) => ipcRenderer.on('playback-ended', (_e, s) => cb(s)),
   onConfigChanged: (cb) => ipcRenderer.on('config-changed', (_e, s) => cb(s)),
+  onNotice: (cb) => ipcRenderer.on('notice', (_e, m) => cb(m)),
   // Parlor (music)
   parlorState: () => ipcRenderer.invoke('parlor-state'),
   parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),
