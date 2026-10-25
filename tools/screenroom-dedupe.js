@@ -27,6 +27,7 @@ const core = require('../lib/media-core');
 const { removeMedia, under } = require('../lib/cleanup');
 const { defaultMediaDir } = require('../lib/transfer');
 
+const plainName = (t) => String(t || '').replace(/\s*[\[(](19|20)\d\d[\])]\s*$/, '').trim();
 // ---- where things are ----------------------------------------------------------------------------------------
 function defaultDataDir() {
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'screenroom');
@@ -114,7 +115,7 @@ function plan({ dataDir = defaultDataDir(), drives = driveMounts() } = {}) {
   // films: the same title (and year), whatever the quality words in the name
   for (const g of core.groupMovies(items.filter((it) => !it.tv))) {
     if (g.versions.length < 2) continue;
-    groups.push({ kind: 'movie', title: g.title + (g.year ? ` (${g.year})` : ''), items: g.versions });
+    groups.push({ kind: 'movie', title: plainName(g.title) + (g.year ? ` (${g.year})` : ''), items: g.versions });
   }
   // episodes: the same show, season and episode
   const eps = new Map();

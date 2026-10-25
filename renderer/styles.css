@@ -895,3 +895,7 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 /* pieces only the 1990s theme shows (theme-90s.css) */
 .card .box3d, .card .sticker, .card .shine { display: none; }
 #fx { display: none; }
+
+/* Settings → Subtitles: the OpenSubtitles account */
+.osub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.osub .pin-input { flex: 1 1 180px; min-width: 0; margin: 0; max-width: none; font-size: 15px; text-align: left; letter-spacing: 0; }

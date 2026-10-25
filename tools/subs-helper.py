@@ -5,6 +5,8 @@ Screenroom subtitle helper (used by screenroom-subs; works on its own too).
   subs-helper.py ocr <file> [--stream N]     read a DVD's picture subtitles (VobSub) and print them as text:
                                              one JSON line per subtitle, {"start": s, "end": s, "text": "..."}
                                              <file> is a film with a DVD subtitle track, or a VobSub .idx file
+  subs-helper.py align <film> <file.srt>     line a subtitle file up with the film's speech; prints
+                                             {"ok": bool, "a": speed, "b": shift_s, "z": confidence}
   subs-helper.py sync <dvd> <other>          line up two copies of the same film by their sound; prints
                                              {"ok": bool, "a": speed, "b": shift_s, "score": n} so that
                                              time_in_other = a * time_in_dvd + b
@@ -229,6 +231,65 @@ def cmd_sync(dvd, other):
     print(json.dumps({'ok': bool(score >= 7 and z > 6), 'a': a, 'b': b, 'score': score, 'z': round(z, 1)}))
 
 
+# ---- lining a subtitle file up with a film's speech (for subtitles from the internet) ----------------------
+def speech(path):
+    """How speech-like the sound is, 100 times a second: the share of the energy in the voice band."""
+    p = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-map', '0:a:0', '-ac', '1', '-ar', '8000', '-f', 's16le', '-'],
+                       capture_output=True)
+    x = np.frombuffer(p.stdout, dtype=np.int16).astype(np.float32)
+    if x.size < 8000 * 60:
+        raise RuntimeError('no usable sound')
+    hop, n = 80, 256
+    frames = (x.size - n) // hop
+    out = np.empty(frames, dtype=np.float32)
+    win = np.hanning(n).astype(np.float32)
+    freqs = np.fft.rfftfreq(n, 1 / 8000)
+    band = (freqs >= 300) & (freqs <= 3000)
+    for c0 in range(0, frames, 50000):
+        c1 = min(frames, c0 + 50000)
+        idx = np.arange(c0, c1)[:, None] * hop + np.arange(n)[None, :]
+        spec = np.abs(np.fft.rfft(x[idx] * win, axis=1)) ** 2
+        tot = spec.sum(axis=1) + 1e-3
+        out[c0:c1] = (spec[:, band].sum(axis=1) / tot) * np.log1p(tot)
+    out = (out - np.median(out)) / (out.std() + 1e-9)
+    return np.tanh(out)
+
+
+def cmd_align(film, srt):
+    import re as _re
+    text = open(srt, encoding='utf-8', errors='replace').read().replace('\r', '')
+    cues = []
+    for m in _re.finditer(r'(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)', text):
+        g = [int(v) for v in m.groups()]
+        cues.append((g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000, g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000))
+    if len(cues) < 20:
+        err('too few subtitles to line up')
+    try:
+        S = speech(film)
+    except Exception as e:
+        err(str(e))
+    nfft = 1 << int(np.ceil(np.log2(S.size * 2 + 1)))
+    FS = np.fft.rfft(S, nfft)
+    best = None
+    maxlag = 600 * RATE  # up to 10 minutes either way
+    for r in RATIOS:
+        mask = np.full(S.size, -1.0, dtype=np.float32)  # -1 = nobody talking, +1 = a subtitle is up
+        for a, b in cues:
+            i0, i1 = int(a * r * RATE), int(b * r * RATE)
+            if i1 > 0 and i0 < S.size:
+                mask[max(0, i0):min(S.size, i1)] = 1.0
+        c = np.fft.irfft(FS * np.conj(np.fft.rfft(mask, nfft)), nfft)
+        lags = np.concatenate([np.arange(0, maxlag), np.arange(nfft - maxlag, nfft)])
+        vals = c[lags]
+        k = int(vals.argmax())
+        z = (vals[k] - vals.mean()) / (vals.std() + 1e-9)
+        lag = lags[k] if lags[k] < nfft // 2 else lags[k] - nfft
+        if best is None or z > best[0]:
+            best = (z, r, lag / RATE)
+    z, r, b = best
+    print(json.dumps({'ok': bool(z > 6), 'a': r, 'b': float(b), 'z': round(float(z), 1)}))
+
+
 def main(argv):
     if len(argv) >= 2 and argv[0] == 'ocr':
         stream = None
@@ -237,6 +298,8 @@ def main(argv):
         return cmd_ocr(argv[1], stream)
     if len(argv) >= 3 and argv[0] == 'sync':
         return cmd_sync(argv[1], argv[2])
+    if len(argv) >= 3 and argv[0] == 'align':
+        return cmd_align(argv[1], argv[2])
     print(__doc__)
     return 2
 

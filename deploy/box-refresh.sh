@@ -124,6 +124,13 @@ APP="\$(readlink -f "\$(command -v screenroom)")"
 exec env ELECTRON_RUN_AS_NODE=1 "\$APP" "\$(dirname "\$APP")/resources/app.asar/tools/screenroom-subs.js" --data "${TVHOME:-/home/tv}/.config/screenroom" "\$@"
 EOF
 chmod 0755 /usr/local/bin/screenroom-subs
+cat > /usr/local/bin/screenroom-getsubs <<EOF
+#!/bin/sh
+# English subtitles from OpenSubtitles.com for films without any (screenroom-getsubs --help).
+APP="\$(readlink -f "\$(command -v screenroom)")"
+exec env ELECTRON_RUN_AS_NODE=1 "\$APP" "\$(dirname "\$APP")/resources/app.asar/tools/screenroom-getsubs.js" --data "${TVHOME:-/home/tv}/.config/screenroom" "\$@"
+EOF
+chmod 0755 /usr/local/bin/screenroom-getsubs
 # the 1990s theme's on-screen display lettering, for players that can't be pointed at Screenroom's own font folder
 if [ -d "$HERE/../mpv/fonts" ]; then
   mkdir -p /usr/local/share/fonts/screenroom && cp -f "$HERE"/../mpv/fonts/*.ttf /usr/local/share/fonts/screenroom/ 2>/dev/null

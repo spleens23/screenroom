@@ -342,10 +342,15 @@ function themeNow() {
   const p = currentProfile();
   return { theme: p && p.theme === '1990s' ? '1990s' : '2020s', fx: !!(p && p.retroFx) };
 }
+// (the OpenSubtitles password stays in the main process)
+function publicConfig() {
+  const o = config.opensubtitles;
+  return o ? { ...config, opensubtitles: { apiKey: o.apiKey || '', username: o.username || '', hasPassword: !!o.password } } : config;
+}
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
-    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config, tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, recs: recs ? recs.all() : [], watchedBy: watchedBy(), duplicates: (library.dups || []).length,
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config: publicConfig(), tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, recs: recs ? recs.all() : [], watchedBy: watchedBy(), duplicates: (library.dups || []).length,
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
@@ -766,19 +771,28 @@ app.whenReady().then(async () => {
   // Settings → Subtitles: tools/screenroom-subs.js (also "screenroom-subs" on the box) makes English subtitles
   // for films without any, from a DVD copy's subtitle pictures. Runs in the background; progress goes to Settings.
   let subsJob = null; // { running, i, total, title, made, failed }
-  ipcMain.handle('subs-plan', async () => {
+  // tool: 'dvd' = read them from a DVD copy (screenroom-subs), 'net' = download them (screenroom-getsubs)
+  const SUBS_TOOL = { dvd: 'screenroom-subs.js', net: 'screenroom-getsubs.js' };
+  ipcMain.handle('subs-plan', async (_e, tool = 'dvd') => {
     if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t change the films.' };
     await doScan();
-    return runDedupe([], 'screenroom-subs.js');
+    return runDedupe([], SUBS_TOOL[tool] || SUBS_TOOL.dvd);
+  });
+  ipcMain.handle('osub-account', (_e, a = {}) => {
+    const cur = config.opensubtitles || {};
+    config.opensubtitles = { apiKey: String(a.apiKey != null ? a.apiKey : cur.apiKey || '').trim(), username: String(a.username != null ? a.username : cur.username || '').trim(),
+      password: a.password ? String(a.password) : (cur.password || '') };
+    writeJson(cfgFile(), config);
+    return snapshot();
   });
   ipcMain.handle('subs-status', () => subsJob);
-  ipcMain.handle('subs-start', async (_e, paths) => {
+  ipcMain.handle('subs-start', async (_e, paths, tool = 'dvd') => {
     if (subsJob && subsJob.running) return { error: 'Already making subtitles.' };
     const list = (Array.isArray(paths) ? paths : []).filter((x) => typeof x === 'string' && x);
     if (!list.length) return { error: 'Nothing chosen.' };
-    subsJob = { running: true, i: 0, total: list.length, title: '', made: 0, failed: [] };
+    subsJob = { running: true, tool, i: 0, total: list.length, title: '', made: 0, failed: [] };
     // (at low priority, so a film playing meanwhile doesn't stutter)
-    const cmd = [process.execPath, path.join(__dirname, 'tools', 'screenroom-subs.js'), '--json', '--apply', '--data', dataDir(), ...list.flatMap((x) => ['--only', x])];
+    const cmd = [process.execPath, path.join(__dirname, 'tools', SUBS_TOOL[tool] || SUBS_TOOL.dvd), '--json', '--apply', '--data', dataDir(), ...list.flatMap((x) => ['--only', x])];
     const nice = process.platform === 'linux' && fs.existsSync('/usr/bin/nice');
     const child = spawn(nice ? '/usr/bin/nice' : cmd[0], nice ? ['-n', '15', ...cmd] : cmd.slice(1),
       { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -790,7 +804,7 @@ app.whenReady().then(async () => {
         const line = buf.slice(0, k); buf = buf.slice(k + 1);
         let m; try { m = JSON.parse(line); } catch { continue; }
         if (m.progress != null) Object.assign(subsJob, { i: m.progress, total: m.total, title: m.title });
-        if (m.done) Object.assign(subsJob, { made: m.made, failed: m.failed || [] });
+        if (m.done) Object.assign(subsJob, { made: m.made, failed: m.failed || [], stopped: m.stopped || null });
         if (m.error) subsJob.error = m.error;
         sendWin('subs-progress', subsJob);
       }
@@ -803,7 +817,8 @@ app.whenReady().then(async () => {
       await doScan().catch(() => {});
       sendWin('library-updated', snapshot());
       sendWin('subs-progress', subsJob);
-      sendWin('notice', subsJob.error ? `Subtitles: ${subsJob.error}` : `Made English subtitles for ${subsJob.made} of ${subsJob.total}${subsJob.failed.length ? ` (${subsJob.failed.length} couldn't be lined up)` : ''}`);
+      sendWin('notice', subsJob.error ? `Subtitles: ${subsJob.error}`
+        : `${subsJob.tool === 'net' ? 'Downloaded' : 'Made'} English subtitles for ${subsJob.made} of ${subsJob.total}${subsJob.failed.length ? ` (${subsJob.failed.length} not found or couldn't be lined up)` : ''}${subsJob.stopped ? `. ${subsJob.stopped}` : ''}`);
     });
     return { ok: true, job: subsJob };
   });

@@ -1353,39 +1353,55 @@
   // Settings → Subtitles: English subtitles for films without any, made from another copy's (a DVD's subtitle
   // pictures are read into text on this box; no internet needed). It runs in the background.
   let subsJob = null;
-  const subsLine = (j) => (j && j.running ? `Making subtitles: ${j.i + 1} of ${j.total}${j.title ? ` · ${j.title}` : ''}…` : '');
+  const subsLine = (j) => (j && j.running ? `${j.tool === 'net' ? 'Getting' : 'Making'} subtitles: ${j.i + 1} of ${j.total}${j.title ? ` · ${j.title}` : ''}…` : '');
   function subsBlock() {
     const status = h('p', { class: 'am-hint subs-status' }, subsLine(subsJob));
     if (api.subsStatus) api.subsStatus().then((j) => { subsJob = j; status.textContent = subsLine(j); }).catch(() => {});
+    const o = S.config.opensubtitles || {};
+    const key = h('input', { type: 'text', class: 'pin-input', 'data-key': 'osub-key', placeholder: 'API key', value: o.apiKey || '', autocomplete: 'off' });
+    const user = h('input', { type: 'text', class: 'pin-input', 'data-key': 'osub-user', placeholder: 'Username', value: o.username || '', autocomplete: 'off' });
+    const pass = h('input', { type: 'password', class: 'pin-input', 'data-key': 'osub-pass', placeholder: o.hasPassword ? 'Password (saved)' : 'Password', autocomplete: 'off' });
+    const hasAccount = !!(o.apiKey);
     return h('div', { class: 'am-card' },
-      h('p', { class: 'am-hint' }, 'English subtitles for the films and episodes that don’t have any, made from another copy that does (your DVD copies’ subtitles, read on this box). The copy can be on this box or on a plugged-in drive. No internet needed.'),
+      h('p', { class: 'am-hint' }, 'English subtitles for the films and episodes that don’t have any, downloaded from OpenSubtitles.com. Each film is looked up by its fingerprint first (subtitles made for exactly that copy), then by its title; ones made for another copy are lined up with the film’s speech.'),
+      h('div', { class: 'osub' }, key, user, pass,
+        h('button', { class: 'btn secondary', 'data-key': 'osub-save', onclick: async () => {
+          S = await api.osubAccount({ apiKey: key.value, username: user.value, password: pass.value });
+          flash('OpenSubtitles account saved'); renderSettings();
+        } }, 'Save account')),
+      h('p', { class: 'am-hint' }, 'Needs a free account at opensubtitles.com and an API key from opensubtitles.com/consumers (both are free). OpenSubtitles allows a set number of downloads a day; the rest wait for the next day.'),
+      h('p', { class: 'am-hint' }, 'No internet on this box? Plug in a network cable, or plug the drive with your films into a computer that has internet (your laptop with Screenroom) and get them there: they’re saved next to the films on the drive and come along when you copy or sync the films to this box.'),
       status,
-      h('div', { class: 'btns' }, h('button', { class: 'btn secondary', 'data-key': 'subs', onclick: () => subsSheet() }, 'Make English subtitles…')));
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn secondary', 'data-key': 'subs-net', disabled: hasAccount ? undefined : 'disabled', onclick: () => subsSheet('net') }, 'Get English subtitles…'),
+        h('button', { class: 'btn secondary', 'data-key': 'subs', onclick: () => subsSheet('dvd') }, 'Make them from DVD copies…')));
   }
   if (api.onSubsProgress) api.onSubsProgress((j) => { subsJob = j; const el = document.querySelector('#settings .subs-status'); if (el) el.textContent = subsLine(j); });
-  async function subsSheet() {
+  async function subsSheet(tool) {
+    const net = tool === 'net';
     if (subsJob && subsJob.running) { flash(subsLine(subsJob)); return; }
     flash('Looking for films without subtitles…');
-    const p = await api.subsPlan();
+    const p = await api.subsPlan(tool);
     if (!p || p.error) { showNotice('Couldn’t check subtitles', (p && p.error) || 'Something went wrong.'); return; }
     if (p.tools && p.tools.length) { showNotice('Something’s missing', `Making subtitles needs ${p.tools.join(', ')}. Update the box (Settings → System) and try again.`); return; }
     if (!p.jobs.length) {
-      showNotice('Nothing to make', p.missing.length ? `These have no copy with English subtitles to take them from: ${p.missing.slice(0, 12).map((m) => m.title).join(', ')}${p.missing.length > 12 ? ` and ${p.missing.length - 12} more` : ''}.` : 'Every film and episode already has English subtitles.');
+      showNotice('Nothing to do', !net && p.missing && p.missing.length ? `These have no copy with English subtitles to take them from: ${p.missing.slice(0, 12).map((m) => m.title).join(', ')}${p.missing.length > 12 ? ` and ${p.missing.length - 12} more` : ''}.` : 'Every film and episode already has English subtitles.');
       return;
     }
-    const picked = new Set(p.jobs.map((j) => j.target.path));
+    const keyOf = (j) => (net ? j.path : j.target.path);
+    const picked = new Set(p.jobs.map(keyOf));
     const list = h('div', { class: 'fpick' });
     const goBtn = h('button', { class: 'btn primary', onclick: () => go() });
-    const drawFoot = () => { goBtn.textContent = picked.size ? `Make ${picked.size} subtitle file${picked.size === 1 ? '' : 's'}` : 'Make subtitles'; goBtn.disabled = !picked.size; };
+    const drawFoot = () => { goBtn.textContent = picked.size ? `${net ? 'Get' : 'Make'} ${picked.size} subtitle file${picked.size === 1 ? '' : 's'}` : (net ? 'Get subtitles' : 'Make subtitles'); goBtn.disabled = !picked.size; };
     function draw(focusPath) {
       const rows = p.jobs.map((j) => {
-        const on = picked.has(j.target.path);
+        const k = keyOf(j), on = picked.has(k);
         return h('div', { class: 'fpick-row' + (on ? ' on' : '') },
-          h('button', { class: 'fpick-main', 'data-path': j.target.path, onclick: () => { if (on) picked.delete(j.target.path); else picked.add(j.target.path); draw(j.target.path); } },
-            h('span', { class: 'fpick-box' }, on ? '✓' : ''), h('span', { class: 'fpick-name' }, `${j.title} · ${j.target.quality}`),
-            h('small', {}, `from the ${j.source.quality} copy${j.source.onDrive ? ' (on a drive)' : ''}`)));
+          h('button', { class: 'fpick-main', 'data-path': k, onclick: () => { if (on) picked.delete(k); else picked.add(k); draw(k); } },
+            h('span', { class: 'fpick-box' }, on ? '✓' : ''), h('span', { class: 'fpick-name' }, `${j.title} · ${net ? j.quality : j.target.quality}`),
+            h('small', {}, net ? (j.onDrive ? 'on a drive' : '') : `from the ${j.source.quality} copy${j.source.onDrive ? ' (on a drive)' : ''}`)));
       });
-      if (p.missing.length) rows.push(h('p', { class: 'am-hint' }, `No copy with English subtitles for: ${p.missing.slice(0, 20).map((m) => m.title).join(', ')}${p.missing.length > 20 ? ` and ${p.missing.length - 20} more` : ''}.`));
+      if (!net && p.missing && p.missing.length) rows.push(h('p', { class: 'am-hint' }, `No copy with English subtitles for: ${p.missing.slice(0, 20).map((m) => m.title).join(', ')}${p.missing.length > 20 ? ` and ${p.missing.length - 20} more` : ''}.`));
       list.replaceChildren(...rows);
       drawFoot();
       const f = focusPath ? list.querySelector(`[data-path="${CSS.escape(focusPath)}"]`) : list.querySelector('button.fpick-main');
@@ -1395,14 +1411,16 @@
       const paths = [...picked];
       if (!paths.length) return;
       closeSheet(true);
-      const r = await api.subsStart(paths);
+      const r = await api.subsStart(paths, tool);
       if (!r || r.error) { showNotice('Couldn’t start', (r && r.error) || 'Something went wrong.'); return; }
       subsJob = r.job;
-      flash(`Making subtitles in the background (a few minutes a film). You can keep watching; Settings shows how far it’s got.`);
+      flash(net ? 'Getting subtitles in the background. Settings shows how far it’s got.' : 'Making subtitles in the background (a few minutes a film). You can keep watching; Settings shows how far it’s got.');
       if (!$('#settings').hidden) renderSettings();
     }
-    sheet('files', h('h2', {}, 'Make English subtitles'),
-      h('p', { class: 'am-hint' }, `${p.jobs.length} film${p.jobs.length === 1 ? '' : 's'} or episode${p.jobs.length === 1 ? '' : 's'} without English subtitles have a copy with them. The subtitles are read from that copy, lined up with this one by the sound, and saved beside it. OK unticks one.`),
+    sheet('files', h('h2', {}, net ? 'Get English subtitles' : 'Make English subtitles'),
+      h('p', { class: 'am-hint' }, net
+        ? `${p.jobs.length} film${p.jobs.length === 1 ? '' : 's'} or episode${p.jobs.length === 1 ? '' : 's'} without English subtitles. Each gets the best match from OpenSubtitles, saved beside it. OK unticks one.`
+        : `${p.jobs.length} film${p.jobs.length === 1 ? '' : 's'} or episode${p.jobs.length === 1 ? '' : 's'} without English subtitles have a copy with them. The subtitles are read from that copy, lined up with this one by the sound, and saved beside it. OK unticks one.`),
       list,
       h('div', { class: 'btns sheet-foot' }, goBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
     draw();

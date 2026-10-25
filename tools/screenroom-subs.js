@@ -47,6 +47,7 @@ function driveMounts() {
   return out;
 }
 
+const plainName = (t) => String(t || '').replace(/\s*[\[(](19|20)\d\d[\])]\s*$/, '').trim();
 // ---- what has English subtitles ---------------------------------------------------------------------------------
 const isEng = (l) => /^(en|eng|english)$/i.test(l || '');
 const isUnknown = (l) => !l || /^(und|unk|unknown)$/i.test(l);
@@ -96,7 +97,7 @@ function plan({ dataDir = defaultDataDir(), drives = driveMounts() } = {}) {
   const onDrive = (p) => drives.some((m) => p === m || under(p, m));
   const items = loadItems(dataDir);
   const groups = [];
-  for (const g of core.groupMovies(items.filter((it) => !it.tv))) groups.push({ title: g.title + (g.year ? ` (${g.year})` : ''), items: g.versions });
+  for (const g of core.groupMovies(items.filter((it) => !it.tv))) groups.push({ title: plainName(g.title) + (g.year ? ` (${g.year})` : ''), items: g.versions });
   const eps = new Map();
   for (const it of items.filter((x) => x.tv)) {
     const k = [core.movieTitleKey(it.tv.series) || it.tv.series.toLowerCase(), it.tv.season, it.tv.episode, it.tv.episodeEnd || '', it.tv.part || ''].join('|');
@@ -229,5 +230,5 @@ async function main(argv) {
   return 0;
 }
 
-module.exports = { plan, makeOne, hasEnglish, sourceOf };
+module.exports = { plan, makeOne, hasEnglish, sourceOf, loadItems, driveMounts, defaultDataDir, describe, parseSrt, srtTime, stem, helperPath, run, lastJson };
 if (require.main === module) main(process.argv.slice(2)).then((code) => process.exit(code), (e) => { console.error(e.message); process.exit(1); });
