@@ -89,12 +89,12 @@ const LANG = { eng: 'English', en: 'English', spa: 'Spanish', es: 'Spanish', fra
 const langName = (l) => LANG[l] || l.toUpperCase();
 // What the removed copy has that the kept one doesn't (another language, subtitles), so you can decide.
 function losses(keep, drop) {
-  const langs = (it, k) => new Set((it[k] || []).map((t) => (t.lang || '').toLowerCase()).filter((l) => l && l !== 'und'));
+  const langs = (it, k) => new Set((it[k] || []).map((t) => (t.lang || '').toLowerCase()).filter((l) => l && l !== 'und').map(langName));
   const out = [];
   const ka = langs(keep, 'audio'), da = [...langs(drop, 'audio')].filter((l) => !ka.has(l));
-  if (da.length) out.push(`${da.map(langName).join(', ')} audio`);
+  if (da.length) out.push(`${da.join(', ')} audio`);
   const ks = langs(keep, 'subs'), ds = [...langs(drop, 'subs')].filter((l) => !ks.has(l));
-  if (ds.length) out.push(`${ds.map(langName).join(', ')} subtitles`);
+  if (ds.length) out.push(`${ds.join(', ')} subtitles`);
   if (!(keep.subs || []).length && (drop.subs || []).length && !ds.length) out.push('subtitles');
   return out;
 }
@@ -104,7 +104,7 @@ function loadItems(dataDir) {
   const file = path.join(dataDir, 'library.json');
   let db;
   try { db = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error(`Couldn't read Screenroom's library list (${file}). Open Screenroom once so it can look at your folders.`); }
-  return Object.values(db).map((it) => core.applyTv(it)).filter((it) => it && it.path && fs.existsSync(it.path));
+  return require('../lib/library').withSidecarSubs(Object.values(db).map((it) => core.applyTv(it)).filter((it) => it && it.path && fs.existsSync(it.path)));
 }
 
 function plan({ dataDir = defaultDataDir(), drives = driveMounts() } = {}) {

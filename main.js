@@ -748,8 +748,8 @@ app.whenReady().then(async () => {
   });
   // Settings → Free up space → Remove lower-quality copies: tools/screenroom-dedupe.js (also a program of its own,
   // "screenroom-dedupe" on the box) finds films and episodes stored more than once and keeps the best copy.
-  const runDedupe = (args) => new Promise((resolve) => {
-    execFile(process.execPath, [path.join(__dirname, 'tools', 'screenroom-dedupe.js'), '--json', '--data', dataDir(), ...args],
+  const runDedupe = (args, tool = 'screenroom-dedupe.js') => new Promise((resolve) => {
+    execFile(process.execPath, [path.join(__dirname, 'tools', tool), '--json', '--data', dataDir(), ...args],
       { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 }, (err, stdout, stderr) => {
         try { resolve(JSON.parse(String(stdout).trim().split('\n').pop())); }
         catch { resolve({ error: String(stderr || (err && err.message) || 'It stopped unexpectedly.').trim().split('\n').pop() }); }
@@ -763,6 +763,51 @@ app.whenReady().then(async () => {
     if (!p.error) p.free = await transfer.freeBytes(mediaRoot || os.homedir());
     return p;
   });
+  // Settings → Subtitles: tools/screenroom-subs.js (also "screenroom-subs" on the box) makes English subtitles
+  // for films without any, from a DVD copy's subtitle pictures. Runs in the background; progress goes to Settings.
+  let subsJob = null; // { running, i, total, title, made, failed }
+  ipcMain.handle('subs-plan', async () => {
+    if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t change the films.' };
+    await doScan();
+    return runDedupe([], 'screenroom-subs.js');
+  });
+  ipcMain.handle('subs-status', () => subsJob);
+  ipcMain.handle('subs-start', async (_e, paths) => {
+    if (subsJob && subsJob.running) return { error: 'Already making subtitles.' };
+    const list = (Array.isArray(paths) ? paths : []).filter((x) => typeof x === 'string' && x);
+    if (!list.length) return { error: 'Nothing chosen.' };
+    subsJob = { running: true, i: 0, total: list.length, title: '', made: 0, failed: [] };
+    // (at low priority, so a film playing meanwhile doesn't stutter)
+    const cmd = [process.execPath, path.join(__dirname, 'tools', 'screenroom-subs.js'), '--json', '--apply', '--data', dataDir(), ...list.flatMap((x) => ['--only', x])];
+    const nice = process.platform === 'linux' && fs.existsSync('/usr/bin/nice');
+    const child = spawn(nice ? '/usr/bin/nice' : cmd[0], nice ? ['-n', '15', ...cmd] : cmd.slice(1),
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let buf = '', errText = '';
+    child.stdout.on('data', (d) => {
+      buf += d;
+      let k;
+      while ((k = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, k); buf = buf.slice(k + 1);
+        let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m.progress != null) Object.assign(subsJob, { i: m.progress, total: m.total, title: m.title });
+        if (m.done) Object.assign(subsJob, { made: m.made, failed: m.failed || [] });
+        if (m.error) subsJob.error = m.error;
+        sendWin('subs-progress', subsJob);
+      }
+    });
+    child.stderr.on('data', (d) => { errText = (errText + d).slice(-2000); });
+    child.on('error', (e) => { subsJob.error = e.message; });
+    child.on('exit', async () => {
+      subsJob.running = false;
+      if (!subsJob.made && !subsJob.error && errText.trim()) subsJob.error = errText.trim().split('\n').pop();
+      await doScan().catch(() => {});
+      sendWin('library-updated', snapshot());
+      sendWin('subs-progress', subsJob);
+      sendWin('notice', subsJob.error ? `Subtitles: ${subsJob.error}` : `Made English subtitles for ${subsJob.made} of ${subsJob.total}${subsJob.failed.length ? ` (${subsJob.failed.length} couldn't be lined up)` : ''}`);
+    });
+    return { ok: true, job: subsJob };
+  });
+
   ipcMain.handle('dedupe-apply', async (_e, paths) => {
     if (!canDelete()) return { error: 'Only on the Screenroom box.' };
     if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t delete anything.' };

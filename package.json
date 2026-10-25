@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.screenroom.app",
     "productName": "Screenroom",
-    "copyright": "Copyright © Screenroom",
+    "copyright": "Copyright \u00a9 Screenroom",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -100,7 +100,10 @@
         "libgbm1"
       ],
       "afterInstall": "build/deb-after-install.sh"
-    }
+    },
+    "asarUnpack": [
+      "tools/*.py"
+    ]
   },
   "license": "MIT",
   "dependencies": {

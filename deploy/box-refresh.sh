@@ -117,6 +117,13 @@ APP="\$(readlink -f "\$(command -v screenroom)")"
 exec env ELECTRON_RUN_AS_NODE=1 "\$APP" "\$(dirname "\$APP")/resources/app.asar/tools/screenroom-dedupe.js" --data "${TVHOME:-/home/tv}/.config/screenroom" "\$@"
 EOF
 chmod 0755 /usr/local/bin/screenroom-dedupe
+cat > /usr/local/bin/screenroom-subs <<EOF
+#!/bin/sh
+# English subtitles for films without any, from another copy's DVD subtitles (screenroom-subs --help).
+APP="\$(readlink -f "\$(command -v screenroom)")"
+exec env ELECTRON_RUN_AS_NODE=1 "\$APP" "\$(dirname "\$APP")/resources/app.asar/tools/screenroom-subs.js" --data "${TVHOME:-/home/tv}/.config/screenroom" "\$@"
+EOF
+chmod 0755 /usr/local/bin/screenroom-subs
 # the 1990s theme's on-screen display lettering, for players that can't be pointed at Screenroom's own font folder
 if [ -d "$HERE/../mpv/fonts" ]; then
   mkdir -p /usr/local/share/fonts/screenroom && cp -f "$HERE"/../mpv/fonts/*.ttf /usr/local/share/fonts/screenroom/ 2>/dev/null
@@ -134,7 +141,7 @@ echo 'options snd-intel-dspcfg dsp_driver=1' > /etc/modprobe.d/screenroom-sound.
 # ---- extra packages (fonts for Japanese / Chinese / Korean titles…) ------------------------------------------
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
   extra=()
-  for p in alsa-ucm-conf x11-xserver-utils python3-evdev unclutter-xfixes fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
+  for p in alsa-ucm-conf x11-xserver-utils python3-evdev unclutter-xfixes tesseract-ocr tesseract-ocr-eng python3-av python3-numpy python3-pil fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core; do
     dpkg -s "$p" >/dev/null 2>&1 || extra+=("$p")
   done
   if [ "${#extra[@]}" -gt 0 ]; then
