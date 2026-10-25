@@ -107,6 +107,16 @@ install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-s
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
 [ -f "$HERE/screenroom-keys.py" ] && install -m 0755 "$HERE/screenroom-keys.py" /usr/local/bin/screenroom-keys
+# screenroom-dedupe: keep only the best copy of each film / episode (also in Settings → Free up space).
+# Run from the maintenance login it still works on the TV user's library.
+TVHOME="$(getent passwd "${TVU:-tv}" | cut -d: -f6)"
+cat > /usr/local/bin/screenroom-dedupe <<EOF
+#!/bin/sh
+# Keep only the best copy of each film and episode on this box (screenroom-dedupe --help).
+APP="\$(readlink -f "\$(command -v screenroom)")"
+exec env ELECTRON_RUN_AS_NODE=1 "\$APP" "\$(dirname "\$APP")/resources/app.asar/tools/screenroom-dedupe.js" --data "${TVHOME:-/home/tv}/.config/screenroom" "\$@"
+EOF
+chmod 0755 /usr/local/bin/screenroom-dedupe
 # the 1990s theme's on-screen display lettering, for players that can't be pointed at Screenroom's own font folder
 if [ -d "$HERE/../mpv/fonts" ]; then
   mkdir -p /usr/local/share/fonts/screenroom && cp -f "$HERE"/../mpv/fonts/*.ttf /usr/local/share/fonts/screenroom/ 2>/dev/null

@@ -746,6 +746,47 @@ app.whenReady().then(async () => {
     const free = await transfer.freeBytes(mediaRoot || os.homedir());
     return { films, shows: showList, albums, free };
   });
+  // Settings → Free up space → Remove lower-quality copies: tools/screenroom-dedupe.js (also a program of its own,
+  // "screenroom-dedupe" on the box) finds films and episodes stored more than once and keeps the best copy.
+  const runDedupe = (args) => new Promise((resolve) => {
+    execFile(process.execPath, [path.join(__dirname, 'tools', 'screenroom-dedupe.js'), '--json', '--data', dataDir(), ...args],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 }, (err, stdout, stderr) => {
+        try { resolve(JSON.parse(String(stdout).trim().split('\n').pop())); }
+        catch { resolve({ error: String(stderr || (err && err.message) || 'It stopped unexpectedly.').trim().split('\n').pop() }); }
+      });
+  });
+  ipcMain.handle('dedupe-plan', async () => {
+    if (!canDelete()) return { error: 'Only on the Screenroom box.' };
+    if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t delete anything.' };
+    await doScan(); // (the tool works from the library list: make it up to date)
+    const p = await runDedupe([]);
+    if (!p.error) p.free = await transfer.freeBytes(mediaRoot || os.homedir());
+    return p;
+  });
+  ipcMain.handle('dedupe-apply', async (_e, paths) => {
+    if (!canDelete()) return { error: 'Only on the Screenroom box.' };
+    if (currentProfile() && currentProfile().kids) return { error: 'Kids profiles can\'t delete anything.' };
+    if (playing) return { error: 'Stop the film first.' };
+    const list = (Array.isArray(paths) ? paths : []).filter((x) => typeof x === 'string' && x);
+    if (!list.length) return { error: 'Nothing chosen.' };
+    const r = await runDedupe(['--apply', ...list.flatMap((x) => ['--only', x])]);
+    if (r.error) return r;
+    // where each profile was in a removed copy carries over to the copy that stays
+    for (const pr of profiles.list()) {
+      const prog = pr.id === currentId ? progress : profiles.loadProgress(pr.id);
+      let changed = false;
+      for (const m of r.moves || []) {
+        const from = prog[m.from];
+        if (!from) continue;
+        if (!prog[m.to] || (from.updated || 0) > (prog[m.to].updated || 0)) prog[m.to] = from;
+        delete prog[m.from]; changed = true;
+      }
+      if (changed) profiles.saveProgress(pr.id, prog);
+    }
+    await doScan();
+    sendWin('library-updated', snapshot());
+    return { ok: true, removed: r.removed, freed: r.freed, free: await transfer.freeBytes(mediaRoot || os.homedir()), state: snapshot() };
+  });
   // what: { films: [id], shows: [{ series, seasons: [n] | null }], albums: [key] }
   ipcMain.handle('delete-media', async (_e, what) => {
     if (!canDelete()) return { error: 'Only on the Screenroom box.' };

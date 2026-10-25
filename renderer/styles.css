@@ -827,6 +827,8 @@ body.big .card.pcard:hover, body.big .card.pcard:focus { transform: scale(1.03);
 .fpick-row.on .fpick-box { background: #46d369; border-color: #46d369; color: #000; }
 .fpick-ico { flex: none; }
 .fpick-row.indent { padding-left: 34px; }
+.fpick-row.keep .fpick-main { background: #1e3a24; cursor: default; }
+.fpick-row.keep .fpick-box { border-color: #46d369; }
 .fpick-head { margin: 14px 0 2px; font-size: 15px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; }
 .sheet-foot .btn.primary.danger { background: #e50914; color: #fff; } .sheet-foot .btn.primary.danger[disabled] { background: #5a1a1d; color: #bbb; }
 .fpick-thumb { flex: none; width: 44px; height: 44px; border-radius: 4px; overflow: hidden; background: #111; }

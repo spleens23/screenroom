@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   scan: () => ipcRenderer.invoke('scan'),
   addDir: (dirs) => ipcRenderer.invoke('add-dir', dirs || null),
   deleteList: () => ipcRenderer.invoke('delete-list'),
+  dedupePlan: () => ipcRenderer.invoke('dedupe-plan'),
+  dedupeApply: (paths) => ipcRenderer.invoke('dedupe-apply', paths),
   setTheme: (o) => ipcRenderer.invoke('set-theme', o),
   deleteMedia: (what) => ipcRenderer.invoke('delete-media', what),
   removeDir: (d) => ipcRenderer.invoke('remove-dir', d),

@@ -1347,8 +1347,64 @@
     return h('div', { class: 'am-card' }, free,
       h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', 'data-key': 'del-video', onclick: () => deleteSheet('video') }, 'Delete films & shows…'),
-        h('button', { class: 'btn secondary', 'data-key': 'del-music', onclick: () => deleteSheet('music') }, 'Delete music…')));
+        h('button', { class: 'btn secondary', 'data-key': 'del-music', onclick: () => deleteSheet('music') }, 'Delete music…'),
+        api.dedupePlan ? h('button', { class: 'btn secondary', 'data-key': 'dedupe', onclick: () => dedupeSheet() }, 'Remove lower-quality copies…') : null));
   }
+  // Films and episodes stored more than once (DVD + Blu-ray + 4K…): keep the best, remove the rest. Every copy
+  // to remove starts ticked; OK unticks one you'd rather keep (e.g. it has a language the best copy doesn't).
+  async function dedupeSheet() {
+    flash('Looking for films and episodes stored more than once…');
+    const p = await api.dedupePlan();
+    if (!p || p.error) { showNotice('Couldn’t check for copies', (p && p.error) || 'Something went wrong.'); return; }
+    if (!p.groups.length) { showNotice('No extra copies', 'Every film and episode on this box is stored once.'); return; }
+    const picked = new Map();
+    for (const g of p.groups) for (const r of g.remove) picked.set(r.path, r.size);
+    const list = h('div', { class: 'fpick' });
+    const total = () => [...picked.values()].reduce((n, x) => n + x, 0);
+    const delBtn = h('button', { class: 'btn primary danger', onclick: () => go() });
+    const drawFoot = () => { delBtn.textContent = picked.size ? `Remove ${picked.size} cop${picked.size === 1 ? 'y' : 'ies'} (${fmtBytes(total())})` : 'Remove selected'; delBtn.disabled = !picked.size; };
+    function draw(focusPath) {
+      const rows = [];
+      for (const g of p.groups) {
+        rows.push(h('h3', { class: 'fpick-head' }, g.title));
+        rows.push(h('div', { class: 'fpick-row keep' }, h('div', { class: 'fpick-main', 'aria-disabled': 'true' },
+          h('span', { class: 'fpick-box' }, ''), h('span', { class: 'fpick-name' }, `Keep: ${g.keep.quality}`), h('small', {}, 'best copy'))));
+        for (const r of g.remove) {
+          const on = picked.has(r.path);
+          rows.push(h('div', { class: 'fpick-row' + (on ? ' on' : '') },
+            h('button', { class: 'fpick-main', 'data-path': r.path, onclick: () => { if (picked.has(r.path)) picked.delete(r.path); else picked.set(r.path, r.size); draw(r.path); } },
+              h('span', { class: 'fpick-box' }, on ? '✓' : ''),
+              h('span', { class: 'fpick-name' }, `Remove: ${r.quality}`),
+              h('small', {}, r.loses.length ? `has ${r.loses.join(' and ')} the kept copy doesn’t` : r.path.split('/').slice(-3).join('/')))));
+        }
+      }
+      list.replaceChildren(...rows);
+      drawFoot();
+      const f = focusPath ? list.querySelector(`[data-path="${CSS.escape(focusPath)}"]`) : list.querySelector('button.fpick-main');
+      if (f) { document.body.classList.add('navmode'); focusEl(f); }
+    }
+    async function go() {
+      const paths = [...picked.keys()];
+      if (!paths.length) return;
+      const ok = await askConfirm(`Remove ${paths.length} lower-quality cop${paths.length === 1 ? 'y' : 'ies'} (${fmtBytes(total())})?`,
+        'Only the extra copies on this box are deleted; the best copy of each stays, and where you were watching carries over to it. Copies on USB drives are never touched.', 'Remove', 'Cancel', true);
+      if (!ok) { delBtn.focus(); return; }
+      closeSheet(true);
+      flash('Removing…');
+      const r = await api.dedupeApply(paths);
+      if (!r || r.error) { showNotice('Couldn’t remove them', (r && r.error) || 'Something went wrong.'); return; }
+      if (r.state) S = r.state;
+      flash(`Removed ${r.removed} cop${r.removed === 1 ? 'y' : 'ies'} · ${fmtBytes(r.freed)} freed${r.free != null ? ` · ${fmtBytes(r.free)} free now` : ''}`);
+      if (!$('#settings').hidden) renderSettings();
+      render();
+    }
+    sheet('files', h('h2', {}, 'Lower-quality copies'),
+      h('p', { class: 'am-hint' }, `${p.groups.length} film${p.groups.length === 1 ? '' : 's'} or episode${p.groups.length === 1 ? '' : 's'} stored more than once. The best copy of each stays (picture first, then HDR, then sound); the ticked copies are removed. OK unticks one you want to keep.`),
+      list,
+      h('div', { class: 'btns sheet-foot' }, delBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+    draw();
+  }
+
   async function deleteSheet(kind) {
     const music = kind === 'music';
     const res = await api.deleteList();
