@@ -9,7 +9,11 @@
   let S = { library: [], progress: {}, config: {}, mpvFound: true, ffprobeFound: true };
   let view = 'home';
   let query = '';
-  let mode = 'movies'; // 'movies' | 'parlor' (music)
+  // Which app this is: 'all' (the TV box: films and music together), 'films' (Screenroom on its own) or
+  // 'music' (Parlor on its own; it opens straight into the music and never shows the films).
+  const EDITION = (window.api && api.edition) || 'all';
+  const APP = EDITION === 'music' ? 'Parlor' : 'Screenroom';
+  let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
 
   if (navigator.platform.includes('Mac')) document.body.classList.add('mac');
@@ -554,7 +558,7 @@
   function renderEmpty() {
     main.replaceChildren(h('div', { class: 'empty' },
       h('h2', {}, 'Add your media'),
-      h('p', {}, 'Add your MP4 files and Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.'),
+      h('p', {}, EDITION === 'all' ? 'Add your MP4 files and Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.' : 'Put your films in Videos, or choose the folders they’re in. Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.'),
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg (brew install ffmpeg / apt install ffmpeg).') : null,
       addMediaPanel(),
       h('p', { class: 'am-hint' }, 'Already have the files on this computer or a mounted drive?'),
@@ -639,6 +643,8 @@
     const t90 = isT90();
     document.body.classList.toggle('t90', t90);
     document.body.classList.toggle('fx', t90 && !!S.retroFx);
+    document.body.classList.toggle('heir', !!(S && S.theme === 'heirloom'));
+    document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
     const c = $('#vcr-clock');
     if (c) { c.hidden = !t90; if (t90) drawClock(); }
   }
@@ -1150,7 +1156,7 @@
   const SAVER_COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#ff6fb5'];
   function showSaver() {
     if (saver) return;
-    const logo = h('div', { class: 'saver-logo' }, 'SCREENROOM');
+    const logo = h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'PARLOR' : 'SCREENROOM');
     const el = h('div', { id: 'saver' }, logo,
       // 1990s theme: a VCR's blue screen, stopped, with the clock nobody ever set
       isT90() ? h('div', { class: 'saver-stop' }, 'STOP') : null, isT90() ? h('div', { class: 'saver-clock' }, '12:00') : null);
@@ -1593,7 +1599,7 @@
 
   function drivesBlock() {
     const list = S.drives || [];
-    if (!list.length) return h('p', { class: 'am-hint' }, 'Plug in a drive and its movies and shows appear in your library automatically. You can also copy them onto this box.');
+    if (!list.length) return h('p', { class: 'am-hint' }, `Plug in a drive and its movies and shows appear in your library automatically. You can also copy them onto this ${EDITION === 'all' ? 'box' : 'computer'}.`);
     return h('div', { class: 'drives' }, list.map((d) => h('div', { class: 'drive' },
       h('div', { class: 'drive-name' }, d.label, h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
       h('div', { class: 'btns' },
@@ -1626,7 +1632,7 @@
         r.mediaDir ? h('div', { class: 'am-hint' }, 'Saved to ', h('b', {}, r.mediaDir)) : null].filter(Boolean));
     }).catch(() => {});
     return h('div', { class: 'addmedia' },
-      wifi,
+      EDITION === 'all' ? wifi : null,
       h('div', { class: 'am-card' }, h('h3', {}, 'USB drive'), drivesBlock()),
       h('div', { id: 'copy-status', class: 'copy-status', hidden: true }));
   }
@@ -1903,7 +1909,7 @@
     const layer = $('#who') || document.body.appendChild(h('div', { id: 'who', class: 'who' }));
     layer.hidden = false;
     layer.replaceChildren(h('div', { class: 'who-inner' },
-      h('div', { class: 'brand who-brand' }, 'SCREENROOM'),
+      h('div', { class: 'brand who-brand' }, EDITION === 'music' ? 'PARLOR' : 'SCREENROOM'),
       h('h1', {}, "Who's watching?"),
       h('div', { class: 'who-list' }, (S.profiles || []).map((p) =>
         h('button', { class: 'who-tile', 'data-profile': p.id, onclick: () => chooseProfile(p) },
@@ -2044,9 +2050,9 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How Screenroom looks for ${who}. 1990s: tapes on the shelf, the VCR's blue menus and on-screen display.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. 1990s: tapes on the shelf, the VCR's blue menus and on-screen display. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
-          [['2020s', '2020s'], ['1990s', '1990s']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
+          [['2020s', '2020s'], ['1990s', '1990s'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
       kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the “Who’s watching?” screen), instead of each profile choosing its own.')),
         h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })),
       S.theme === '1990s' ? h('label', { class: 'row-set' }, h('span', {}, 'Scanlines & static', h('small', {}, 'Faint TV lines over the menus and a burst of static when a tape starts.')),
@@ -2126,28 +2132,29 @@
         h('div', {}, 'PIN: ', h('b', { class: 'pin' }, r.pin)));
     }).catch(() => {});
 
-    const canPower = S.platform === 'linux';
+    const canPower = S.platform === 'linux' && !!S.appliance;
     const isAndroid = S.platform === 'android';
+    const films = EDITION !== 'music', music = EDITION !== 'films', box = EDITION === 'all';
     $('#settings-body').replaceChildren(...[
       h('h2', {}, 'Settings'),
       api.saveProfile && S.profile ? h('h3', {}, 'Profiles') : null,
       api.saveProfile && S.profile ? profilesBlock() : null,
       api.setTheme ? h('h3', {}, 'Theme') : null,
       api.setTheme ? themeBlock() : null,
-      api.clearInProgress ? h('h3', {}, 'Continue Watching') : null,
-      api.clearInProgress ? h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, `Forget where ${S.profile ? S.profile.name : 'you'} stopped in films and episodes that aren't finished. Finished ones stay marked as watched.`),
+      films && api.clearInProgress ? h('h3', {}, 'Continue Watching') : null,
+      films && api.clearInProgress ? h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, `Forget where ${S.profile ? S.profile.name : 'you'} stopped in films and episodes that aren't finished. Finished ones stay marked as watched.`),
         h('div', { class: 'btns' }, clearProgressButton())) : null,
       !S.mpvFound ? h('div', { class: 'warn' }, 'mpv was not found, so playback will not work. Install it with “brew install mpv” (Mac) or “sudo apt install mpv” (Linux).') : null,
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg to scan your library.') : null,
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
-      isAndroid ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
-      isAndroid ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
-      isAndroid || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
-      isAndroid ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
-      isAndroid ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
+      isAndroid || !box ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
+      isAndroid || !films ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
+      isAndroid || !films || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
+      isAndroid || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
+      isAndroid || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
       isAndroid || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
-      isAndroid || S.tv ? null : toggle('Full screen', 'Screenroom and the player use the whole screen. (Also F11, or the green button on a Mac window.)', 'appFullscreen'),
-      isAndroid || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
+      isAndroid || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
+      isAndroid || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
       isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
@@ -2158,42 +2165,42 @@
         b.textContent = 'Test sound';
         flash(r.ok ? `Test sound played on ${r.where}${r.notice ? ` (${r.notice})` : ''}. Didn't hear it? Check the volume, or pick another output above.` : `No sound on ${r.where || 'that output'}: ${r.error || 'it failed'}`);
       } }, 'Test sound')) : null,
-      h('label', { class: 'row-set' }, h('span', {}, 'Screensaver', h('small', {}, 'The Screenroom name bounces around the screen when nothing has been pressed for a while (not during a film).')),
+      h('label', { class: 'row-set' }, h('span', {}, 'Screensaver', h('small', {}, `The ${APP} name bounces around the screen when nothing has been pressed for a while${films ? ' (not during a film)' : ''}.`)),
         h('select', { class: 'dev-select', 'data-key': 'screensaverMin', onchange: async (e) => { S = await api.setConfig({ screensaverMin: Number(e.target.value) }); } },
           [[0, 'Off'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes'], [20, 'After 20 minutes'], [30, 'After 30 minutes']]
             .map(([v, l]) => h('option', { value: v, selected: Number(S.config.screensaverMin != null ? S.config.screensaverMin : 5) === v }, l)))),
-      toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote'),
-      remoteBox,
-      parlorUI ? h('h3', { id: 'set-parlor' }, 'Parlor (music)') : null,
+      box ? toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote') : null,
+      box ? remoteBox : null,
+      parlorUI ? h('h3', { id: 'set-parlor' }, EDITION === 'music' ? 'Music' : 'Parlor (music)') : null,
       parlorUI ? parlorUI.settingsBlock() : null,
-      h('h3', {}, 'Add media'),
-      addMediaPanel(),
-      api.subsPlan && S.platform !== 'android' ? h('h3', {}, 'Subtitles') : null,
-      api.subsPlan && S.platform !== 'android' ? subsBlock() : null,
+      films ? h('h3', {}, 'Add media') : null,
+      films ? addMediaPanel() : null,
+      films && api.subsPlan && S.platform !== 'android' ? h('h3', {}, 'Subtitles') : null,
+      films && api.subsPlan && S.platform !== 'android' ? subsBlock() : null,
       S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? h('h3', {}, 'Free up space') : null,
       S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? freeSpaceBlock() : null,
-      h('h3', {}, 'Library folders'),
-      h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
+      films ? h('h3', {}, 'Library folders') : null,
+      !films ? null : h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
         h('div', { class: 'dir' }, d, h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),
-      h('div', { class: 'btns' },
+      !films ? null : h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: async () => { if (await addFilmFolder()) { renderSettings(); render(); } } }, 'Add folder…'),
         h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.scan(); setScanning(false); renderSettings(); render(); } }, 'Rescan')),
       S.duplicates ? h('div', { class: 'am-hint' }, `${S.duplicates} duplicate episode file${S.duplicates === 1 ? ' was' : 's were'} hidden (the same episode found twice; the best quality copy is kept).`) : null,
-      S.platform === 'linux' && api.wifiStatus ? h('h3', {}, 'Wi-Fi') : null,
-      S.platform === 'linux' && api.wifiStatus ? wifiBlock() : null,
-      S.platform === 'linux' && api.btStatus ? h('h3', {}, 'Bluetooth') : null,
-      S.platform === 'linux' && api.btStatus ? bluetoothBlock() : null,
+      S.appliance && api.wifiStatus ? h('h3', {}, 'Wi-Fi') : null,
+      S.appliance && api.wifiStatus ? wifiBlock() : null,
+      S.appliance && api.btStatus ? h('h3', {}, 'Bluetooth') : null,
+      S.appliance && api.btStatus ? bluetoothBlock() : null,
       isAndroid ? h('h3', {}, 'This box') : null,
       isAndroid ? h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('main') }, 'System settings'),
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('storage') }, 'Storage & drives'),
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('network') }, 'Wi-Fi & network')) : null,
-      (S.playbackProblems || []).length ? h('h3', {}, 'Playback problems') : null,
+      films && (S.playbackProblems || []).length ? h('h3', {}, 'Playback problems') : null,
       (S.playbackProblems || []).length ? problemsBlock() : null,
       isAndroid && api.kioskStatus ? h('h3', {}, 'Lock to Screenroom') : null,
       isAndroid && api.kioskStatus ? kioskBlock() : null,
-      S.platform === 'linux' && api.applianceInfo ? h('h3', {}, 'System') : null,
-      S.platform === 'linux' && api.applianceInfo ? systemBlock() : null,
+      S.appliance && api.applianceInfo ? h('h3', {}, 'System') : null,
+      S.appliance && api.applianceInfo ? systemBlock() : null,
       isAndroid ? null : h('h3', {}, 'Power'),
       S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
       isAndroid ? null : h('div', { class: 'btns' },
@@ -2201,7 +2208,7 @@
         S.appliance ? h('button', { class: 'btn secondary', onclick: () => api.power('suspend') }, 'Sleep') : null,
         S.appliance
           ? h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Restart Screenroom')
-          : h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Quit Screenroom'),
+          : h('button', { class: 'btn secondary', onclick: () => api.quit() }, `Quit ${APP}`),
         canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Restart this computer?', 'Screenroom will be back in about a minute.', 'Restart', 'Cancel').then((y) => { if (y) api.power('reboot'); }); } }, 'Restart') : null,
         canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Shut down this computer?', 'Turn it on again with its power button.', 'Shut down', 'Cancel', true).then((y) => { if (y) api.power('poweroff'); }); } }, 'Shut down') : null),
     ].filter(Boolean));
@@ -2729,6 +2736,7 @@
 
   // ---- Parlor (music) ------------------------------------------------------------------------------
   function toggleMode() {
+    if (EDITION !== 'all') return; // (the films and the music are separate apps here)
     mode = mode === 'parlor' ? 'movies' : 'parlor';
     document.body.classList.toggle('parlor', mode === 'parlor');
     $('#nav .brand').textContent = mode === 'parlor' ? 'PARLOR' : 'SCREENROOM';
@@ -2742,7 +2750,7 @@
     if (document.body.classList.contains('navmode')) { const f = main.querySelector('.btn, .card'); f && focusEl(f); }
   }
   const FILM_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.6"/></svg>';
-  if (window.createParlor && api.parlorState) {
+  if (window.createParlor && api.parlorState && EDITION !== 'films') {
     parlorUI = window.createParlor({
       h, $, api, flash, focusEl,
       query: () => query,
@@ -2764,11 +2772,19 @@
       pickPath: (o) => pickPath(o), isLinux: () => isLinuxApp(),
     });
     const b = $('#parlor-btn');
-    b.hidden = false;
+    b.hidden = EDITION !== 'all';
     b.innerHTML = parlorUI.noteIcon();
     b.addEventListener('click', toggleMode);
+    if (EDITION === 'music') {
+      // Parlor on its own: straight into the music
+      document.body.classList.add('parlor', 'ed-music');
+      $('#nav .brand').textContent = 'PARLOR';
+      $('#search').placeholder = 'Search music…';
+    }
     document.querySelectorAll('#pnav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); parlorUI.go(a.dataset.pview); }));
   }
 
+  document.body.classList.toggle('ed-films', EDITION === 'films');
+  document.title = EDITION === 'music' ? 'Parlor' : 'Screenroom';
   (async () => { S = await api.state(); render(); wake(); })();
 })();

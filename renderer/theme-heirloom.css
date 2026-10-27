@@ -1,0 +1,182 @@
+/* ======================================================================================================
+   Heirloom theme — matches the Heirloom tablet (Harbor, Spectacle, Updates): soft pinstriped paper,
+   a glossy sky-blue bar with embossed white titles, beveled glass buttons, white cards with soft
+   shadows, and light blue as the accent. Everything is scoped under body.heir and loaded last.
+   ====================================================================================================== */
+body.heir {
+  --bg: #e4eaf0; --bg2: #ffffff; --fg: #2c3540; --muted: #6b7785; --accent: #3f84bd;
+  --h-sky1: #d9eefc; --h-sky2: #b9dcf7; --h-sky3: #8cc4ef; --h-sky4: #5fa6de; --h-edge: #3f84bd; --h-text: #1d5a8c;
+  --h-paper: repeating-linear-gradient(90deg, #e7edf3 0, #e7edf3 5px, #dfe6ed 5px, #dfe6ed 7px);
+  --p-bg: #e4eaf0; --p-panel: #fff; --p-line: #c3ccd5; --p-text: #2c3540; --p-muted: #6b7785;
+  --p-blue: #3f84bd; --p-blue2: #5fa6de; --p-stripe: #eef4fa;
+  background: #e4eaf0 var(--h-paper) fixed; color: var(--fg);
+}
+html:has(> body.heir) { background: #e4eaf0 repeating-linear-gradient(90deg, #e7edf3 0, #e7edf3 5px, #dfe6ed 5px, #dfe6ed 7px) fixed; }
+body.heir ::selection { background: #b9dcf7; }
+
+/* ---- the bar ---- */
+body.heir #nav, body.heir #nav.solid, body.heir.parlor #nav, body.heir.parlor #nav.solid {
+  background: linear-gradient(to bottom, var(--h-sky1) 0%, var(--h-sky2) 48%, var(--h-sky3) 52%, var(--h-sky4) 100%);
+  border-bottom: 1px solid var(--h-edge); box-shadow: inset 0 1px rgba(255,255,255,.85), 0 2px 4px rgba(20,60,100,.25); height: 58px; }
+body.heir .brand, body.heir.parlor .brand { color: #fff; font-weight: 800; letter-spacing: 3px; text-shadow: 0 -1px rgba(25,70,115,.75); }
+body.heir #nav nav a, body.heir.parlor #pnav a { color: #fff; opacity: 1; padding: 5px 13px; border-radius: 7px; font-weight: 600;
+  text-shadow: 0 -1px rgba(20,60,100,.55); }
+body.heir #nav nav a:hover { background: rgba(255,255,255,.18); }
+body.heir #nav nav a.active, body.heir.parlor #pnav a.active {
+  background: linear-gradient(to bottom, #4a8ac0, #3c7bb2); box-shadow: inset 0 2px 4px rgba(10,40,70,.45), 0 1px rgba(255,255,255,.4);
+  color: #fff; font-weight: 700; }
+body.heir #search, body.heir.parlor #search { background: #fff; border: 1px solid #3a78ad; color: var(--fg); border-radius: 14px;
+  box-shadow: inset 0 1px 3px rgba(20,60,100,.3), 0 1px rgba(255,255,255,.45); }
+body.heir #search::placeholder { color: #8a96a3; }
+body.heir #search:focus { outline: 2px solid #fff; }
+body.heir #settings-btn, body.heir #vote-btn, body.heir #parlor-btn, body.heir.parlor #settings-btn { color: #fff; text-shadow: 0 -1px rgba(20,60,100,.6); }
+body.heir #vote-btn svg, body.heir #parlor-btn svg { filter: drop-shadow(0 -1px 0 rgba(20,60,100,.5)); }
+
+/* ---- buttons: beveled glass ---- */
+body.heir .btn { border-radius: 9px; font-weight: 700; }
+body.heir .btn.primary, body.heir.parlor .btn.primary {
+  background: linear-gradient(to bottom, #a9d3f4 0%, #7ab7e6 50%, #5e9fd6 51%, #4f93cc 100%); color: #fff; border: 1px solid #3a78ad;
+  text-shadow: 0 -1px rgba(20,60,100,.6); box-shadow: inset 0 1px rgba(255,255,255,.6), 0 1px 2px rgba(20,60,100,.25); }
+body.heir .btn.secondary, body.heir.parlor .btn.secondary {
+  background: linear-gradient(to bottom, #fdfeff 0%, #eef2f5 48%, #e2e8ed 52%, #d6dde4 100%); color: #2c3540; border: 1px solid #a7b3bf;
+  text-shadow: 0 1px #fff; box-shadow: inset 0 1px #fff, 0 1px 2px rgba(20,60,100,.18); }
+body.heir .btn:hover { filter: brightness(1.04); }
+body.heir .btn:active { filter: brightness(.94); box-shadow: inset 0 2px 4px rgba(10,40,70,.3); }
+body.heir .btn.primary.danger, body.heir .sheet-foot .btn.primary.danger {
+  background: linear-gradient(to bottom, #f6b1a9 0%, #e57b6f 50%, #d65a4d 51%, #c94a3e 100%); border-color: #a33a30; color: #fff; }
+body.heir .chip, body.heir .chip.pchip { background: linear-gradient(#fff, #e3e9ee); color: #2c3540; border: 1px solid #a7b3bf; box-shadow: inset 0 1px #fff; }
+body.heir .chip.on, body.heir .chip.pchip.on { background: linear-gradient(#7ab7e6, #4f93cc); color: #fff; border-color: #3a78ad; text-shadow: 0 -1px rgba(20,60,100,.5); }
+body.heir select, body.heir .season-select, body.heir .dev-select, body.heir .m-actions .quality select {
+  background: linear-gradient(#fff, #e9eef2); color: #2c3540; border: 1px solid #a7b3bf; border-radius: 7px; }
+body.heir input[type=text], body.heir input[type=password], body.heir input:not([type]), body.heir .pin-input, body.heir .poverlay input.pin-input {
+  background: #fff; color: #2c3540; border: 1px solid #a7b3bf; box-shadow: inset 0 1px 2px rgba(20,60,100,.18); }
+
+/* ---- focus (remote / keyboard) ---- */
+body.heir.navmode :focus { outline: 3px solid var(--h-sky4); outline-offset: 2px; }
+body.heir.navmode .btn:focus, body.heir.navmode .chip:focus { outline: 3px solid var(--h-edge); box-shadow: 0 0 0 6px rgba(95,166,222,.3); }
+
+/* ---- home: hero fades into the paper ---- */
+body.heir .hero::after { background: linear-gradient(to top, #e4eaf0 0%, rgba(228,234,240,.6) 16%, rgba(0,0,0,0) 42%),
+  linear-gradient(to right, rgba(14,34,56,.72), rgba(14,34,56,0) 60%); }
+body.heir .hero h1 { color: #fff; }
+body.heir .hero p { color: #e8f0f7; }
+body.heir .row h2, body.heir.parlor .row h2 { color: #2c3540; text-shadow: 0 1px #fff; font-weight: 700; }
+body.heir .page-title, body.heir.parlor .page-title, body.heir.parlor .phead h1 { color: #2c3540; text-shadow: 0 1px #fff; }
+body.heir .empty, body.heir .pnote, body.heir .pstats { color: var(--muted); }
+
+/* ---- film cards: white-framed prints with a soft shadow ---- */
+body.heir .card { background-color: #cfd8e1; border: 3px solid #fff; border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(20,60,100,.25), 0 6px 14px rgba(20,60,100,.18); }
+body.heir .card.pcard { border: 0; box-shadow: none; background: none; }
+body.heir.navmode .card:focus { outline: 3px solid var(--h-sky4); outline-offset: 2px; box-shadow: 0 0 0 7px rgba(95,166,222,.3), 0 8px 18px rgba(20,60,100,.3); }
+body.heir .card .card-stars, body.heir .card-from, body.heir .card-who .more { background: rgba(255,255,255,.92); color: #2c3540; }
+body.heir .card .card-stars { color: #d79a00; }
+
+/* ---- detail pop-up: a white card under a glossy header ---- */
+body.heir .modal { background: rgba(40,60,82,.5); }
+body.heir .modal-card { background: #fff; color: var(--fg); border: 1px solid #a7b3bf; border-radius: 12px; box-shadow: 0 20px 50px rgba(20,40,70,.4); }
+body.heir .m-hero::after { background: linear-gradient(to top, #fff 0%, rgba(255,255,255,0) 55%); }
+body.heir .m-hero h1 { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.65); }
+body.heir .close, body.heir .modal-card.pmodal .close {
+  background: linear-gradient(#a9d3f4, #7ab7e6 50%, #5e9fd6 51%, #4f93cc); color: #fff; border: 1px solid #3a78ad;
+  box-shadow: inset 0 1px rgba(255,255,255,.6), 0 2px 5px rgba(20,60,100,.35); }
+body.heir .meta, body.heir .side { color: var(--muted); }
+body.heir .side b { color: #2c3540; }
+body.heir .meta .rating { border-color: #a7b3bf; color: #4b5866; }
+body.heir .desc-more { color: var(--h-text); }
+body.heir .track, body.heir .dir, body.heir .remote-box { background: #f1f5f9; border: 1px solid #d3dbe3; color: #2c3540; }
+body.heir .track:hover { background: #e6eef6; } body.heir .track.sel { border-color: var(--h-sky4); background: #e2effa; }
+body.heir .remote-box .url, body.heir .remote-box .pin { color: var(--h-text); }
+body.heir .ep:hover, body.heir .ep:focus-visible { background: #eef4fa; }
+body.heir .ep.focus { background: #e2effa; box-shadow: inset 3px 0 0 var(--h-sky4); }
+body.heir .ep-watch { color: var(--h-text); border-color: #a7b3bf; }
+body.heir .ep-watch.on { background: var(--h-sky4); border-color: var(--h-edge); color: #fff; }
+body.heir .rating-chip { background: #f1f5f9; border-color: #d3dbe3; color: #2c3540; }
+
+/* ---- settings, sheets, and the app's own pop-ups ---- */
+body.heir #settings h3, body.heir .sheet-card h3 { color: var(--h-text); }
+body.heir .am-card, body.heir .copy-status { background: #fff; border: 1px solid #c8d1da; box-shadow: 0 1px 3px rgba(20,60,100,.12); }
+body.heir .am-hint { color: var(--muted); }
+body.heir .am-steps .url { color: var(--h-text); }
+body.heir .sheet, body.heir .pinpad, body.heir .poverlay { background: rgba(40,60,82,.5); }
+body.heir .sheet-card, body.heir .pin-card, body.heir .poverlay-card {
+  background: #fff; color: var(--fg); border: 1px solid #a7b3bf; box-shadow: 0 20px 50px rgba(20,40,70,.4); }
+body.heir .sheet-card h2 { color: #2c3540; }
+body.heir .sheet-foot { background: #fff; border-top-color: #dbe2e8; }
+body.heir .fpick-main { background: #f1f5f9; color: #2c3540; border-color: transparent; }
+body.heir .fpick-main:focus, body.heir .fpick-main:hover { background: #e2effa; border-color: var(--h-sky4); }
+body.heir .fpick-row.on .fpick-main { background: #dff0dc; }
+body.heir .pin-key, body.heir .osk-key { background: linear-gradient(#fff, #e2e8ed); color: #2c3540; border: 1px solid #a7b3bf; box-shadow: inset 0 1px #fff; }
+body.heir .pin-key:focus, body.heir .osk-key:focus { background: linear-gradient(#a9d3f4, #4f93cc); color: #fff; }
+body.heir .osk-field { background: #fff; color: #2c3540; border-color: #a7b3bf; }
+body.heir .pin-dots span.on { background: var(--h-sky4); border-color: var(--h-edge); }
+body.heir #scan-status { background: #fff; color: #2c3540; border: 1px solid #a7b3bf; box-shadow: 0 6px 18px rgba(20,60,100,.25); }
+
+/* ---- profile picker ---- */
+body.heir .who { background: #e4eaf0 var(--h-paper); }
+body.heir .who h1 { color: #2c3540; text-shadow: 0 1px #fff; }
+body.heir .who-tile, body.heir .who-opt { color: #4b5866; }
+body.heir .who-tile:hover, body.heir .who-tile:focus, body.heir .who-opt.on small { color: #1d5a8c; }
+body.heir .who-tile:hover .avatar, body.heir .who-tile:focus .avatar, body.heir .who-opt.on .avatar,
+body.heir.navmode .who-opt:focus .avatar, body.heir .swatch.on, body.heir .pic.on { border-color: var(--h-sky4); }
+
+/* ---- Parlor (music): the same paper and bar, white song lists with blue stripes ---- */
+body.heir.parlor { background: #e4eaf0 var(--h-paper) fixed; color: #2c3540; }
+html:has(> body.heir.parlor) { background: #e4eaf0 repeating-linear-gradient(90deg, #e7edf3 0, #e7edf3 5px, #dfe6ed 5px, #dfe6ed 7px) fixed; }
+body.heir.parlor .pcard-t { color: #2c3540; } body.heir.parlor .pcard-s { color: var(--muted); }
+body.heir.parlor .cover { background: #cfd8e1; box-shadow: 0 1px 2px rgba(20,60,100,.25), 0 8px 18px rgba(20,60,100,.22); }
+body.heir.parlor .cover-blank { background: linear-gradient(135deg, #fff, #c9ddef); color: #7d9ab6; }
+body.heir.parlor .cover.reflect { -webkit-box-reflect: below 3px linear-gradient(transparent 72%, rgba(255,255,255,.4)); }
+body.heir.parlor table.songs, body.heir .modal-card.pmodal table.songs { background: #fff; border-color: #c3ccd5; color: #2c3540; }
+body.heir.parlor table.songs th { background: linear-gradient(#fdfeff, #e2e8ed); color: #4b5866; border-color: #b7c2cc; text-shadow: 0 1px #fff; }
+body.heir.parlor table.songs tbody tr:nth-child(even), body.heir .modal-card.pmodal table.songs tbody tr:nth-child(even) { background: #eef4fa; }
+body.heir.parlor table.songs .t, body.heir.parlor table.songs .n, body.heir.parlor table.songs .g,
+body.heir .modal-card.pmodal table.songs .t, body.heir .modal-card.pmodal table.songs .n { color: #7a8693; }
+body.heir.parlor .srow:hover td { background: rgba(95,166,222,.14); }
+body.heir .srow:focus td, body.heir.navmode .srow:focus td { background: linear-gradient(#7ab7e6, #4f93cc); color: #fff; }
+body.heir.parlor .srow.now td:first-child, body.heir.parlor .srow.now td:nth-child(2) { color: var(--h-text); }
+body.heir.parlor tr.disc td { background: #e9eff4 !important; color: #4b5866; }
+body.heir.parlor .rowbtn { color: var(--h-text); }
+body.heir.parlor .rowbtn:hover, body.heir.parlor .rowbtn:focus { background: #e2effa; border-color: var(--h-sky4); }
+body.heir.parlor .srow .by { color: var(--muted); }
+body.heir .modal-card.pmodal { background: #fff; color: #2c3540; border-color: #a7b3bf; }
+body.heir .modal-card.pmodal .palbum-info h1 { color: #2c3540; }
+body.heir .modal-card.pmodal .partist { color: var(--h-text); }
+body.heir .modal-card.pmodal .pmeta, body.heir .modal-card.pmodal .pshare-t { color: var(--muted); }
+body.heir .cover-pick { color: #2c3540; } body.heir .cover-pick small { color: var(--muted); }
+body.heir .pempty { color: #2c3540; } body.heir .pempty p { color: var(--muted); }
+
+/* now-playing bar: a light tab bar like Spectacle's, with glass buttons */
+body.heir #npbar, body.heir.parlor #npbar { background: linear-gradient(to bottom, #fbfcfd 0%, #eef2f5 48%, #e2e8ed 52%, #d6dde4 100%);
+  border-top: 1px solid #aab6c1; color: #2c3540; box-shadow: inset 0 1px #fff, 0 -2px 8px rgba(20,60,100,.15); }
+body.heir .npb { background: linear-gradient(#fff, #e2e8ed); color: #2c3540; border: 1px solid #a7b3bf; box-shadow: inset 0 1px #fff, 0 1px 2px rgba(20,60,100,.2); }
+body.heir .npb:focus, body.heir .npb-art:focus, body.heir .lcd:focus, body.heir .npf-bar:focus, body.heir .upnext-i:focus { outline-color: var(--h-sky4); }
+body.heir .lcd { border-color: #9fb3c6; }
+
+/* full-screen now playing */
+body.heir #npfull { background: #e4eaf0; color: #2c3540; }
+body.heir #npfull::after { background: radial-gradient(ellipse at 35% 45%, rgba(228,234,240,.35), rgba(228,234,240,.82) 60%, rgba(228,234,240,.94)); }
+body.heir .npf-bg { opacity: .55; }
+body.heir .np-close { background: linear-gradient(#a9d3f4, #4f93cc); color: #fff; border-color: #3a78ad; }
+body.heir .npf-from { color: var(--muted); }
+body.heir .npf-side h1 { color: #2c3540; text-shadow: 0 1px #fff; }
+body.heir .npf-side h2 { color: var(--h-text); } body.heir .npf-side h3 { color: #4b5866; }
+body.heir .npf-prog, body.heir .npf-vol { color: #4b5866; }
+body.heir .npf-bar { background: #fff; border-color: #a7b3bf; box-shadow: inset 0 1px 3px rgba(20,60,100,.25); }
+body.heir .npf-bar div { background: linear-gradient(#a9d3f4, #4f93cc); }
+body.heir .upnext { background: rgba(255,255,255,.92); border-color: #c3ccd5; box-shadow: 0 8px 24px rgba(20,60,100,.2); }
+body.heir .upnext-t { background: linear-gradient(#fdfeff, #e2e8ed); border-color: #b7c2cc; color: #4b5866; }
+body.heir .upnext-i { color: #2c3540; } body.heir .upnext-i:nth-child(odd) { background: rgba(238,244,250,.9); } body.heir .upnext-i small { color: var(--muted); }
+body.heir .upnext-i:focus { background: linear-gradient(#7ab7e6, #4f93cc); color: #fff; }
+body.heir .npf-caption span { color: #4b5866; }
+body.heir #np-chip { color: #fff; border-color: rgba(255,255,255,.6); background: rgba(255,255,255,.15); }
+
+/* touch: roomy targets and no hover-only reveals */
+body.heir.touch .btn { min-height: 44px; }
+body.heir.touch #nav nav a, body.heir.touch #pnav a { padding: 8px 14px; }
+body.heir .card:not(.pcard) { color: #fff; }
+body.heir .card:not(.pcard):hover, body.heir .card:not(.pcard):focus-visible { outline: 2px solid var(--h-sky4); box-shadow: 0 10px 26px rgba(20,60,100,.35); }
+body.heir .hero .meta { color: #e8f0f7; }
+body.heir.navmode #nav button:focus, body.heir.navmode #nav a:focus, body.heir.navmode #nav input:focus { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(29,90,140,.45); border-radius: 8px; }
+body.heir .srow:focus td *, body.heir.navmode .srow:focus td * { color: #fff !important; }
+body.heir.navmode .close:focus, body.heir.navmode .np-close:focus { outline: 3px solid var(--h-edge); outline-offset: 3px; }

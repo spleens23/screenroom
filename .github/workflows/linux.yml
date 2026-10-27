@@ -27,8 +27,11 @@ jobs:
         run: |
           npm ci
           npm pkg set version="$VERSION"
-          npx electron-builder --linux deb --x64 -p never
+          npx electron-builder --linux deb dir --x64 -p never
           ls -la dist/*.deb
+          # The plain app folder, for systems that bake it into their image (Heirloom pulls this one).
+          tar -C dist -czf dist/screenroom-linux-x64.tar.gz --transform 's,^linux-unpacked,screenroom,' linux-unpacked
+          ls -la dist/screenroom-linux-x64.tar.gz
 
       # Fast check (a few minutes) that the whole setup works on Debian 13, before the slow VM test.
       - name: Set up Screenroom inside a Debian 13 container
@@ -96,6 +99,7 @@ jobs:
           SIZE=$(stat -c %s "out/Screenroom-Installer-${VERSION}.iso"); echo "::notice::Installer size: $((SIZE / 1048576)) MB"
           [ "$SIZE" -lt 2000000000 ] || { echo "::error::The installer is over 2 GB, too big for a GitHub release"; exit 1; }
           cp "$DEB" out/
+          cp dist/screenroom-linux-x64.tar.gz out/
 
       # ---- 3. install it in a virtual machine (UEFI, like the M910q) ---------------------------------
       - name: Prepare a virtual M910q (system drive + movie drive)
@@ -225,6 +229,7 @@ jobs:
           body: |
             **Screenroom-Installer-${{ env.VERSION }}.iso**: automatic installer for a mini PC (ThinkCentre M910q etc.). Write it to a USB stick, boot from it with a network cable plugged in. It erases the main drive. See deploy/M910Q.md.
             **screenroom_${{ env.VERSION }}_amd64.deb**: the app on its own (for updates / manual installs).
+            **screenroom-linux-x64.tar.gz**: the app folder for Heirloom (run as `screenroom --edition=films` for Screenroom, `--edition=music` for Parlor).
             Tested automatically: unattended install in a virtual machine, then boot, app, movie drive and phone remote checks.
           files: out/*
           make_latest: false

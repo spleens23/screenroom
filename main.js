@@ -28,7 +28,20 @@ if (process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance')) 
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
 }
 
-app.setPath('userData', path.join(app.getPath('appData'), 'screenroom'));
+// Editions: the TV box runs everything in one app ("all"). On Heirloom (the tablet) films and music are two
+// apps of their own: `--edition=films` (Screenroom) and `--edition=music` (Parlor), each with its own settings,
+// profiles and library, and its own window class so the home screen shows them as two apps.
+const EDITION = (() => {
+  const a = process.argv.find((x) => x.startsWith('--edition='));
+  const e = (a ? a.split('=')[1] : process.env.SCREENROOM_EDITION) || 'all';
+  return ['all', 'films', 'music'].includes(e) ? e : 'all';
+})();
+const WM_CLASS = EDITION === 'music' ? 'dev.screenroom.Parlor' : EDITION === 'films' ? 'dev.screenroom.Screenroom' : null;
+if (WM_CLASS) {
+  app.setName(EDITION === 'music' ? 'Parlor' : 'Screenroom');
+  if (process.platform === 'linux') { app.commandLine.appendSwitch('class', WM_CLASS); try { app.setDesktopName(`${WM_CLASS}.desktop`); } catch {} }
+}
+app.setPath('userData', path.join(app.getPath('appData'), EDITION === 'music' ? 'parlor' : 'screenroom'));
 
 // TV mode: fullscreen, scaled up for a TV, remote/gamepad friendly.
 // Turn it on in Settings, or launch with `--tv` / SCREENROOM_TV=1 (what the mini-PC session does).
@@ -152,7 +165,8 @@ function createWindow() {
     fullscreen: process.platform === 'darwin' ? false : wantFull(),
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    title: EDITION === 'music' ? 'Parlor' : 'Screenroom',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, additionalArguments: [`--sr-edition=${EDITION}`] },
   });
   if (isTv()) win.setMenuBarVisibility(false);
   // Remember full screen however it was switched (green button, menu, F11), so the app opens that way next time.
@@ -336,11 +350,16 @@ function battery() {
   } catch { return null; }
 }
 
+// Themes: '2020s' (the default), '1990s' (the VCR and the video store), 'heirloom' (glossy light blue, to match
+// the Heirloom tablet system, and the default there).
+const THEMES = ['2020s', '1990s', 'heirloom'];
+const onHeirloom = (() => { try { return /^VARIANT_ID=heirloom$/m.test(fs.readFileSync('/etc/os-release', 'utf8')); } catch { return false; } })();
+const defaultTheme = () => (onHeirloom || process.env.SCREENROOM_HEIRLOOM === '1' ? 'heirloom' : '2020s');
 // The look: each profile picks its own theme, unless "same theme for every profile" is ticked.
 function themeNow() {
-  if (config.themeAll) return { theme: config.theme === '1990s' ? '1990s' : '2020s', fx: !!config.retroFx };
+  if (config.themeAll) return { theme: THEMES.includes(config.theme) ? config.theme : defaultTheme(), fx: !!config.retroFx };
   const p = currentProfile();
-  return { theme: p && p.theme === '1990s' ? '1990s' : '2020s', fx: !!(p && p.retroFx) };
+  return { theme: p && THEMES.includes(p.theme) ? p.theme : defaultTheme(), fx: !!(p && p.retroFx) };
 }
 // (the OpenSubtitles password stays in the main process)
 function publicConfig() {
@@ -355,7 +374,7 @@ function snapshot() {
     drives, mediaDir: mediaRoot,
     platform: process.platform,
     canDelete: isAppliance() || !!process.env.SCREENROOM_TEST_DELETE,
-    theme: themeNow().theme, retroFx: themeNow().fx,
+    theme: themeNow().theme, retroFx: themeNow().fx, edition: EDITION,
     battery: battery(),
     playbackProblems: problems(),
     mpvFound: !!findBinary('mpv', config.mpvPath),
@@ -393,6 +412,7 @@ async function ensureMediaDir() {
 
 // Drives that are plugged in count as part of the library while they're there.
 function scanDirs() {
+  if (EDITION === 'music') return []; // (Parlor on its own has no film library)
   const extra = drives.map((d) => d.mount).filter((m) => !config.dirs.some((d) => m === d || m.startsWith(d + path.sep)));
   return [...config.dirs, ...extra];
 }
@@ -567,6 +587,7 @@ function smbUrls() {
 }
 
 function startRemote() {
+  if (EDITION !== 'all') return; // (the phone remote is the TV box's)
   if (remoteServer) { remoteServer.close(); remoteServer = null; }
   if (!config.remote) return;
   if (!config.remotePin) {
@@ -606,7 +627,10 @@ app.whenReady().then(async () => {
   powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
   powerMonitor.on('resume', () => { lastResume = Date.now(); });
   if (isAppliance()) startKeys();
+  const firstRun = !fs.existsSync(cfgFile());
   config = { ...defaults, ...readJson(cfgFile(), {}) };
+  // Screenroom on its own (e.g. on Heirloom): start with the Videos folder, if there is one.
+  if (firstRun && EDITION === 'films') { const v = path.join(os.homedir(), 'Videos'); try { if (fs.statSync(v).isDirectory()) config.dirs = [v]; } catch {} }
   profiles = new Profiles(dataDir());
   ratings = new Ratings(dataDir());
   recs = new Recommendations(dataDir());
@@ -922,7 +946,7 @@ app.whenReady().then(async () => {
     }
     if (all != null) config.themeAll = !!all;
     if (config.themeAll) {
-      if (theme != null) config.theme = theme === '1990s' ? '1990s' : '2020s';
+      if (theme != null) config.theme = THEMES.includes(theme) ? theme : '2020s';
       if (fx != null) config.retroFx = !!fx;
     } else if (currentId) profiles.setTheme(currentId, theme, fx);
     writeJson(cfgFile(), config);

@@ -899,3 +899,4 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 /* Settings → Subtitles: the OpenSubtitles account */
 .osub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .osub .pin-input { flex: 1 1 180px; min-width: 0; margin: 0; max-width: none; font-size: 15px; text-align: left; letter-spacing: 0; }
+#vote-btn[hidden], #parlor-btn[hidden] { display: none !important; }

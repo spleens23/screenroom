@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// which app this is: 'all' (the TV box), 'films' (Screenroom on its own) or 'music' (Parlor on its own)
+const edition = ((process.argv.find((x) => x.startsWith('--sr-edition=')) || '').split('=')[1]) || 'all';
+
 contextBridge.exposeInMainWorld('api', {
+  edition,
   state: () => ipcRenderer.invoke('state'),
   recommend: (to, item) => ipcRenderer.invoke('recommend', to, item),
   dismissRec: (id) => ipcRenderer.invoke('rec-dismiss', id),

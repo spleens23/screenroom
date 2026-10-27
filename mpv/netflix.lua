@@ -907,7 +907,10 @@ end)
 mp.add_forced_key_binding('mouse_leave', 'nf_leave', function() S.mx, S.my = -1, -1 end)
 
 local function mouse_down()
+  -- a tap (touch screen, or a click after the controls faded) first brings the controls back, it doesn't pause
+  local hidden = S.fade < 0.2 and not S.menu and not S.power
   S.last_act = now()
+  if hidden then return end
   local h = topmost_hit()
   if h then
     if h.ondrag then S.drag = h; h.ondrag(S.mx)
