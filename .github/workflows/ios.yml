@@ -104,9 +104,12 @@ jobs:
           printf '%s' "$ASC_KEY_P8" | (base64 --decode 2>/dev/null || cat) > "$KEY"
           grep -q "BEGIN PRIVATE KEY" "$KEY" || printf '%s' "$ASC_KEY_P8" > "$KEY"
           AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          # The archive is built unsigned: signing it for development would need a registered iPad. The export below
+          # signs it for the App Store with Apple's cloud-managed distribution certificate (needs an Admin key).
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release -destination 'generic/platform=iOS' \
             -archivePath build/Screenroom.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            "${AUTH[@]}" archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
           mkdir -p ../shots
           grep -q "ARCHIVE SUCCEEDED" archive.log || { grep -E "error:" -B2 -A3 archive.log | head -100 | tee ../shots/testflight-errors.txt; tail -30 archive.log >> ../shots/testflight-errors.txt; exit 1; }
           sed "s/TEAM_ID_HERE/$TEAM_ID/" ExportOptions.plist > build/ExportOptions.plist
