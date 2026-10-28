@@ -490,7 +490,7 @@ final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
             DispatchQueue.main.async {
                 p.cont = c
                 media.delegate = p
-                let started = VLCProbe.parser.queueMedia(media, options: VLCMediaParsingOptions(rawValue: 0x01 | 0x02))
+                let started = VLCProbe.parser.queue(media, options: VLCMediaParsingOptions(rawValue: 0x01 | 0x02))
                 if started != 0 { p.finish() }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 16) { p.finish() }
             }
