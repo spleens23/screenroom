@@ -21,6 +21,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - name: Use Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$X" ] || { echo "::error::No Xcode 26 on this runner"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
       - name: Tools
         run: brew install xcodegen ffmpeg
       - name: Generate the Xcode project
@@ -88,6 +94,12 @@ jobs:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v5
+      - name: Use Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$X" ] || { echo "::error::No Xcode 26 on this runner"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
       - name: Is the App Store Connect key set up?
         id: key
         run: |
@@ -116,7 +128,7 @@ jobs:
           xcodebuild -exportArchive -archivePath build/Screenroom.xcarchive -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/export "${AUTH[@]}" > export.log 2>&1 || true
           tail -20 export.log
-          grep -qiE "EXPORT SUCCEEDED|Upload succeeded|Uploaded" export.log || { mkdir -p ../shots; { grep -iE "error|fail" export.log | head -40; echo ----; tail -80 export.log; } > ../shots/testflight-errors.txt; exit 1; }
+          { grep -q "EXPORT SUCCEEDED" export.log && ! grep -qiE "EXPORT FAILED|Upload failed|Validation failed" export.log; } || { mkdir -p ../shots; { grep -iE "error|fail" export.log | head -40; echo ----; tail -80 export.log; } > ../shots/testflight-errors.txt; exit 1; }
           echo "::notice title=TestFlight::Build $GITHUB_RUN_NUMBER sent to App Store Connect. It shows up in TestFlight once Apple has processed it (usually 10–30 minutes)."
       - name: What App Store Connect says
         if: always() && steps.key.outputs.ready == 'yes'
