@@ -115,6 +115,18 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         load(index + 1)
     }
 
+    /// Soundtracks VLC's engine can't decode: TrueHD stored in an MP4 ('mlpa'). They'd play silently.
+    private func unplayableAudioIds() -> Set<Int32> {
+        var out: Set<Int32> = []
+        for case let t as [String: Any] in (player.media?.tracksInformation ?? []) {
+            guard (t[VLCMediaTracksInformationType] as? String) == VLCMediaTracksInformationTypeAudio else { continue }
+            let code = (t[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value ?? 0
+            let cc = String(bytes: [UInt8(code & 0xff), UInt8((code >> 8) & 0xff), UInt8((code >> 16) & 0xff), UInt8((code >> 24) & 0xff)], encoding: .ascii) ?? ""
+            if cc == "mlpa", let id = (t[VLCMediaTracksInformationId] as? NSNumber)?.int32Value { out.insert(id) }
+        }
+        return out
+    }
+
     /// The Audio & subtitles menu: every soundtrack and subtitle in the file (and beside it), the playing ones ticked.
     private func tracksMenu() -> UIMenu {
         func names(_ a: [Any]?) -> [String] { (a ?? []).map { "\($0)" } }
@@ -123,9 +135,11 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         let sIds = ids(player.videoSubTitlesIndexes), sNames = names(player.videoSubTitlesNames)
         let curA = player.currentAudioTrackIndex, curS = player.currentVideoSubTitleIndex
         var audio: [UIAction] = []
+        let bad = unplayableAudioIds()
         for (n, id) in aIds.enumerated() where id >= 0 {
-            let label = n < aNames.count ? aNames[n] : "Track \(n)"
-            audio.append(UIAction(title: label, state: id == curA ? .on : .off) { [weak self] _ in
+            var label = n < aNames.count ? aNames[n] : "Track \(n)"
+            if bad.contains(id) { label += " (TrueHD in MP4: can't play on iPad)" }
+            audio.append(UIAction(title: label, attributes: bad.contains(id) ? .disabled : [], state: id == curA ? .on : .off) { [weak self] _ in
                 guard let self else { return }
                 self.trackQueue.async { self.player.currentAudioTrackIndex = id }
                 self.controller.poke()
@@ -155,8 +169,17 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         tracksChosen = true
         let aNames = (player.audioTrackNames ?? []).map { "\($0)".lowercased() }
         var pickA: Int32?
+        let bad = unplayableAudioIds()
         if let n = audioTrack, n >= 1, n <= aIds.count { pickA = aIds[n - 1] }
         else if let k = matchIndex(aNames.filter { $0 != "disable" }, lang: audioLang) { pickA = aIds[k] }
+        // never a soundtrack that would be silent: the first one in the same language that plays, else any that plays
+        let current = pickA ?? player.currentAudioTrackIndex
+        if bad.contains(current) || (pickA == nil && bad.contains(player.currentAudioTrackIndex)) {
+            let names = aNames.filter { $0 != "disable" }
+            let playable = aIds.enumerated().filter { !bad.contains($0.element) }
+            let sameLang = playable.first { i in i.offset < names.count && matchIndex([names[i.offset]], lang: audioLang) != nil }
+            pickA = (sameLang ?? playable.first)?.element ?? pickA
+        }
         if let a = pickA, a != player.currentAudioTrackIndex { trackQueue.async { self.player.currentAudioTrackIndex = a } }
         let sIds = (player.videoSubTitlesIndexes ?? []).compactMap { ($0 as? NSNumber)?.int32Value }
         let sNames = (player.videoSubTitlesNames ?? []).map { "\($0)".lowercased() }
