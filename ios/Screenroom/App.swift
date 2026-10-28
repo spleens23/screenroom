@@ -72,8 +72,8 @@ final class ScreenController: UIViewController, WKNavigationDelegate {
                 if (!b) { b = document.createElement('div'); b.id = 'ios-problem'; b.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;z-index:99999;background:#3A1E16;color:#FFE2D6;border:1px solid #D2553A;border-radius:14px;padding:14px 18px;font:15px -apple-system,sans-serif;white-space:pre-wrap;max-height:40vh;overflow:auto';
                   b.onclick = () => b.remove(); document.body.appendChild(b); b.textContent = 'Screenroom hit a problem starting up (tap to hide). Please send a screenshot of this:'; }
                 b.textContent += '\\n• ' + m; }; document.body ? put() : addEventListener('DOMContentLoaded', put); };
-              const report = (m) => { log(m); show(m); };
-              window.addEventListener('error', (e) => report('error: ' + e.message + ' @ ' + String(e.filename).split('/').slice(-2).join('/') + ':' + e.lineno));
+              const report = (m) => { log(m); show(m); }; window.__iosReport = report;
+              window.addEventListener('error', (e) => (e.message === 'Script error.' ? log : report)('error: ' + e.message + ' @ ' + String(e.filename).split('/').slice(-2).join('/') + ':' + e.lineno));
               window.addEventListener('unhandledrejection', (e) => report('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
               const ce = console.error; console.error = (...a) => { log('console: ' + a.join(' ')); ce.apply(console, a); }; })();
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))

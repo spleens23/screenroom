@@ -23,4 +23,19 @@ s = s.replace('<script src="../lib/media-core.js"></script>',
 assert 'ios-api.js' in s and 'ios.css' in s, 'index.html changed: update prepare-web.sh'
 open(p, 'w', encoding='utf-8').write(s)
 PY
+# Each script runs inside try/catch: a script loaded from a file only reports "Script error." to the page, so
+# catching its exception here is what gets the real message (shown on screen and logged by the app).
+python3 - "$OUT" <<'PY'
+import sys, os
+out = sys.argv[1]
+for rel in ['lib/media-core.js', 'ios/ios-api.js', 'renderer/avatars.js', 'renderer/parlor.js', 'renderer/app.js']:
+    p = os.path.join(out, rel)
+    s = open(p, encoding='utf-8').read()
+    name = os.path.basename(rel)
+    s = ('try {\n' + s + '\n} catch (e) {\n'
+         '  const m = "' + name + ': " + (e && e.message ? e.message : e) + (e && e.stack ? "\\n" + e.stack : "");\n'
+         '  if (window.__iosReport) window.__iosReport(m); else setTimeout(() => window.__iosReport && window.__iosReport(m), 0);\n'
+         '  throw e;\n}\n')
+    open(p, 'w', encoding='utf-8').write(s)
+PY
 echo "Web screens ready in $OUT"
