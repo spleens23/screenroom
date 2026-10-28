@@ -37,8 +37,9 @@ jobs:
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
       - name: Try it in a simulated iPad
         run: |
-          set -x
           mkdir -p shots
+          exec > >(tee shots/simulator.txt) 2>&1
+          set -x
           TYPE="$(xcrun simctl list devicetypes | grep -m1 -E 'iPad Pro 11' | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
           [ -n "$TYPE" ] || TYPE="$(xcrun simctl list devicetypes | grep -m1 iPad | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
           RUNTIME="$(xcrun simctl list runtimes | grep -m1 -E '^iOS' | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')"
