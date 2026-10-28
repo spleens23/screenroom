@@ -257,7 +257,6 @@ window.createParlor = function createParlor(ctx) {
             h('td', { class: 't' }, mmss(t.duration)),
             h('td', { class: 'x' }, h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '+')))];
       }).flat())));
-    $('#modal').classList.remove('tape'); // (the 1990s theme's film box look is only for films)
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
     if (focusSel) { const f = $('#modal-body').querySelector(focusSel); f && f.focus(); }

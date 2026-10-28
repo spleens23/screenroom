@@ -62,7 +62,7 @@
   // ---- config --------------------------------------------------------------------------------------------
   const DEFAULTS = { preferredLang: 'eng', subLang: '', screensaverMin: 0, theme: '2020s', themeAll: false, retroFx: false };
   let config = null;
-  const THEMES = ['2020s', '1990s', 'heirloom'];
+  const THEMES = ['2020s', 'heirloom'];
 
   // ---- profiles (the same rules as lib/profiles.js) -------------------------------------------------------
   const COLORS = ['#b5523a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];

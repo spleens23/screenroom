@@ -892,11 +892,17 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 @media (max-width: 1500px) { body.big #nav nav { gap: 16px; font-size: 16px; } body.big #pnav a { padding: 6px 10px; } }
 @media (max-width: 1250px) { #nav nav { gap: 12px; } #search { width: 110px; } }
 
-/* pieces only the 1990s theme shows (theme-90s.css) */
-.card .box3d, .card .sticker, .card .shine { display: none; }
-#fx { display: none; }
 
 /* Settings → Subtitles: the OpenSubtitles account */
 .osub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .osub .pin-input { flex: 1 1 180px; min-width: 0; margin: 0; max-width: none; font-size: 15px; text-align: left; letter-spacing: 0; }
 #vote-btn[hidden], #parlor-btn[hidden] { display: none !important; }
+
+/* drives: name (and Eject) on top, what you can do with it underneath, wrapping inside the card */
+.drive.disk { flex-direction: column; align-items: stretch; gap: 10px; }
+.disk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.disk-head .drive-name { min-width: 0; overflow-wrap: anywhere; }
+.drive.disk .btns { flex-wrap: wrap; gap: 8px; }
+.drive.disk .btn { white-space: nowrap; }
+.disk-eject { flex: none; }
+.disk-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 12px; font-weight: 600; opacity: .7; vertical-align: 2px; }

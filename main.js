@@ -350,9 +350,9 @@ function battery() {
   } catch { return null; }
 }
 
-// Themes: '2020s' (the default), '1990s' (the VCR and the video store), 'heirloom' (glossy light blue, to match
+// Themes: '2020s' (Matinee, the default), 'heirloom' (glossy light blue, to match
 // the Heirloom tablet system, and the default there).
-const THEMES = ['2020s', '1990s', 'heirloom'];
+const THEMES = ['2020s', 'heirloom'];
 const onHeirloom = (() => { try { return /^VARIANT_ID=heirloom$/m.test(fs.readFileSync('/etc/os-release', 'utf8')); } catch { return false; } })();
 const defaultTheme = () => (onHeirloom || process.env.SCREENROOM_HEIRLOOM === '1' ? 'heirloom' : '2020s');
 // The look: each profile picks its own theme, unless "same theme for every profile" is ticked.
@@ -707,6 +707,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('drive-eject', async (_e, mount) => {
     const d = drives.find((x) => x.mount === mount);
     if (!d) return { ok: false, msg: 'Drive not found' };
+    if (d.internal) return { ok: false, msg: 'That drive is built into this computer.' };
     const r = await transfer.eject(d);
     await pollDrives();
     return r;

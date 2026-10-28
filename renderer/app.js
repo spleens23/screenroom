@@ -552,11 +552,7 @@
       (() => { const a = avgRating(entry); return a ? h('div', { class: 'card-stars', title: `${a.count} rating${a.count > 1 ? 's' : ''}` }, `★ ${a.avg.toFixed(1).replace('.0', '')}`) : null; })(),
       cont && cont.from ? h('div', { class: 'card-from' }, avatar(cont.from), `from ${cont.from.name}`) : tinyFaces(watchersOf(entry).map((x) => x.profile), 'card-who'),
       h('div', { class: 'ttl' }, entry.name, sub ? h('span', { class: 'sub' }, sub) : null),
-      pct ? h('div', { class: 'bar', style: `width:${pct}%` }) : null,
-      // 1990s theme: the plastic box's sides and top, a store sticker, the sleeve's shine
-      h('span', { class: 'box3d', 'aria-hidden': 'true' }, h('i', { class: 'bx-l' }), h('i', { class: 'bx-r' }), h('i', { class: 'bx-t' })),
-      (() => { const t = isT90() ? cardSticker(entry, cont) : ''; return t ? h('span', { class: 'sticker' }, t) : null; })(),
-      h('span', { class: 'shine', 'aria-hidden': 'true' }));
+      pct ? h('div', { class: 'bar', style: `width:${pct}%` }) : null);
   }
 
   // The iPad: films arrive through the Files app, Finder (from a Mac), AirDrop or a USB-C drive.
@@ -645,16 +641,6 @@
   }
 
   function renderGrid(title, entries) {
-    if (isT90() && entries.length) {
-      // one shelf per line of boxes
-      const cw = parseFloat(getComputedStyle(document.body).getPropertyValue('--card-w')) || 190;
-      const per = Math.max(3, Math.floor((innerWidth * 0.92 + 40) / (cw + 40)));
-      const shelves = [];
-      for (let i = 0; i < entries.length; i += per) shelves.push(entries.slice(i, i + per));
-      main.replaceChildren(h('h1', { class: 'page-title' }, title),
-        h('div', { class: 'rows flat shelves' }, shelves.map((list) => h('section', { class: 'row' }, h('div', { class: 'strip' }, list.map((e) => card(e)))))));
-      return;
-    }
     main.replaceChildren(h('h1', { class: 'page-title' }, title),
       entries.length ? h('div', { class: 'grid' }, entries.map((e) => card(e))) : h('div', { class: 'empty' }, h('p', {}, 'Nothing here.')));
   }
@@ -668,25 +654,11 @@
   };
 
   function applyTheme() {
-    const t90 = isT90();
-    document.body.classList.toggle('t90', t90);
-    document.body.classList.toggle('fx', t90 && !!S.retroFx);
     document.body.classList.toggle('heir', !!(S && S.theme === 'heirloom'));
     // Matinee: the standard look (stored as '2020s')
-    document.body.classList.toggle('mat', !t90 && !(S && S.theme === 'heirloom'));
+    document.body.classList.toggle('mat', !(S && S.theme === 'heirloom'));
     document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
-    const c = $('#vcr-clock');
-    if (c) { c.hidden = !t90; if (t90) drawClock(); }
   }
-  function drawClock() {
-    const c = $('#vcr-clock');
-    if (!c || c.hidden) return;
-    const d = new Date();
-    const hh = d.getHours() % 12 || 12, mm = String(d.getMinutes()).padStart(2, '0');
-    c.replaceChildren(`${hh}:${mm}`, h('small', {}, d.getHours() < 12 ? 'AM' : 'PM'));
-  }
-  setInterval(drawClock, 15000);
-
   function render() {
     applyTheme();
     document.body.classList.toggle('tv', !!S.tv);
@@ -745,163 +717,7 @@
     if (!open) return;
     const e = fullEntry(open.key);
     if (!e) return closeModal();
-    $('#modal').classList.toggle('tape', isT90());
-    $('#modal-body').replaceChildren(...(isT90() ? tapeDetail(e) : e.kind === 'series' ? seriesDetail(e) : movieDetail(e)));
-  }
-
-  // ---- 1990s theme: the tape taken off the shelf. The front of the box (its cover) with what you can do; Flip
-  // turns it over to the back, where the details are, like reading the back of a box at the video store.
-  function isT90() { return !!(S && S.theme === '1990s'); }
-  const yearOf = (e) => (e.kind === 'series' ? (e.year ? (e.yearEnd && e.yearEnd !== e.year ? `${e.year}–${e.yearEnd}` : String(e.year)) : '') : (e.year ? String(e.year) : ''));
-  const ageOf = (e) => ((e.items || []).map((i) => i.rating).filter(Boolean).sort((a, b) => b.level - a.level)[0] || null);
-  function formatLogos(items) {
-    const out = [];
-    const best = items.map(resOf).sort((a, b) => (RES_RANK[b] || 0) - (RES_RANK[a] || 0))[0];
-    if (best === '4K') out.push('4K ULTRA HD'); else if (best === '1080p' || best === '720p') out.push(`HD ${best.toUpperCase()}`); else if (best) out.push('STANDARD');
-    if (items.some((i) => i.video && i.video.dv)) out.push('DOLBY VISION');
-    else { const hdr = items.map((i) => i.video && i.video.hdr).find(Boolean); if (hdr) out.push(String(hdr).toUpperCase()); }
-    const audio = items.flatMap((i) => i.audio || []);
-    if (audio.some((a) => /Atmos/i.test(a.label))) out.push('DOLBY ATMOS');
-    else if (audio.some((a) => /DTS:?X/i.test(a.label))) out.push('DTS:X');
-    else if (audio.some((a) => a.family === 'dts')) out.push('DTS');
-    else if (audio.some((a) => a.family === 'dolby')) out.push('DOLBY DIGITAL');
-    else if (audio.some((a) => (a.channels || 0) >= 2)) out.push('HI-FI STEREO');
-    if (items.some((i) => (i.subs || []).length)) out.push('CC SUBTITLED');
-    return out;
-  }
-  function tapeDetail(e) {
-    const series = e.kind === 'series';
-    const vs = series ? null : (e.versions || [e.item]);
-    const item = series ? null : ((open.version && vs.find((v) => v.id === open.version)) || e.item);
-    if (!series && (selectedAudio == null || !item.audio.some((a) => a.n === selectedAudio))) { const d = item.audio.find((a) => a.default) || item.audio[0]; selectedAudio = d ? d.n : null; }
-    const age = ageOf(e);
-    const minutes = series ? 0 : Math.round((item.duration || 0) / 60);
-
-    // ---- what you can do (right of the box)
-    const playBtns = () => {
-      if (!series) {
-        const p = prog(item.id);
-        const resumable = p && !p.done && p.pos > 5;
-        return [
-          h('button', { class: 'tbtn primary', onclick: () => start(item.id, selectedAudio) }, resumable ? `RESUME AT ${fmtTime(p.pos)}` : 'PLAY'),
-          resumable ? h('button', { class: 'tbtn', onclick: () => start(item.id, selectedAudio, true) }, 'PLAY FROM THE START') : null,
-        ];
-      }
-      const n = nextUp(e);
-      const ep = n.ep;
-      const which = `S${ep.tv.season} E${ep.tv.label || ep.tv.episode}`;
-      return [
-        h('button', { class: 'tbtn primary', onclick: () => start(ep.id, null, n.mode === 'finished') }, n.mode === 'resume' ? `RESUME ${which} AT ${fmtTime(n.p.pos)}` : n.mode === 'next' ? `PLAY ${which}` : 'PLAY FROM THE START'),
-        n.mode === 'resume' ? h('button', { class: 'tbtn', onclick: () => start(ep.id, null, true) }, `${which} FROM THE START`) : null,
-      ];
-    };
-    const flipBtn = () => h('button', { class: 'tbtn flip-btn', onclick: flipTape }, open.flipped ? 'FLIP TO THE FRONT' : 'FLIP FOR DETAILS');
-    const side = h('div', { class: 'tape-side' });
-    function drawSide() {
-      const front = !open.flipped;
-      const p = !series && prog(item.id);
-      const kids = [
-        h('div', { class: 'tape-kicker' }, [yearOf(e), series ? plural(e.seasons.size, 'Season') : minutes ? `${Math.floor(minutes / 60)}H ${String(minutes % 60).padStart(2, '0')}M` : '', age ? age.label : ''].filter(Boolean).join('   ·   ').toUpperCase()),
-        front ? h('h1', { class: 'tape-title' }, e.name) : h('div', { class: 'tape-title small' }, e.name),
-        front ? h('div', { class: 'tape-formats' }, formatLogos(series ? e.items : [item]).join('  ·  ')) : null,
-        h('div', { class: 'tape-btns' },
-          playBtns(),
-          !front && !series && item.audio.length > 1 ? h('button', { class: 'tbtn', onclick: async () => {
-            const a = await askChoice('Audio', item.audio.map((x) => ({ value: x.n, label: [x.label, x.layout, x.lang].filter(Boolean).join(' · ') })), selectedAudio);
-            if (a != null) { selectedAudio = a; drawSide(); }
-            const b = side.querySelector('.audio-btn'); b && b.focus();
-          } }, (() => { const a = item.audio.find((x) => x.n === selectedAudio); return `AUDIO: ${a ? a.label.toUpperCase() : 'DEFAULT'}`; })()) : null,
-          !front && !series && vs.length > 1 ? h('button', { class: 'tbtn', onclick: async () => {
-            const v = await askChoice('Which tape', vs.map((x) => ({ value: x.id, label: qualityLabel(x) })), item.id);
-            if (v) { open.version = v; selectedAudio = null; renderModal(); }
-          } }, `TAPE: ${qualityLabel(item).split(' · ')[0].toUpperCase()}`) : null,
-          !front && !series ? h('button', { class: 'tbtn', onclick: async () => { S = await api.setWatched(vs.map((v) => v.id), !(p && p.done)); renderModal(); render(); } }, p && p.done ? 'WATCHED (UNDO)' : 'MARK AS WATCHED') : null,
-          !front ? (() => { const b = recommendButton(e); if (b) { b.className = 'tbtn rec-btn'; b.textContent = 'RECOMMEND TO SOMEONE'; } return b; })() : null,
-          flipBtn(),
-          front ? h('button', { class: 'tbtn', onclick: closeModal }, 'PUT IT BACK') : null),
-        !front ? ratingBlock(e) : null,
-        !front ? watchedByBlock(e) : null,
-        !front ? recBanner(e) : null,
-        h('div', { class: 'tape-hint' }, front ? 'OK: CHOOSE      BACK: PUT IT BACK ON THE SHELF' : 'BACK: FLIP TO THE FRONT')];
-      side.classList.toggle('back', !front);
-      side.replaceChildren(...kids);
-      side.querySelectorAll('.tbtn').forEach((b) => { if (/^AUDIO/.test(b.textContent)) b.classList.add('audio-btn'); });
-    }
-    drawSide();
-
-    // ---- the box: front (the cover) and back (the details)
-    const cover = h('div', { class: 'face front' + (e.art ? '' : ' no-art'), style: bg(e.art) },
-      e.art ? null : h('div', { class: 'made-cover' }, h('div', { class: 'mc-title' }, e.name), h('div', { class: 'mc-year' }, yearOf(e))),
-      (() => { const t = cardSticker(e); return t ? h('div', { class: 'tape-sticker' }, t) : null; })(),
-      h('div', { class: 'shine' }));
-    const small = series
-      ? [e.genres.join(' · '), `${plural(e.eps.length, 'episode')} on ${plural(e.seasons.size, 'season')} · ${e.eps.filter((x) => isDone(x.id)).length} watched`]
-      : [item.genres.join(' · '),
-        item.audio.length ? `Audio: ${item.audio.map((a) => [a.label, a.lang].filter(Boolean).join(' ')).join(' · ')}` : '',
-        `Subtitles: ${item.subs.length ? item.subs.map((x) => x.lang || x.codec).join(' · ') : 'none'}`,
-        item.artist ? `Credits: ${item.artist}` : ''];
-    let backBody;
-    if (!series) {
-      backBody = [
-        e.backdrop ? h('div', { class: 'tb-still', style: bg(e.backdrop) }) : null,
-        h('p', { class: 'tb-desc' }, item.description || 'No description.'),
-      ];
-    } else {
-      const seasons = [...e.seasons.keys()].sort((a, b) => a - b);
-      if (!seasons.includes(open.season)) open.season = seasons[0];
-      const eps = e.seasons.get(open.season);
-      backBody = [
-        h('p', { class: 'tb-desc short' }, e.description || ''),
-        seasons.length > 1 ? h('div', { class: 'tb-seasons', 'data-navrow': '1' }, seasons.map((n) => h('button', { class: 'tb-season' + (n === open.season ? ' on' : ''),
-          onclick: () => { open.season = n; open.focusEp = null; renderModal(); const c = $('#modal .tb-season.on'); c && c.focus(); } }, seasonLabel(n).toUpperCase()))) : null,
-        h('div', { class: 'tb-eps' }, eps.map((ep) => {
-          const p = prog(ep.id);
-          const pct = p && !p.done && p.dur ? Math.round((p.pos / p.dur) * 100) : 0;
-          return h('button', { class: 'tb-ep' + (open.focusEp === ep.id ? ' focus' : ''), 'data-ep': ep.id, onclick: () => start(ep.id, null, false) },
-            h('span', { class: 'tb-n' }, String(ep.tv.label || ep.tv.episode)),
-            h('span', { class: 'tb-name' }, ep.tv.name),
-            h('span', { class: 'tb-dur' }, p && p.done ? 'WATCHED' : pct ? `${pct}%` : ep.duration ? `${Math.round(ep.duration / 60)} MIN` : ''));
-        })),
-      ];
-    }
-    const back = h('div', { class: 'face back' + (series ? ' series' : '') },
-      h('div', { class: 'tb-head' }, e.name),
-      ...backBody,
-      h('div', { class: 'tb-logos' }, formatLogos(series ? e.items : [item]).map((x) => h('span', {}, x))),
-      h('div', { class: 'tb-small' }, small.filter(Boolean).map((x) => h('div', {}, x))),
-      h('div', { class: 'tb-foot' },
-        h('div', { class: 'tb-age' }, age ? h('span', { class: 'tb-rated' }, age.label) : null,
-          h('span', {}, 'COLOR', h('br'), series ? plural(e.eps.length, 'EPISODE').toUpperCase() : minutes ? `APPROX. ${minutes} MIN.` : '')),
-        h('div', { class: 'tb-barcode' }, h('div', { class: 'bars' }), h('span', {}, barcodeDigits(e.key)))));
-    const inner = h('div', { class: 'tape-inner' + (open.flipped ? ' flipped' : '') + (series ? ' series' : '') }, cover, back);
-    open.drawSide = drawSide; open.inner = inner;
-    if (open.focusEp && open.flipped) setTimeout(() => { const el = $(`#modal .tb-ep[data-ep="${open.focusEp}"]`); el && el.scrollIntoView({ block: 'center' }); }, 30);
-    return [h('div', { class: 'tape-scene' }, h('div', { class: 'tape-wrap' }, inner), side)];
-  }
-  const barcodeDigits = (key) => { let n = 0; for (const c of String(key)) n = (n * 31 + c.charCodeAt(0)) % 1e11; return `0 ${String(n).padStart(11, '0').replace(/(\d{5})(\d{5})(\d)/, '$1 $2 $3')}`; };
-  function flipTape() {
-    if (!open || !open.inner) return;
-    open.flipped = !open.flipped;
-    open.inner.classList.toggle('flipped', open.flipped);
-    // the buttons change half way through the turn
-    setTimeout(() => {
-      if (!open || !open.drawSide) return;
-      open.drawSide();
-      const b = $('#modal .tape-side .tbtn.primary');
-      if (b) { document.body.classList.add('navmode'); b.focus({ preventScroll: true }); }
-    }, 320);
-  }
-  // A note on the box (like a video store sticker): NEW, or where you left off.
-  function cardSticker(e, cont) {
-    if (e.kind === 'series') {
-      const n = cont && cont.ep ? cont : null;
-      if (n) return `S${n.ep.tv.season} E${n.ep.tv.label || n.ep.tv.episode}`;
-    } else {
-      const p = prog(e.item.id);
-      if (p && !p.done && p.dur && p.pos > 5) return `${Math.round((p.pos / p.dur) * 100)}%`;
-    }
-    const newest = Math.max(...(e.items || [e.item]).filter(Boolean).map((i) => i.mtime || 0));
-    return Date.now() - newest < 14 * 864e5 ? 'NEW' : '';
+    $('#modal-body').replaceChildren(...(e.kind === 'series' ? seriesDetail(e) : movieDetail(e)));
   }
 
   function heroBlock(e, extraBtns) {
@@ -1036,27 +852,9 @@
     return node;
   }
 
-  // Scanlines & static (1990s theme, when switched on): a burst of TV static as the tape starts.
-  function staticBurst(ms = 650) {
-    const c = h('canvas', { id: 'static', width: 320, height: 180 });
-    document.body.append(c);
-    const g = c.getContext('2d');
-    const img = g.createImageData(320, 180);
-    const t0 = performance.now();
-    const step = (t) => {
-      if (t - t0 > ms) { c.remove(); return; }
-      const d = img.data;
-      for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
-      g.putImageData(img, 0, 0);
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-
   let filmPlaying = false;
   async function start(id, audioTrack, fromStart) {
     hideSaver();
-    if (!filmPlaying && document.body.classList.contains('fx')) staticBurst();
     if (filmPlaying) return; // a second press while the film is starting does nothing
     filmPlaying = true;
     const r = await api.play({ id, audioTrack, fromStart });
@@ -1187,9 +985,7 @@
   function showSaver() {
     if (saver) return;
     const logo = h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'Parlor' : 'Screenroom');
-    const el = h('div', { id: 'saver' }, logo,
-      // 1990s theme: a VCR's blue screen, stopped, with the clock nobody ever set
-      isT90() ? h('div', { class: 'saver-stop' }, 'STOP') : null, isT90() ? h('div', { class: 'saver-clock' }, '12:00') : null);
+    const el = h('div', { id: 'saver' }, logo);
     document.body.append(el);
     let x = Math.random() * (innerWidth - 400), y = Math.random() * (innerHeight - 120);
     let vx = 140, vy = 110, ci = 0, last = performance.now();
@@ -1630,14 +1426,18 @@
   function drivesBlock() {
     const list = S.drives || [];
     if (!list.length) return h('p', { class: 'am-hint' }, `Plug in a drive and its movies and shows appear in your library automatically. You can also copy them onto this ${EDITION === 'all' ? 'box' : 'computer'}.`);
-    return h('div', { class: 'drives' }, list.map((d) => h('div', { class: 'drive' },
-      h('div', { class: 'drive-name' }, d.label, h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
+    const eject = (d) => h('button', { class: 'btn secondary small disk-eject', title: `Eject ${d.label}`, onclick: async () => { const r = await api.ejectDrive(d.mount); if (!r.ok) flash(r.msg || 'Could not eject'); else flash(`${d.label} can be unplugged`); S = await api.state(); render(); if (!$('#settings').hidden) renderSettings(); } }, 'Eject');
+    return h('div', { class: 'drives' }, list.map((d) => h('div', { class: 'drive disk' },
+      h('div', { class: 'disk-head' },
+        h('div', { class: 'drive-name' }, d.label, d.internal ? h('span', { class: 'disk-tag' }, 'Internal') : null,
+          h('small', {}, [d.fs, d.free != null ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)}` : ''].filter(Boolean).join(' · '))),
+        // an internal drive can't be unplugged, so it has no Eject
+        d.internal ? null : eject(d)),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: () => syncDrive(d) }, 'Sync films to this box'),
+        h('button', { class: 'btn secondary', onclick: () => syncDrive(d) }, `Sync films to this ${EDITION === 'all' ? 'box' : 'computer'}`),
         api.drivePlan && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => syncDrive(d, 'music') }, 'Sync music') : null,
         api.driveList ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d) }, 'Choose films to copy…') : null,
-        api.driveList && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d, 'music') }, 'Choose music to copy…') : null,
-        h('button', { class: 'btn secondary', onclick: async () => { const r = await api.ejectDrive(d.mount); if (!r.ok) flash(r.msg || 'Could not eject'); else flash(`${d.label} can be unplugged`); S = await api.state(); render(); if (!$('#settings').hidden) renderSettings(); } }, 'Eject')))));
+        api.driveList && api.parlorState && S.profile && !S.profile.kids ? h('button', { class: 'btn secondary', onclick: () => chooseFiles(d, 'music') }, 'Choose music to copy…') : null))));
   }
 
   function addMediaPanel() {
@@ -1663,7 +1463,7 @@
     }).catch(() => {});
     return h('div', { class: 'addmedia' },
       EDITION === 'all' ? wifi : null,
-      h('div', { class: 'am-card' }, h('h3', {}, 'USB drive'), drivesBlock()),
+      h('div', { class: 'am-card' }, h('h3', {}, (S.drives || []).some((d) => d.internal) ? 'Drives' : 'USB drive'), drivesBlock()),
       h('div', { id: 'copy-status', class: 'copy-status', hidden: true }));
   }
 
@@ -1940,8 +1740,8 @@
     layer.hidden = false;
     layer.replaceChildren(h('div', { class: 'who-inner' },
       h('div', { class: 'brand who-brand' }, EDITION === 'music' ? 'Parlor' : 'Screenroom'),
-      h('h1', {}, isT90() ? "Who's watching?" : 'Take a seat'),
-      isT90() ? null : h('p', { class: 'who-sub' }, EDITION === 'music' ? 'Everyone gets their own albums, playlists and favourites.' : 'Everyone gets their own list and their own place in every film.'),
+      h('h1', {}, 'Take a seat'),
+      h('p', { class: 'who-sub' }, EDITION === 'music' ? 'Everyone gets their own albums, playlists and favourites.' : 'Everyone gets their own list and their own place in every film.'),
       h('div', { class: 'who-list' }, (S.profiles || []).map((p) =>
         h('button', { class: 'who-tile', 'data-profile': p.id, onclick: () => chooseProfile(p) },
           avatar(p, true),
@@ -2071,8 +1871,8 @@
   }
 
   // ---- settings ----------------------------------------------------------------
-  // Settings → Theme: Matinee (stored as '2020s'), the 1990s one (video store shelves, the VCR). For this profile, or for
-  // everyone when "Same theme for every profile" is ticked; Scanlines & static only go with the 1990s theme.
+  // Settings → Theme: Matinee (stored as '2020s') or Heirloom. For this profile, or for everyone when "Same theme for
+  // every profile" is ticked.
   function themeBlock(kids) {
     const set = async (o, key) => {
       S = await api.setTheme(o);
@@ -2081,13 +1881,11 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. Matinee: Screenroom's own warm picture-house look. 1990s: tapes on the shelf, the VCR's blue menus and on-screen display. Heirloom: glossy light blue, like the Heirloom tablet.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. Matinee: Screenroom's own warm picture-house look. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
-          [['2020s', 'Matinee'], ['1990s', '1990s'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
+          [['2020s', 'Matinee'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
       kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
-        h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })),
-      S.theme === '1990s' ? h('label', { class: 'row-set' }, h('span', {}, 'Scanlines & static', h('small', {}, 'Faint TV lines over the menus and a burst of static when a tape starts.')),
-        h('input', { type: 'checkbox', 'data-key': 'retroFx', checked: !!S.retroFx, onchange: (e) => set({ fx: e.target.checked }, 'retroFx') })) : null);
+        h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })));
   }
 
   function toggle(label, hint, key) {
@@ -2440,7 +2238,7 @@
     if ($('#sheet')) { if (sheetBack && sheetBack()) return true; closeSheet(); return true; }
     if ($('#who') && !$('#who').hidden) return true;
     if (parlorUI && parlorUI.scope()) { parlorUI.back(); return true; }
-    if (!$('#modal').hidden) { if (open && open.flipped && isT90()) { flipTape(); return true; } closeModal(); return true; }
+    if (!$('#modal').hidden) { closeModal(); return true; }
     if (!$('#settings').hidden) { closeSettings(); return true; }
     if (document.activeElement === $('#search')) $('#search').blur();
     // Scrolled down a page: Back first jumps to the top bar (menu, Now Playing, search, settings).
