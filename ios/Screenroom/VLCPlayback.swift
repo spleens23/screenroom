@@ -1,9 +1,9 @@
 import UIKit
 import AVFoundation
 import MediaPlayer
-import MobileVLCKit
+import VLCKit
 
-/// Plays what Apple's player can't (DTS and TrueHD sound, MKV / AVI / WebM files, films with .srt subtitles beside
+/// Plays what Apple's player can't (DTS and TrueHD sound, including TrueHD inside an MP4, MKV / AVI / WebM files, films with .srt subtitles beside
 /// them) with VLC's engine, behind Screenroom's own controls: the title, a scrub bar, back / forward 10 s,
 /// play / pause, an Audio & subtitles menu that switches tracks while the film plays, and Next episode.
 /// Reports where you are every few seconds (Continue Watching) and goes on to the next episode by itself.
@@ -25,6 +25,9 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
     private var finished = false
     private var tracksChosen = false
     private var pendingStart: Double = 0
+    /// How far into the film we last were (VLC 4 reports the end of a film as "stopped").
+    private var lastFraction: Double = 0
+    private var switching = false
 
     init(queue: [[String: Any]], audioLang: String, subLang: String, audioTrack: Int?, bridge: Bridge) {
         self.queue = queue
@@ -71,8 +74,9 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         tracksChosen = false
         guard let path = item["path"] as? String else { return }
         let url = URL(fileURLWithPath: path)
-        let media = VLCMedia(url: url)
-        player.media = media
+        lastFraction = 0
+        switching = true
+        player.media = VLCMedia(url: url)
         // .srt / .vtt beside the film (Film.srt, Film.en.srt …)
         for sub in sidecarSubtitles(for: url) { player.addPlaybackSlave(sub, type: .subtitle, enforce: false) }
         pendingStart = (item["start"] as? NSNumber)?.doubleValue ?? 0
@@ -82,6 +86,7 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         controller.setHasNext(index + 1 < queue.count)
         player.play()
         updateNowPlaying()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.switching = false }
     }
 
     private func sidecarSubtitles(for url: URL) -> [URL] {
@@ -101,12 +106,12 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
     }
 
     private func skip(_ seconds: Int) {
-        if seconds >= 0 { player.jumpForward(Int32(seconds)) } else { player.jumpBackward(Int32(-seconds)) }
+        if seconds >= 0 { player.jumpForward(Double(seconds)) } else { player.jumpBackward(Double(-seconds)) }
         controller.poke()
     }
 
     private func seek(to fraction: Float) {
-        player.position = max(0, min(1, fraction))
+        player.position = Double(max(0, min(1, fraction)))
     }
 
     private func next() {
@@ -115,42 +120,31 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         load(index + 1)
     }
 
-    /// Soundtracks VLC's engine can't decode: TrueHD stored in an MP4 ('mlpa'). They'd play silently.
-    private func unplayableAudioIds() -> Set<Int32> {
-        var out: Set<Int32> = []
-        for case let t as [String: Any] in (player.media?.tracksInformation ?? []) {
-            guard (t[VLCMediaTracksInformationType] as? String) == VLCMediaTracksInformationTypeAudio else { continue }
-            let code = (t[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value ?? 0
-            let cc = String(bytes: [UInt8(code & 0xff), UInt8((code >> 8) & 0xff), UInt8((code >> 16) & 0xff), UInt8((code >> 24) & 0xff)], encoding: .ascii) ?? ""
-            if cc == "mlpa", let id = (t[VLCMediaTracksInformationId] as? NSNumber)?.int32Value { out.insert(id) }
-        }
-        return out
-    }
-
     /// The Audio & subtitles menu: every soundtrack and subtitle in the file (and beside it), the playing ones ticked.
     private func tracksMenu() -> UIMenu {
-        func names(_ a: [Any]?) -> [String] { (a ?? []).map { "\($0)" } }
-        func ids(_ a: [Any]?) -> [Int32] { (a ?? []).compactMap { ($0 as? NSNumber)?.int32Value } }
-        let aIds = ids(player.audioTrackIndexes), aNames = names(player.audioTrackNames)
-        let sIds = ids(player.videoSubTitlesIndexes), sNames = names(player.videoSubTitlesNames)
-        let curA = player.currentAudioTrackIndex, curS = player.currentVideoSubTitleIndex
         var audio: [UIAction] = []
-        let bad = unplayableAudioIds()
-        for (n, id) in aIds.enumerated() where id >= 0 {
-            var label = n < aNames.count ? aNames[n] : "Track \(n)"
-            if bad.contains(id) { label += " (TrueHD in MP4: can't play on iPad)" }
-            audio.append(UIAction(title: label, attributes: bad.contains(id) ? .disabled : [], state: id == curA ? .on : .off) { [weak self] _ in
+        for (n, t) in player.audioTracks.enumerated() {
+            let label = t.trackName.isEmpty ? "Track \(n + 1)" : t.trackName
+            audio.append(UIAction(title: label, state: t.isSelected ? .on : .off) { [weak self] _ in
                 guard let self else { return }
-                self.trackQueue.async { self.player.currentAudioTrackIndex = id }
+                self.trackQueue.async { t.isSelectedExclusively = true }
                 self.controller.poke()
             })
         }
+        let texts = player.textTracks
         var subs: [UIAction] = []
-        for (n, id) in sIds.enumerated() {
-            let label = id < 0 ? "Off" : (n < sNames.count ? sNames[n] : "Subtitle \(n)")
-            subs.append(UIAction(title: label, state: id == curS ? .on : .off) { [weak self] _ in
+        if !texts.isEmpty {
+            subs.append(UIAction(title: "Off", state: texts.contains { $0.isSelected } ? .off : .on) { [weak self] _ in
                 guard let self else { return }
-                self.trackQueue.async { self.player.currentVideoSubTitleIndex = id }
+                self.trackQueue.async { self.player.deselectAllTextTracks() }
+                self.controller.poke()
+            })
+        }
+        for (n, t) in texts.enumerated() {
+            let label = t.trackName.isEmpty ? "Subtitle \(n + 1)" : t.trackName
+            subs.append(UIAction(title: label, state: t.isSelected ? .on : .off) { [weak self] _ in
+                guard let self else { return }
+                self.trackQueue.async { t.isSelectedExclusively = true }
                 self.controller.poke()
             })
         }
@@ -164,30 +158,19 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
     /// The soundtrack in your language (or the one picked on the film's page), subtitles if you want them.
     private func chooseTracks() {
         guard !tracksChosen else { return }
-        let aIds = (player.audioTrackIndexes ?? []).compactMap { ($0 as? NSNumber)?.int32Value }.filter { $0 >= 0 }
-        guard !aIds.isEmpty else { return }
+        let audio = player.audioTracks
+        guard !audio.isEmpty else { return }
         tracksChosen = true
-        let aNames = (player.audioTrackNames ?? []).map { "\($0)".lowercased() }
-        var pickA: Int32?
-        let bad = unplayableAudioIds()
-        if let n = audioTrack, n >= 1, n <= aIds.count { pickA = aIds[n - 1] }
-        else if let k = matchIndex(aNames.filter { $0 != "disable" }, lang: audioLang) { pickA = aIds[k] }
-        // never a soundtrack that would be silent: the first one in the same language that plays, else any that plays
-        let current = pickA ?? player.currentAudioTrackIndex
-        if bad.contains(current) || (pickA == nil && bad.contains(player.currentAudioTrackIndex)) {
-            let names = aNames.filter { $0 != "disable" }
-            let playable = aIds.enumerated().filter { !bad.contains($0.element) }
-            let sameLang = playable.first { i in i.offset < names.count && matchIndex([names[i.offset]], lang: audioLang) != nil }
-            pickA = (sameLang ?? playable.first)?.element ?? pickA
-        }
-        if let a = pickA, a != player.currentAudioTrackIndex { trackQueue.async { self.player.currentAudioTrackIndex = a } }
-        let sIds = (player.videoSubTitlesIndexes ?? []).compactMap { ($0 as? NSNumber)?.int32Value }
-        let sNames = (player.videoSubTitlesNames ?? []).map { "\($0)".lowercased() }
+        var pick: VLCMediaPlayer.Track?
+        if let n = audioTrack, n >= 1, n <= audio.count { pick = audio[n - 1] }
+        else if let k = matchIndex(audio.map { "\($0.trackName) [\($0.language ?? "")]".lowercased() }, lang: audioLang) { pick = audio[k] }
+        if let a = pick, !a.isSelected { trackQueue.async { a.isSelectedExclusively = true } }
+        let texts = player.textTracks
         if subLang.isEmpty {
-            if player.currentVideoSubTitleIndex != -1 { trackQueue.async { self.player.currentVideoSubTitleIndex = -1 } }
-        } else if let k = matchIndex(sNames, lang: subLang), k < sIds.count {
-            let sid = sIds[k]
-            trackQueue.async { self.player.currentVideoSubTitleIndex = sid }
+            if texts.contains(where: { $0.isSelected }) { trackQueue.async { self.player.deselectAllTextTracks() } }
+        } else if let k = matchIndex(texts.map { "\($0.trackName) [\($0.language ?? "")]".lowercased() }, lang: subLang) {
+            let t = texts[k]
+            trackQueue.async { t.isSelectedExclusively = true }
         }
     }
 
@@ -201,21 +184,23 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
     }
 
     // ---- what VLC tells us --------------------------------------------------------------------------------
-    func mediaPlayerStateChanged(_ aNotification: Notification) {
+    @objc(mediaPlayerStateChanged:)
+    func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.finished else { return }
-            switch self.player.state {
-            case .playing, .esAdded:
+            switch newState {
+            case .playing:
                 self.chooseTracks()
                 if self.pendingStart > 0, let len = self.player.media?.length.intValue, len > 0 {
-                    self.player.position = Float(self.pendingStart * 1000 / Double(len))
+                    self.player.position = self.pendingStart * 1000 / Double(len)
                     self.pendingStart = 0
                 }
                 self.controller.setPlaying(true)
             case .paused:
                 self.controller.setPlaying(false)
-            case .ended:
-                self.ended()
+            case .stopped:
+                // the end of the film (switching to the next one also passes through "stopped")
+                if !self.switching && self.lastFraction > 0.9 { self.ended() }
             case .error:
                 let title = self.item["title"] as? String ?? ""
                 self.bridge.emit("playback-error", ["title": title, "code": "vlc", "details": "", "message": "\(title): this file couldn't be played."])
@@ -226,11 +211,21 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         }
     }
 
+    @objc(mediaPlayerTrackAdded:withType:)
+    func mediaPlayerTrackAdded(_ trackId: String, with trackType: VLCMedia.TrackType) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.tracksChosen, self.player.isPlaying else { return }
+            self.chooseTracks()
+        }
+    }
+
+    @objc(mediaPlayerTimeChanged:)
     func mediaPlayerTimeChanged(_ aNotification: Notification) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let pos = Double(self.player.time.intValue) / 1000
             let len = Double(self.player.media?.length.intValue ?? 0) / 1000
+            if len > 0 { self.lastFraction = pos / len }
             self.controller.setTime(pos, duration: len)
             if !self.tracksChosen { self.chooseTracks() }
         }
@@ -271,6 +266,17 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         finished = true
         reportProgress(done: false)
         progressTimer?.invalidate(); progressTimer = nil
+        #if DEBUG
+        // test builds note whether sound was decoded and played (the automated check reads it)
+        if let m = player.media {
+            let st = m.statistics
+            let codecs = player.audioTracks.filter { $0.isSelected }.map { "\($0.codecName())" }.joined(separator: ",")
+            let line = "\(item["title"] as? String ?? "?"): audio=\(codecs) decodedAudio=\(st.decodedAudio) playedBuffers=\(st.playedAudioBuffers) lostBuffers=\(st.lostAudioBuffers) decodedVideo=\(st.decodedVideo)\n"
+            let log = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("vlc-stats.log")
+            if let h = try? FileHandle(forWritingTo: log) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+            else { try? Data(line.utf8).write(to: log) }
+        }
+        #endif
         player.delegate = nil
         player.stop()
         UIApplication.shared.isIdleTimerDisabled = false

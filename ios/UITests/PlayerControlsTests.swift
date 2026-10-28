@@ -44,10 +44,14 @@ final class PlayerControlsTests: XCTestCase {
             if pause.isHittable { pause.tap(); sleep(1); XCTAssertTrue(app.buttons["Play"].exists, "\(tag): pause didn't work") }
         }
         save("\(tag)-7-end", app)
+        // close the player properly (test builds then note whether sound played)
+        if !close.isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap(); sleep(1) }
+        if close.isHittable { close.tap(); sleep(2) }
         app.terminate()
     }
 
     func testAppleEngineFilm() { run(film: "Last Signal", tag: "apple") }
     func testVLCFilm() { run(film: "Desert Signal", tag: "vlc") }
     func testVLCMP4Film() { run(film: "Harbor Lights", tag: "vlcmp4") }
+    func testTrueHDInMP4() { run(film: "Night Ferry", tag: "truehd") }
 }

@@ -33,13 +33,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/vendor
-          key: mobilevlckit-v1
+          key: vlckit-4.0.0a25
       - name: Fetch VLC's engine
         run: |
           set -o pipefail
           ios/scripts/fetch-vlckit.sh 2>&1 | tee -a shots-vlc.txt
           # a dynamic framework has to be copied into the app; a static one is linked in
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
+          BIN="$(find ios/vendor/VLCKit.xcframework -path "*ios-arm64/*" -name VLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
           if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           grep -n "embed:" ios/project.yml
       - name: Generate the Xcode project
@@ -122,6 +122,9 @@ jobs:
             -destination "id=$UDID" -derivedDataPath build CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
             | tee uitest.log | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)" || true
           { grep -E "Test Case .*(passed|failed)|: error:|TEST (SUCCEEDED|FAILED)" uitest.log; echo ---; tail -25 uitest.log; } > ../shots/uitest.txt
+          DATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
+          cat "$DATA/Library/Caches/vlc-stats.log" > ../shots/vlc-stats.txt 2>/dev/null || echo "(no VLC stats)" > ../shots/vlc-stats.txt
+          cat ../shots/vlc-stats.txt
       - name: Share the screenshots
         if: always()
         env:
@@ -161,7 +164,7 @@ jobs:
           set -o pipefail
           brew install xcodegen
           ios/scripts/fetch-vlckit.sh
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
+          BIN="$(find ios/vendor/VLCKit.xcframework -path "*ios-arm64/*" -name VLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
           if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           ios/scripts/prepare-web.sh
           cd ios && xcodegen generate

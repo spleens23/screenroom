@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 import UIKit
-import MobileVLCKit
+import VLCKit
 
 /// Finds the films and songs in Documents and describes each one: films the way ffprobe does on the desktop
 /// (so the shared JavaScript builds the same library items), songs by their tags. Results are cached by path +
@@ -225,47 +225,49 @@ final class Scanner {
     /// What VLC sees in a file: every track (Apple's reader skips soundtracks it can't play, like DTS in an MP4),
     /// the tags, the length and the built-in cover.
     private func vlcRead(_ url: URL) async -> (streams: [[String: Any]], tags: [String: String], duration: Double, cover: UIImage?) {
-        let media = VLCMedia(url: url)
+        guard let media = VLCMedia(url: url) else { return ([], [:], 0, nil) }
         await VLCProbe.parse(media)
         var streams: [[String: Any]] = []
         var firstAudio = true
-        for case let t as [String: Any] in (media.tracksInformation ?? []) {
-            let type = t[VLCMediaTracksInformationType] as? String ?? ""
-            let code = (t[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value ?? 0
-            let cc = vlcFourCC(code)
-            let lang = (t[VLCMediaTracksInformationLanguage] as? String) ?? ""
+        for t in media.tracksInformation {
+            let cc = vlcFourCC(t.codec)
+            let lang = t.language ?? ""
             var st: [String: Any] = ["tags": ["language": lang]]
-            if type == VLCMediaTracksInformationTypeVideo {
+            switch t.type {
+            case .video:
                 st["codec_type"] = "video"
                 st["codec_name"] = ["h264": "h264", "avc1": "h264", "hevc": "hevc", "h265": "hevc", "av01": "av1", "VP90": "vp9", "VP80": "vp8",
                                     "mpgv": "mpeg2video", "mp2v": "mpeg2video", "mp4v": "mpeg4", "WVC1": "vc1", "XVID": "mpeg4", "DIVX": "mpeg4"][cc] ?? cc.trimmingCharacters(in: .whitespaces).lowercased()
-                st["width"] = (t[VLCMediaTracksInformationVideoWidth] as? NSNumber)?.intValue ?? 0
-                st["height"] = (t[VLCMediaTracksInformationVideoHeight] as? NSNumber)?.intValue ?? 0
+                st["width"] = Int(t.video?.width ?? 0)
+                st["height"] = Int(t.video?.height ?? 0)
                 st["disposition"] = ["default": 1, "attached_pic": 0]
-            } else if type == VLCMediaTracksInformationTypeAudio {
+            case .audio:
                 st["codec_type"] = "audio"
-                st["codec_name"] = ["dts ": "dts", "a52 ": "ac3", "eac3": "eac3", "mp4a": "aac", "trhd": "truehd", "mlp ": "truehd", "mpga": "mp3",
+                st["codec_name"] = ["dts ": "dts", "a52 ": "ac3", "eac3": "eac3", "mp4a": "aac", "trhd": "truehd", "mlp ": "truehd", "mlpa": "truehd", "mpga": "mp3",
                                     "mp3 ": "mp3", "flac": "flac", "opus": "opus", "vorb": "vorbis", "araw": "pcm_s16le", "s16l": "pcm_s16le", "lpcm": "pcm_s16le"][cc]
                     ?? cc.trimmingCharacters(in: .whitespaces).lowercased()
-                st["channels"] = (t[VLCMediaTracksInformationAudioChannelsNumber] as? NSNumber)?.intValue ?? 2
+                st["channels"] = Int(t.audio?.channelsNumber ?? 2)
                 st["disposition"] = ["default": firstAudio ? 1 : 0]
                 firstAudio = false
-            } else if type == VLCMediaTracksInformationTypeText {
+            case .text:
                 st["codec_type"] = "subtitle"
                 st["codec_name"] = ["subt": "subrip", "tx3g": "mov_text", "ssa ": "ass", "pgs ": "hdmv_pgs_subtitle", "spu ": "dvd_subtitle"][cc] ?? "subrip"
-            } else { continue }
+            default:
+                continue
+            }
             streams.append(st)
         }
         var tags: [String: String] = [:]
-        for (k, n) in [("title", "title"), ("description", "description"), ("genre", "genre"), ("date", "date"), ("showName", "show"),
-                       ("season", "season_number"), ("episode", "episode_sort"), ("artist", "artist")] {
-            if let v = media.metadata(forKey: k), !v.isEmpty { tags[n] = v }
-        }
+        let m = media.metaData
+        let pairs: [(String, String?)] = [("title", m.title), ("description", m.metaDescription), ("genre", m.genre), ("date", m.date),
+                                          ("show", m.showName), ("season_number", m.season > 0 ? String(m.season) : nil),
+                                          ("episode_sort", m.episode > 0 ? String(m.episode) : nil), ("artist", m.artist)]
+        for (n, v) in pairs { if let v, !v.isEmpty { tags[n] = v } }
         // VLC calls an untitled file by its file name: that's not a real title
         if tags["title"] == url.lastPathComponent || tags["title"] == url.deletingPathExtension().lastPathComponent { tags["title"] = nil }
         let duration = Double(media.length.intValue) / 1000
-        var cover: UIImage?
-        if let art = media.metadata(forKey: "artworkURL"), let au = URL(string: art), au.isFileURL { cover = UIImage(contentsOfFile: au.path) }
+        var cover: UIImage? = m.artwork
+        if cover == nil, let au = m.artworkURL, au.isFileURL { cover = UIImage(contentsOfFile: au.path) }
         return (streams, tags, max(0, duration), cover)
     }
 
@@ -479,6 +481,7 @@ final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
     private var thumbCont: CheckedContinuation<CGImage?, Never>?
     private var thumbnailer: VLCMediaThumbnailer?
     private static var alive: [VLCProbe] = []
+    static let parser = VLCMediaParser(library: VLCLibrary.shared(), timeout: 15000)
 
     static func parse(_ media: VLCMedia) async {
         let p = VLCProbe()
@@ -487,7 +490,7 @@ final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
             DispatchQueue.main.async {
                 p.cont = c
                 media.delegate = p
-                let started = media.parse(options: [.fetchLocal], timeout: 15000)
+                let started = VLCProbe.parser.queueMedia(media, options: VLCMediaParsingOptions(rawValue: 0x01 | 0x02))
                 if started != 0 { p.finish() }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 16) { p.finish() }
             }
@@ -500,6 +503,7 @@ final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
         cont = nil
     }
 
+    @objc(mediaDidFinishParsing:)
     func mediaDidFinishParsing(_ aMedia: VLCMedia) {
         DispatchQueue.main.async { self.finish() }
     }
@@ -510,7 +514,8 @@ final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
         let img: CGImage? = await withCheckedContinuation { (c: CheckedContinuation<CGImage?, Never>) in
             DispatchQueue.main.async {
                 p.thumbCont = c
-                let t = VLCMediaThumbnailer(media: VLCMedia(url: url), andDelegate: p)
+                guard let media = VLCMedia(url: url) else { p.thumbDone(nil); return }
+                let t = VLCMediaThumbnailer(media: media, andDelegate: p)
                 t.snapshotPosition = position
                 t.thumbnailWidth = 1280
                 t.thumbnailHeight = 720
