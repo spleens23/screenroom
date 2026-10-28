@@ -1,10 +1,11 @@
 import AVKit
 import UIKit
 
-/// Plays a film (or a run of episodes) with Apple's player: full screen, scrubbing, AirPlay, picture-in-picture,
-/// audio and subtitle choices. Reports where you are every few seconds, so Continue Watching works, and goes
-/// on to the next episode by itself.
-final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
+/// Plays the films Apple's engine handles (MP4 / MOV with AAC, AC-3 or E-AC-3 sound; keeps HDR and Dolby Vision),
+/// behind the same Screenroom controls as the VLC films: title, scrub bar, back / forward 10 s, play / pause,
+/// an Audio & subtitles menu and Next episode. Reports where you are every few seconds (Continue Watching) and
+/// goes on to the next episode by itself.
+final class VideoPlayback: NSObject {
     static var current: VideoPlayback?
 
     private let queue: [[String: Any]]
@@ -14,11 +15,15 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
     private let audioTrack: Int?
     private let bridge: Bridge
     private let player = AVPlayer()
-    private var controller: PlayerController!
+    private var controller: VLCPlayerController!
+    private let layerView = PlayerLayerView()
     private var timeObserver: Any?
+    private var tickObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObserver: NSKeyValueObservation?
-    private var inPiP = false
+    private var rateObserver: NSKeyValueObservation?
+    private var audioGroup: AVMediaSelectionGroup?
+    private var subGroup: AVMediaSelectionGroup?
     private var finished = false
 
     init(queue: [[String: Any]], audioLang: String, subLang: String, audioTrack: Int?, bridge: Bridge) {
@@ -43,16 +48,37 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
     private func present(from presenter: UIViewController) {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
-        controller = PlayerController()
-        controller.player = player
-        controller.delegate = self
-        controller.allowsPictureInPicturePlayback = true
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller = VLCPlayerController()
         controller.modalPresentationStyle = .fullScreen
-        controller.onDismiss = { [weak self] in self?.dismissed() }
+        controller.loadViewIfNeeded()
+        layerView.frame = controller.videoView.bounds
+        layerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        layerView.isUserInteractionEnabled = false
+        layerView.playerLayer.player = player
+        layerView.playerLayer.videoGravity = .resizeAspect
+        controller.videoView.addSubview(layerView)
+        controller.onClose = { [weak self] in self?.close() }
+        controller.onToggle = { [weak self] in self?.togglePause() }
+        controller.onSkip = { [weak self] s in self?.skip(s) }
+        controller.onSeek = { [weak self] f in self?.seek(to: f) }
+        controller.onNext = { [weak self] in self?.next() }
+        controller.menuProvider = { [weak self] in self?.tracksMenu() }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 5, preferredTimescale: 1), queue: .main) { [weak self] _ in
             self?.reportProgress(done: false)
         }
+        tickObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 2), queue: .main) { [weak self] t in
+            guard let self, let cur = self.player.currentItem else { return }
+            var d = cur.duration.seconds
+            if !d.isFinite || d <= 0 { d = (self.item["duration"] as? NSNumber)?.doubleValue ?? 0 }
+            self.controller.setTime(t.seconds.isFinite ? t.seconds : 0, duration: d)
+        }
+        rateObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
+            DispatchQueue.main.async {
+                guard let self, !self.finished, p.timeControlStatus != .waitingToPlayAtSpecifiedRate else { return }
+                self.controller.setPlaying(p.timeControlStatus == .playing)
+            }
+        }
+        UIApplication.shared.isIdleTimerDisabled = true
         load(0)
         presenter.present(controller, animated: true) { [weak self] in self?.player.play() }
     }
@@ -63,6 +89,7 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         index = i
         let entry = queue[i]
         guard let path = entry["path"] as? String else { return }
+        audioGroup = nil; subGroup = nil
         let asset = AVURLAsset(url: URL(fileURLWithPath: path))
         let pi = AVPlayerItem(asset: asset)
         pi.externalMetadata = metadata(entry)
@@ -78,6 +105,73 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         player.replaceCurrentItem(with: pi)
         let start = (entry["start"] as? NSNumber)?.doubleValue ?? 0
         if start > 0 { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+        let title = entry["title"] as? String ?? ""
+        let sub = [entry["sub"] as? String, entry["name"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        controller.setTitle(title, subtitle: sub)
+        controller.setHasNext(i + 1 < queue.count)
+        controller.setTime(start, duration: (entry["duration"] as? NSNumber)?.doubleValue ?? 0)
+    }
+
+    // ---- controls ---------------------------------------------------------------------------------------
+    private func togglePause() {
+        if player.timeControlStatus == .paused { player.play() } else { player.pause() }
+    }
+
+    private func skip(_ seconds: Int) {
+        let t = player.currentTime().seconds
+        guard t.isFinite else { return }
+        player.seek(to: CMTime(seconds: max(0, t + Double(seconds)), preferredTimescale: 600))
+        controller.poke()
+    }
+
+    private func seek(to fraction: Float) {
+        guard let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 else { return }
+        player.seek(to: CMTime(seconds: d * Double(max(0, min(1, fraction))), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    private func next() {
+        guard index + 1 < queue.count else { return }
+        reportProgress(done: true)
+        load(index + 1)
+        player.play()
+    }
+
+    private func close() {
+        stop()
+        controller?.dismiss(animated: true)
+    }
+
+    /// The Audio & subtitles menu: every soundtrack and subtitle Apple's engine sees in the file, the playing ones ticked.
+    private func tracksMenu() -> UIMenu {
+        guard let pi = player.currentItem else { return UIMenu(children: []) }
+        var audio: [UIAction] = []
+        if let g = audioGroup {
+            let cur = pi.currentMediaSelection.selectedMediaOption(in: g)
+            for o in g.options {
+                audio.append(UIAction(title: o.displayName, state: o == cur ? .on : .off) { [weak self] _ in
+                    pi.select(o, in: g); self?.controller.poke()
+                })
+            }
+        }
+        var subs: [UIAction] = []
+        if let g = subGroup {
+            let cur = pi.currentMediaSelection.selectedMediaOption(in: g)
+            if g.allowsEmptySelection {
+                subs.append(UIAction(title: "Off", state: cur == nil ? .on : .off) { [weak self] _ in
+                    pi.select(nil, in: g); self?.controller.poke()
+                })
+            }
+            for o in g.options {
+                subs.append(UIAction(title: o.displayName, state: o == cur ? .on : .off) { [weak self] _ in
+                    pi.select(o, in: g); self?.controller.poke()
+                })
+            }
+        }
+        if subs.isEmpty { subs = [UIAction(title: "None in this file", attributes: .disabled) { _ in }] }
+        return UIMenu(title: "", children: [
+            UIMenu(title: "Audio", options: .displayInline, children: audio.isEmpty ? [UIAction(title: "None", attributes: .disabled) { _ in }] : audio),
+            UIMenu(title: "Subtitles", options: .displayInline, children: subs),
+        ])
     }
 
     private func metadata(_ e: [String: Any]) -> [AVMetadataItem] {
@@ -112,12 +206,14 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         Task { @MainActor in
             let asset = pi.asset
             if let group = try? await asset.loadMediaSelectionGroup(for: .audible) {
+                audioGroup = group
                 var pick: AVMediaSelectionOption?
                 if let n = audioTrack, n >= 1, n <= group.options.count { pick = group.options[n - 1] }
                 if pick == nil { pick = group.options.first { matches($0, audioLang) } }
                 if let p = pick { pi.select(p, in: group) }
             }
             if let group = try? await asset.loadMediaSelectionGroup(for: .legible) {
+                subGroup = group
                 if subLang.isEmpty {
                     if group.allowsEmptySelection { pi.select(nil, in: group) }
                 } else if let p = group.options.first(where: { matches($0, subLang) }) {
@@ -151,7 +247,7 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
             load(index + 1)
             player.play()
         } else {
-            controller.dismiss(animated: true)
+            close()
         }
     }
 
@@ -160,12 +256,7 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         let msg = (error as NSError?)?.localizedDescription ?? "That file could not be played."
         bridge.emit("playback-error", ["title": title, "code": String((error as NSError?)?.code ?? 0),
                                        "details": String(describing: error), "message": "\(title): \(msg)"])
-        controller.dismiss(animated: true)
-    }
-
-    private func dismissed() {
-        if inPiP { return }
-        stop()
+        close()
     }
 
     func stop() {
@@ -174,6 +265,9 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         reportProgress(done: false)
         player.pause()
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
+        if let t = tickObserver { player.removeTimeObserver(t); tickObserver = nil }
+        rateObserver = nil
+        UIApplication.shared.isIdleTimerDisabled = false
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
         statusObserver = nil
         player.replaceCurrentItem(with: nil)
@@ -181,23 +275,10 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
         if VideoPlayback.current === self { VideoPlayback.current = nil }
     }
 
-    // ---- picture-in-picture ---------------------------------------------------------------------------------
-    func playerViewControllerWillStartPictureInPicture(_ c: AVPlayerViewController) { inPiP = true }
-    func playerViewControllerDidStopPictureInPicture(_ c: AVPlayerViewController) {
-        inPiP = false
-        if c.presentingViewController == nil { stop() }
-    }
-    func playerViewController(_ c: AVPlayerViewController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler done: @escaping (Bool) -> Void) {
-        guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { done(false); return }
-        if c.presentingViewController == nil { root.present(c, animated: true) { done(true) } } else { done(true) }
-    }
 }
 
-/// Apple's player screen, telling us when it's closed.
-final class PlayerController: AVPlayerViewController {
-    var onDismiss: (() -> Void)?
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        if isBeingDismissed || presentingViewController == nil { onDismiss?() }
-    }
+/// A view whose layer shows an AVPlayer's picture.
+final class PlayerLayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
