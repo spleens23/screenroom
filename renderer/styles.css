@@ -1,5 +1,5 @@
 :root {
-  --bg: #141414; --bg2: #181818; --fg: #e5e5e5; --muted: #a3a3a3; --accent: #e50914;
+  --bg: #141414; --bg2: #181818; --fg: #e5e5e5; --muted: #a3a3a3; --accent: #f0a73a;
   --card-w: 190px;
 }
 * { box-sizing: border-box; }
@@ -15,7 +15,7 @@ button { font: inherit; cursor: pointer; }
 #nav.solid { background: var(--bg); }
 body.mac #nav { padding-left: 90px; }
 #nav a, #nav input, #nav button { -webkit-app-region: no-drag; }
-.brand { color: var(--accent); font-weight: 800; letter-spacing: 3px; font-size: 20px; }
+.brand { color: var(--accent); font-weight: 800; letter-spacing: 3px; font-size: 20px; text-transform: uppercase; }
 #nav nav { display: flex; gap: 20px; font-size: 14px; }
 #nav nav a { color: #ddd; opacity: .8; } #nav nav a.active, #nav nav a:hover { opacity: 1; font-weight: 600; }
 .nav-right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
@@ -843,7 +843,7 @@ body.big .fpick-main { font-size: 19px; padding: 14px 18px; }
 body.big #battery { font-size: 17px; } body.big #battery .batt { width: 34px; height: 18px; }
 /* screensaver */
 #saver { position: fixed; inset: 0; z-index: 2000; background: #000; cursor: none; overflow: hidden; }
-#saver .saver-logo { position: absolute; left: 0; top: 0; font-weight: 900; letter-spacing: .18em; font-size: clamp(26px, 3.4vw, 60px); white-space: nowrap; will-change: transform; text-shadow: 0 0 24px currentColor; }
+#saver .saver-logo { text-transform: uppercase; position: absolute; left: 0; top: 0; font-weight: 900; letter-spacing: .18em; font-size: clamp(26px, 3.4vw, 60px); white-space: nowrap; will-change: transform; text-shadow: 0 0 24px currentColor; }
 
 /* big-cover Now Playing: no highlight frame on the record and sleeve (it's still what Back / OK act on) */
 #npfull.big .npf-stage:focus .cover, body.navmode #npfull.big .npf-stage:focus .cover { outline: none; box-shadow: none; }

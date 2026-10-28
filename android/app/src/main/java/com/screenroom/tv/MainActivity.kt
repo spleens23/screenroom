@@ -16,7 +16,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject
 
-/** Hosts the Netflix-style browse screens (the same web UI as the desktop app) in a full-screen WebView. */
+/** Hosts the browse screens (the same web UI as the desktop app) in a full-screen WebView. */
 class MainActivity : Activity() {
     lateinit var web: WebView
         private set

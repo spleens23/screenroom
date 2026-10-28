@@ -27,7 +27,7 @@ class Profiles(private val dir: File) {
 
     companion object {
         const val MAX = 8
-        val COLORS = listOf("#e50914", "#2f80ed", "#27ae60", "#f2c94c", "#9b51e0", "#f2994a", "#56ccf2", "#eb5757")
+        val COLORS = listOf("#b5523a", "#2f80ed", "#27ae60", "#f2c94c", "#9b51e0", "#f2994a", "#56ccf2", "#eb5757")
 
         private fun hash(salt: String, pin: String): String =
             MessageDigest.getInstance("SHA-256").digest("$salt:$pin".toByteArray()).joinToString("") { "%02x".format(it) }

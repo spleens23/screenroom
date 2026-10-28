@@ -672,6 +672,8 @@
     document.body.classList.toggle('t90', t90);
     document.body.classList.toggle('fx', t90 && !!S.retroFx);
     document.body.classList.toggle('heir', !!(S && S.theme === 'heirloom'));
+    // Matinee: the standard look (stored as '2020s')
+    document.body.classList.toggle('mat', !t90 && !(S && S.theme === 'heirloom'));
     document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
     const c = $('#vcr-clock');
     if (c) { c.hidden = !t90; if (t90) drawClock(); }
@@ -1181,10 +1183,10 @@
 
   // ---- screensaver: the Screenroom name bouncing around, changing colour at every edge (like the old DVD logo) ----
   let lastInput = Date.now(), saver = null;
-  const SAVER_COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#ff6fb5'];
+  const SAVER_COLORS = ['#f0a73a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#ff6fb5'];
   function showSaver() {
     if (saver) return;
-    const logo = h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'PARLOR' : 'SCREENROOM');
+    const logo = h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'Parlor' : 'Screenroom');
     const el = h('div', { id: 'saver' }, logo,
       // 1990s theme: a VCR's blue screen, stopped, with the clock nobody ever set
       isT90() ? h('div', { class: 'saver-stop' }, 'STOP') : null, isT90() ? h('div', { class: 'saver-clock' }, '12:00') : null);
@@ -1876,7 +1878,7 @@
   ];
   const LANGS = [['', 'Default'], ['eng', 'English'], ['spa', 'Spanish'], ['fre', 'French'], ['ger', 'German'], ['ita', 'Italian'],
     ['por', 'Portuguese'], ['jpn', 'Japanese'], ['kor', 'Korean'], ['chi', 'Chinese']];
-  const COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
+  const COLORS = ['#b5523a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
 
   /** A profile's picture: their photo, a character on their colour, or their initial. */
   function avatar(p, big) {
@@ -1937,8 +1939,9 @@
     const layer = $('#who') || document.body.appendChild(h('div', { id: 'who', class: 'who' }));
     layer.hidden = false;
     layer.replaceChildren(h('div', { class: 'who-inner' },
-      h('div', { class: 'brand who-brand' }, EDITION === 'music' ? 'PARLOR' : 'SCREENROOM'),
-      h('h1', {}, "Who's watching?"),
+      h('div', { class: 'brand who-brand' }, EDITION === 'music' ? 'Parlor' : 'Screenroom'),
+      h('h1', {}, isT90() ? "Who's watching?" : 'Take a seat'),
+      isT90() ? null : h('p', { class: 'who-sub' }, EDITION === 'music' ? 'Everyone gets their own albums, playlists and favourites.' : 'Everyone gets their own list and their own place in every film.'),
       h('div', { class: 'who-list' }, (S.profiles || []).map((p) =>
         h('button', { class: 'who-tile', 'data-profile': p.id, onclick: () => chooseProfile(p) },
           avatar(p, true),
@@ -2068,7 +2071,7 @@
   }
 
   // ---- settings ----------------------------------------------------------------
-  // Settings → Theme: the 2020s look or the 1990s one (video store shelves, the VCR). For this profile, or for
+  // Settings → Theme: Matinee (stored as '2020s'), the 1990s one (video store shelves, the VCR). For this profile, or for
   // everyone when "Same theme for every profile" is ticked; Scanlines & static only go with the 1990s theme.
   function themeBlock(kids) {
     const set = async (o, key) => {
@@ -2078,10 +2081,10 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. 1990s: tapes on the shelf, the VCR's blue menus and on-screen display. Heirloom: glossy light blue, like the Heirloom tablet.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. Matinee: Screenroom's own warm picture-house look. 1990s: tapes on the shelf, the VCR's blue menus and on-screen display. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
-          [['2020s', '2020s'], ['1990s', '1990s'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
-      kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the “Who’s watching?” screen), instead of each profile choosing its own.')),
+          [['2020s', 'Matinee'], ['1990s', '1990s'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
+      kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
         h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })),
       S.theme === '1990s' ? h('label', { class: 'row-set' }, h('span', {}, 'Scanlines & static', h('small', {}, 'Faint TV lines over the menus and a burst of static when a tape starts.')),
         h('input', { type: 'checkbox', 'data-key': 'retroFx', checked: !!S.retroFx, onchange: (e) => set({ fx: e.target.checked }, 'retroFx') })) : null);
@@ -2769,7 +2772,7 @@
     if (EDITION !== 'all') return; // (the films and the music are separate apps here)
     mode = mode === 'parlor' ? 'movies' : 'parlor';
     document.body.classList.toggle('parlor', mode === 'parlor');
-    $('#nav .brand').textContent = mode === 'parlor' ? 'PARLOR' : 'SCREENROOM';
+    $('#nav .brand').textContent = mode === 'parlor' ? 'Parlor' : 'Screenroom';
     $('#search').placeholder = mode === 'parlor' ? 'Search music…' : 'Search titles, genres…';
     const b = $('#parlor-btn');
     b.title = mode === 'parlor' ? 'Back to films' : 'Parlor (music)';

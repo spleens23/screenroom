@@ -1,12 +1,13 @@
--- Screenroom: Netflix-style on-screen controller for mpv.
--- Replaces the stock OSC. Loaded with:  mpv --osc=no --script=netflix.lua
--- Options (via --script-opts): netflix-meta=<json file>, netflix-font=<name>, netflix-accent=<RRGGBB>
+-- Screenroom: the on-screen controls for mpv (Matinee: a warm panel along the bottom, the title on the left,
+-- round transport buttons in the middle, pills for audio, subtitles and the next episode on the right).
+-- Replaces the stock OSC. Loaded with:  mpv --osc=no --script=screenroom-player.lua
+-- Options (via --script-opts): screenroom-meta=<json file>, screenroom-font=<name>, screenroom-accent=<RRGGBB>
 local mp = require 'mp'
 local utils = require 'mp.utils'
 local options = require 'mp.options'
 
-local o = { meta = '', font = '', accent = 'E50914', tv = 'no', passthru = 'no', sound = '', hdrout = '', stats = '', theme = '' }
-options.read_options(o, 'netflix')
+local o = { meta = '', font = '', accent = 'F0A73A', tv = 'no', passthru = 'no', sound = '', hdrout = '', stats = '', theme = '' }
+options.read_options(o, 'screenroom')
 
 -- ---------------------------------------------------------------- constants
 local HIDE_AFTER = 3.2     -- seconds of inactivity before controls fade
@@ -22,6 +23,16 @@ local FONT = (o.font ~= '') and ('\\fn' .. o.font) or ''
 -- in the VCR's menu blue.
 local T90 = (o.theme == '1990s')
 local TEXT_EDGE = '\\bord0\\shad1\\4c&H000000&\\4a&H90&'
+-- Matinee (the standard theme) and Heirloom: the same layout; Matinee's ink-brown and cream, Heirloom's blues.
+local HEIR = (o.theme == 'heirloom')
+local SERIF = FONT
+local CREAM, MUTED, EDGE, TRACK, INK = bgr('F3E9DC'), bgr('CDBDAC'), bgr('5A4636'), bgr('4A3B2F'), bgr('16110D')
+if HEIR then
+  CREAM, MUTED, EDGE, TRACK, INK = WHITE, bgr('B9C7D6'), bgr('3A4E66'), bgr('2A3A50'), bgr('0E1826')
+elseif not T90 then
+  FONT, SERIF = '\\fnDM Sans', '\\fnFraunces'
+end
+PANEL = INK
 if T90 then
   FONT = '\\fnShare Tech Mono'
   PANEL = 'B42212' -- (blue, in mpv's BGR order)
@@ -38,7 +49,7 @@ local S = {
   menu = false, col = 1, row = 1,
   toast = nil, toast_until = 0,
   next_dismissed = false, pref_audio = nil, pref_sub = nil,
-  focus = nil, kbnav = false, lastcol = 1,  -- remote / keyboard focus on the controls
+  focus = nil, kbnav = false, lastcol = T90 and 2 or 3,  -- remote / keyboard focus on the controls
 }
 local meta = {}
 local lines, hits = {}, {}
@@ -98,6 +109,17 @@ local function circle(cx, cy, r)
     pts[#pts + 1] = { cx + r * math.cos(a), cy + r * math.sin(a) }
   end
   return poly(pts)
+end
+
+-- a rounded rectangle (cubic corners)
+local function rrect(x, y, w, h, r)
+  r = math.min(r, w / 2, h / 2)
+  local k = 0.5523 * r
+  return string.format('m %.1f %.1f l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f '
+    .. 'l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f',
+    x + r, y, x + w - r, y, x + w - r + k, y, x + w, y + r - k, x + w, y + r, x + w, y + h - r,
+    x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h, x + r, y + h,
+    x + r - k, y + h, x, y + h - r + k, x, y + h - r, x, y + r, x, y + r - k, x + r - k, y, x + r, y)
 end
 
 local function esc(s) return (tostring(s or ''):gsub('[\\{}]', ''):gsub('\n', ' ')) end
@@ -232,6 +254,12 @@ local function icon_back(cx, cy, s, c, op)
     { cx - 0.28 * s, cy + 0.07 * s }, { cx + 0.02 * s, cy + 0.38 * s }, { cx - 0.05 * s, cy + 0.45 * s } }), c, op)
 end
 
+local function icon_close(cx, cy, s, c, op)
+  local a, t = 0.42 * s, 0.07 * s
+  shape(poly({ { cx - a - t, cy - a + t }, { cx - a + t, cy - a - t }, { cx + a + t, cy + a - t }, { cx + a - t, cy + a + t } }), c, op)
+  shape(poly({ { cx + a - t, cy - a - t }, { cx + a + t, cy - a + t }, { cx - a + t, cy + a + t }, { cx - a - t, cy + a - t } }), c, op)
+end
+
 local function icon_check(cx, cy, s, c, op)
   shape(poly({ { cx - 0.5 * s, cy + 0.05 * s }, { cx - 0.35 * s, cy - 0.1 * s }, { cx - 0.12 * s, cy + 0.13 * s },
     { cx + 0.36 * s, cy - 0.38 * s }, { cx + 0.5 * s, cy - 0.23 * s }, { cx - 0.12 * s, cy + 0.42 * s } }), c, op)
@@ -358,7 +386,7 @@ local function draw_menu(k)
   local colw, gap, pad, rowh = 500, 40, 44, 58
   local pw, ph = colw * 2 + gap + pad * 2, 110 + nrows * rowh + pad
   local px, py = W - MARGIN - pw, H - 300 - ph
-  shape(rect(px, py, pw, ph), PANEL, 0.96 * k)
+  if T90 then shape(rect(px, py, pw, ph), PANEL, 0.96 * k) else shape(rrect(px, py, pw, ph, 28), INK, 0.97 * k) end
   hit(px, py, pw, ph, { panel = true })
   local cols = { { list = menu_audio, title = 'Audio' }, { list = menu_subs, title = 'Subtitles' } }
   for ci, c in ipairs(cols) do
@@ -376,8 +404,10 @@ local function draw_menu(k)
       hit(cx, ry, colw, rowh - 4, spec)
       local hovered = in_rect(spec, S.mx, S.my)
       local lit = T90 and (focused or hovered)
-      if focused or hovered then shape(rect(cx - 12, ry, colw + 24, rowh - 4), WHITE, (T90 and 1 or 0.14) * k) end
-      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, lit and PANEL or WHITE, k) end
+      if focused or hovered then
+        if T90 then shape(rect(cx - 12, ry, colw + 24, rowh - 4), WHITE, k) else shape(rrect(cx - 12, ry, colw + 24, rowh - 4, 14), CREAM, (focused and 0.16 or 0.09) * k) end
+      end
+      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, lit and PANEL or (T90 and WHITE or ACCENT), k) end
       text(cx + 54, ry + (rowh - 4) / 2, trunc(T90 and e.label:upper() or e.label, 22), 30, lit and PANEL or ((e.selected or T90) and WHITE or GRAY), k, 4, e.selected, lit and '\\bord0' or '')
       if e.sub ~= '' then text(cx + colw, ry + (rowh - 4) / 2, trunc(e.sub, 26), 22, GRAY, k * 0.8, 6, false) end
     end
@@ -478,9 +508,13 @@ local function draw_badges(k)
     local tw = b.note and text_w('(' .. b.note .. ')', 24) or 0
     local w = 28 + nw + (b.note and (10 + tw) or 0)
     local x0 = x - w
-    shape(rect(x0, y - 26, w, 52), BLACK, 0.55 * k)
-    shape(rect(x0, y - 26, w, 2), WHITE, 0.85 * k); shape(rect(x0, y + 24, w, 2), WHITE, 0.85 * k)
-    shape(rect(x0, y - 26, 2, 52), WHITE, 0.85 * k); shape(rect(x0 + w - 2, y - 26, 2, 52), WHITE, 0.85 * k)
+    if T90 then
+      shape(rect(x0, y - 26, w, 52), BLACK, 0.55 * k)
+      shape(rect(x0, y - 26, w, 2), WHITE, 0.85 * k); shape(rect(x0, y + 24, w, 2), WHITE, 0.85 * k)
+      shape(rect(x0, y - 26, 2, 52), WHITE, 0.85 * k); shape(rect(x0 + w - 2, y - 26, 2, 52), WHITE, 0.85 * k)
+    else
+      shape(rrect(x0, y - 26, w, 52, 14), INK, 0.82 * k)
+    end
     -- name and note as one line of text, so the spacing between them is the font's own
     local col = b.warn and AMBER or (b.note == 'Unaltered' and GREEN or GRAY)
     add(string.format('{\\an4\\pos(%.1f,%.1f)%s\\fs30\\bord0\\shad1\\4c&H000000&\\4a&H90&\\1a%s\\b1\\1c&H%s&}%s%s',
@@ -591,28 +625,30 @@ local function draw_controls(k)
   local pos = S.scrub or S.pos
   local dur = S.dur
   local frac = (dur > 0) and clamp(pos / dur, 0, 1) or 0
+  local PH = 300
 
-  -- scrims
-  gradient(0, 260, 0.75, 0, k)
-  gradient(H - 360, H, 0, 0.88, k)
-
-  -- back arrow
-  if S.kbnav and S.focus == 'back' then shape(circle(MARGIN + 30, 96, 52), WHITE, 0.25 * k) end
-  icon_back(MARGIN + 30, 96, 46, WHITE, k)
-  hit(MARGIN - 20, 40, 120, 112, { onclick = quit_player })
+  -- the panel along the bottom, and a round close button top left
+  shape(rect(0, H - PH, W, PH), INK, 0.90 * k)
+  local bx, byy = MARGIN + 34, 92
+  local cfoc = S.kbnav and S.focus == 'back'
+  shape(circle(bx, byy, 40), cfoc and CREAM or INK, (cfoc and 1 or 0.82) * k)
+  icon_close(bx, byy, 30, cfoc and INK or CREAM, k)
+  hit(bx - 50, byy - 50, 100, 100, { onclick = quit_player })
   draw_badges(k)
 
-  -- progress bar
-  local bx0, bx1 = MARGIN, W - MARGIN - 130
-  local by = H - 190
+  -- progress: time played on the left, time left on the right
+  local by = H - PH + 132
+  local bx0, bx1 = MARGIN + 150, W - MARGIN - 150
   local bw = bx1 - bx0
   local bar_focus = S.kbnav and S.focus == 'bar'
   local over_bar = (S.my >= by - 36 and S.my <= by + 36 and S.mx >= bx0 - 10 and S.mx <= bx1 + 10) or S.drag ~= nil and S.drag.is_bar or bar_focus
-  local bh = over_bar and 10 or 6
-  shape(rect(bx0, by - bh / 2, bw, bh), WHITE, 0.30 * k)
-  shape(rect(bx0, by - bh / 2, bw * frac, bh), ACCENT, k)
-  shape(circle(bx0 + bw * frac, by, over_bar and 17 or 0), ACCENT, k)
-  text(W - MARGIN, by, fmt_time(math.max(0, dur - pos)), 32, WHITE, k, 6, false)
+  local bh = over_bar and 10 or 7
+  shape(rrect(bx0, by - bh / 2, bw, bh, bh / 2), TRACK, k)
+  if frac > 0 then shape(rrect(bx0, by - bh / 2, math.max(bh, bw * frac), bh, bh / 2), ACCENT, k) end
+  shape(circle(bx0 + bw * frac, by, over_bar and 16 or 11), CREAM, k)
+  if bar_focus then shape(ring(bx0 + bw * frac, by, 26, 21, 0, 360, 1), CREAM, k) end
+  text(MARGIN, by, fmt_time(pos), 30, MUTED, k, 4, false, '\\bord0\\shad0')
+  text(W - MARGIN, by, '−' .. fmt_time(math.max(0, dur - pos)), 30, MUTED, k, 6, false, '\\bord0\\shad0')
   hit(bx0 - 10, by - 36, bw + 20, 72, {
     is_bar = true,
     ondrag = function(mx)
@@ -627,79 +663,106 @@ local function draw_controls(k)
   })
   if over_bar and dur > 0 and not S.drag then
     local f = bar_focus and frac or clamp((S.mx - bx0) / bw, 0, 1)
-    local tx = clamp(bx0 + bw * f, bx0 + 50, bx1 - 50)
-    shape(rect(tx - 56, by - 84, 112, 44), PANEL, 0.95 * k)
-    text(tx, by - 62, fmt_time(f * dur), 28, WHITE, k, 5, false)
+    local tx = clamp(bx0 + bw * f, bx0 + 60, bx1 - 60)
+    shape(rrect(tx - 62, by - 92, 124, 50, 25), CREAM, k)
+    text(tx, by - 67, fmt_time(f * dur), 28, INK, k, 5, true, '\\bord0\\shad0')
   end
 
-  -- button row
-  local cy = H - 100
-  local function btn(cx, size, draw, onclick, key)
+  -- the middle: back 10, play / pause, forward 10
+  local cy = H - 92
+  local cx = W / 2
+  local function round_btn(x, r, filled, key, onclick, draw)
     local spec = { onclick = onclick }
-    hit(cx - size * 0.9, cy - size * 0.9, size * 1.8, size * 1.8, spec)
-    local hov = in_rect(spec, S.mx, S.my)
-    local foc = S.kbnav and key and S.focus == key
-    if foc then shape(circle(cx, cy, size * 1.05), WHITE, 0.25 * k) end
-    draw(cx, cy, size, WHITE, k * ((hov or foc) and 1 or 0.85))
+    hit(x - r - 8, cy - r - 8, 2 * r + 16, 2 * r + 16, spec)
+    local lit = in_rect(spec, S.mx, S.my) or (S.kbnav and S.focus == key)
+    if filled then
+      shape(circle(x, cy, r), lit and CREAM or ACCENT, k)
+      draw(x, cy, lit and INK or INK)
+    else
+      if lit then shape(circle(x, cy, r), CREAM, k) else shape(ring(x, cy, r, r - 2.5, 0, 360, 1), EDGE, k) end
+      draw(x, cy, lit and INK or CREAM)
+    end
   end
-  btn(MARGIN + 36, 56, S.paused and icon_play or icon_pause, toggle_pause, 'play')
-  btn(MARGIN + 150, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, false) end, function() seek_by(-SKIP) end, 'rew')
-  btn(MARGIN + 262, 60, function(x, y, sz, c, op) icon_skip(x, y, sz, c, op, true) end, function() seek_by(SKIP) end, 'fwd')
-  local vx = MARGIN + 380
-  btn(vx, 50, function(x, y, s, c, op) icon_volume(x, y, s, c, op, S.vol, S.mute) end, toggle_mute, 'mute')
-  local sx0, sw = vx + 50, 150
-  local vfrac = S.mute and 0 or clamp(S.vol / 100, 0, 1)
-  shape(rect(sx0, cy - 3, sw, 6), WHITE, 0.3 * k)
-  shape(rect(sx0, cy - 3, sw * vfrac, 6), WHITE, k)
-  shape(circle(sx0 + sw * vfrac, cy, 9), WHITE, k)
-  hit(sx0 - 8, cy - 28, sw + 16, 56, {
-    ondrag = function(mx)
-      mp.set_property_native('mute', false)
-      mp.set_property_native('volume', math.floor(clamp((mx - sx0) / sw, 0, 1) * 100 + 0.5))
-    end,
-  })
+  round_btn(cx - 140, 42, false, 'rew', function() seek_by(-SKIP) end, function(x, y, c) text(x, y, '−' .. SKIP, 28, c, k, 5, true, '\\bord0\\shad0') end)
+  round_btn(cx, 56, true, 'play', toggle_pause, function(x, y, c) (S.paused and icon_play or icon_pause)(S.paused and x + 4 or x, y, 40, c, k) end)
+  round_btn(cx + 140, 42, false, 'fwd', function() seek_by(SKIP) end, function(x, y, c) text(x, y, '+' .. SKIP, 28, c, k, 5, true, '\\bord0\\shad0') end)
 
-  -- right-hand group
-  local rx = W - MARGIN - 36
-  if o.tv == 'yes' then rx = rx + 110 else btn(rx, 50, icon_fullscreen, toggle_fullscreen, 'full') end -- TV: always full screen
-  btn(rx - 110, 50, icon_subs, function()
-    if S.menu then close_menu() else open_menu() end
-  end, 'subs')
-  local right_edge = rx - 110 - 60
-  if has_next then
-    btn(rx - 220, 50, icon_next, play_next, 'next')
-    right_edge = rx - 220 - 60
+  -- the right: pills (next episode, audio & subtitles), mute + volume, full screen
+  local xr = W - MARGIN
+  local ph = 58
+  local function pill(label, key, onclick)
+    local w = text_w(label, 28) + 60
+    local x0 = xr - w
+    local spec = { onclick = onclick }
+    hit(x0, cy - ph / 2, w, ph, spec)
+    local lit = in_rect(spec, S.mx, S.my) or (S.kbnav and S.focus == key)
+    if lit then shape(rrect(x0, cy - ph / 2, w, ph, ph / 2), CREAM, k)
+    else shape(rrect(x0, cy - ph / 2, w, ph, ph / 2), EDGE, k, '\\1a&HFF&\\bord2.5\\3c&H' .. EDGE .. '&\\3a' .. alpha(k)) end
+    text(x0 + w / 2, cy, label, 28, lit and INK or CREAM, k, 5, false, '\\bord0\\shad0')
+    xr = x0 - 16
+  end
+  local function icon_btn(key, onclick, draw)
+    local r = 34
+    local x = xr - r
+    local spec = { onclick = onclick }
+    hit(x - r, cy - r, 2 * r, 2 * r, spec)
+    local lit = in_rect(spec, S.mx, S.my) or (S.kbnav and S.focus == key)
+    if lit then shape(circle(x, cy, r), CREAM, k) end
+    draw(x, cy, lit and INK or CREAM)
+    xr = x - r - 16
+  end
+  if o.tv ~= 'yes' then icon_btn('full', toggle_fullscreen, function(x, y, c) icon_fullscreen(x, y, 30, c, k) end) end
+  pill('Audio & subtitles', 'subs', function() if S.menu then close_menu() else open_menu() end end)
+  if has_next then pill('Next episode', 'next', play_next) end
+  -- the left: mute, and the volume slider on a computer (the TV's remote has its own volume)
+  local xl = MARGIN
+  do
+    local r = 34
+    local x = xl + r
+    local spec = { onclick = toggle_mute }
+    hit(x - r, cy - r, 2 * r, 2 * r, spec)
+    local lit = in_rect(spec, S.mx, S.my) or (S.kbnav and S.focus == 'mute')
+    if lit then shape(circle(x, cy, r), CREAM, k) end
+    icon_volume(x, cy, 30, lit and INK or CREAM, k, S.vol, S.mute)
+    xl = x + r + 14
+  end
+  if o.tv ~= 'yes' then
+    local sw = 150
+    local sx0 = xl
+    local vfrac = S.mute and 0 or clamp(S.vol / 100, 0, 1)
+    shape(rrect(sx0, cy - 3, sw, 6, 3), TRACK, k)
+    if vfrac > 0 then shape(rrect(sx0, cy - 3, math.max(6, sw * vfrac), 6, 3), CREAM, k) end
+    shape(circle(sx0 + sw * vfrac, cy, 9), CREAM, k)
+    hit(sx0 - 8, cy - 28, sw + 16, 56, {
+      ondrag = function(mx)
+        mp.set_property_native('mute', false)
+        mp.set_property_native('volume', math.floor(clamp((mx - sx0) / sw, 0, 1) * 100 + 0.5))
+      end,
+    })
   end
 
-  -- title (centre of the free span)
-  local left_edge = sx0 + sw + 50
-  local cxm = (left_edge + right_edge) / 2
-  local maxc = math.floor((right_edge - left_edge) / 17)
-  local ttl = m.title or ''
+  -- above the progress bar: the title, then the episode, in one line
+  local ty = H - PH + 58
+  local maxc = math.max(10, math.floor((W - 2 * MARGIN - 240) / 24))
   local ep = ((m.sub and m.sub ~= '') and (m.sub .. '  ') or '') .. (m.name or '')
-  if ep ~= '' then
-    local t1 = trunc(ttl, math.floor(maxc * 0.5))
-    local t2 = trunc(ep, maxc - #t1 - 2)
-    add(string.format('{\\an5\\pos(%.1f,%.1f)%s\\fs34\\bord0\\shad1\\4c&H000000&\\4a&H90&\\1a%s\\b1\\1c&H%s&}%s{\\b0\\1c&H%s&}   %s',
-      cxm, cy, FONT, alpha(k), WHITE, esc(t1), GRAY, esc(t2)))
-  else
-    text(cxm, cy, trunc(ttl, maxc), 34, WHITE, k, 5, true)
-  end
+  local t1 = trunc(m.title or '', (ep ~= '') and math.floor(maxc * 0.55) or maxc)
+  add(string.format('{\\an4\\pos(%.1f,%.1f)%s\\fs50\\bord0\\shad0\\1a%s\\b1\\1c&H%s&}%s%s', MARGIN, ty, SERIF, alpha(k), CREAM, esc(t1),
+    (ep ~= '') and string.format('{%s\\b0\\fs32\\1c&H%s&}     %s', FONT, MUTED, esc(trunc(ep, maxc - #t1))) or ''))
 
   if S.menu then draw_menu(k) end
 end
 
 local function draw_pause_overlay(k)
   local m = meta_for(mp.get_property('path'))
-  shape(rect(0, 0, W, H), BLACK, 0.62 * k)
-  local x, y = 140, H * 0.30
-  text(x, y, "You're watching", 30, GRAY, k, 7, false)
-  text(x, y + 56, trunc(m.title or '', 34), 76, WHITE, k, 7, true)
-  local ep = ((m.sub and m.sub ~= '') and (m.sub .. '  ') or '') .. (m.name or '')
-  if ep ~= '' then text(x, y + 152, trunc(ep, 52), 40, WHITE, k, 7, true) end
-  local ly = y + ((ep ~= '') and 220 or 170)
+  shape(rect(0, 0, W, H), INK, 0.70 * k)
+  local x, y = 140, H * 0.24
+  text(x, y, 'PAUSED', 26, ACCENT, k, 7, true, '\\bord0\\shad0\\fsp3')
+  add(string.format('{\\an7\\pos(%.1f,%.1f)%s\\fs84\\bord0\\shad0\\1a%s\\b1\\1c&H%s&}%s', x, y + 48, SERIF, alpha(k), CREAM, esc(trunc(m.title or '', 30))))
+  local ep = ((m.sub and m.sub ~= '') and (m.sub .. '  ·  ') or '') .. (m.name or '')
+  if ep ~= '' then text(x, y + 160, trunc(ep, 52), 38, CREAM, k, 7, true, '\\bord0\\shad0') end
+  local ly = y + ((ep ~= '') and 228 or 176)
   for i, l in ipairs(wrap(m.desc or '', 58, 5)) do
-    text(x, ly + (i - 1) * 46, l, 32, 'D9D9D9', k, 7, false)
+    text(x, ly + (i - 1) * 46, l, 32, MUTED, k, 7, false, '\\bord0\\shad0')
   end
 end
 
@@ -710,15 +773,28 @@ local function draw_next_card(k)
   if S.dur <= 0 or remaining > NEXT_CARD_AT or remaining < 0 then return end
   local cw, ch = 620, 150
   local cx = W - MARGIN - cw
-  local cy = (S.fade > 0.5) and (H - 470) or (H - 250)
-  shape(rect(cx, cy, cw, ch), PANEL, 0.96)
-  -- countdown strip
-  shape(rect(cx, cy + ch - 6, cw * (1 - clamp(remaining / NEXT_CARD_AT, 0, 1)), 6), ACCENT, 1)
-  text(cx + 36, cy + 32, 'Next Episode', 24, GRAY, 1, 4, false)
+  local cy = (S.fade > 0.5) and (H - 300 - ch - 30) or (H - 250)
+  local f = 1 - clamp(remaining / NEXT_CARD_AT, 0, 1)
+  if T90 then
+    shape(rect(cx, cy, cw, ch), PANEL, 0.96)
+    shape(rect(cx, cy + ch - 6, cw * f, 6), ACCENT, 1)
+    text(cx + 36, cy + 32, 'Next Episode', 24, GRAY, 1, 4, false)
+    local n = pl.next
+    local line = ((n.sub and n.sub ~= '') and (n.sub .. '  ') or '') .. ((n.name and n.name ~= '') and n.name or n.title or '')
+    text(cx + 36, cy + 78, trunc(line, 30), 34, WHITE, 1, 4, true)
+    icon_next(cx + cw - 56, cy + 62, 40, WHITE, 1)
+    hit(cx, cy, cw, ch, { onclick = play_next })
+    return
+  end
+  shape(rrect(cx, cy, cw, ch, 26), INK, 0.96)
+  -- countdown along the bottom edge
+  if f > 0 then shape(rrect(cx + 26, cy + ch - 12, (cw - 52) * f, 5, 2.5), ACCENT, 1) end
+  text(cx + 36, cy + 34, 'Up next', 24, ACCENT, 1, 4, true, '\\bord0\\shad0')
   local n = pl.next
   local line = ((n.sub and n.sub ~= '') and (n.sub .. '  ') or '') .. ((n.name and n.name ~= '') and n.name or n.title or '')
-  text(cx + 36, cy + 78, trunc(line, 30), 34, WHITE, 1, 4, true)
-  icon_next(cx + cw - 56, cy + 62, 40, WHITE, 1)
+  text(cx + 36, cy + 80, trunc(line, 30), 34, CREAM, 1, 4, true, '\\bord0\\shad0')
+  shape(circle(cx + cw - 64, cy + 70, 36), ACCENT, 1)
+  icon_play(cx + cw - 60, cy + 70, 30, INK, 1)
   hit(cx, cy, cw, ch, { onclick = play_next })
 end
 
@@ -728,8 +804,8 @@ local function draw_toast()
   local k = clamp((S.toast_until - t) / 0.3, 0, 1)
   local w = 60 + #S.toast * 17
   if T90 then text(MARGIN + 10, H / 2, S.toast:upper(), 40, WHITE, k, 4, false); return end
-  shape(rect(W / 2 - w / 2, 120, w, 64), PANEL, 0.92 * k)
-  text(W / 2, 152, S.toast, 30, WHITE, k, 5, true)
+  shape(rrect(W / 2 - w / 2, 120, w, 64, 32), INK, 0.94 * k)
+  text(W / 2, 152, S.toast, 30, CREAM, k, 5, true, '\\bord0\\shad0')
 end
 
 -- ---------------------------------------------------------------- power menu (the computer's power button)
@@ -761,16 +837,16 @@ local function draw_power()
   local ph = 120 + #POWER * rowh + 30
   local px, py = W / 2 - pw / 2, H / 2 - ph / 2
   shape(rect(0, 0, W, H), BLACK, 0.55)
-  shape(rect(px, py, pw, ph), PANEL, 0.97)
+  if T90 then shape(rect(px, py, pw, ph), PANEL, 0.97) else shape(rrect(px, py, pw, ph, 28), INK, 0.98) end
   hit(px, py, pw, ph, { panel = true })
-  text(px + 50, py + 64, 'Power', 40, WHITE, 1, 4, true)
+  text(px + 50, py + 64, 'Power', 40, T90 and WHITE or CREAM, 1, 4, true)
   for i, e in ipairs(POWER) do
     local ry = py + 110 + (i - 1) * rowh
     local spec = { onclick = function() S.prow = i; power_choose(i) end }
     hit(px + 30, ry, pw - 60, rowh - 10, spec)
     local on = (i == S.prow) or in_rect(spec, S.mx, S.my)
-    if on then shape(rect(px + 30, ry, pw - 60, rowh - 10), WHITE, 1) end
-    text(px + 60, ry + (rowh - 10) / 2, e.label, 32, on and BLACK or WHITE, 1, 4, true)
+    if on then if T90 then shape(rect(px + 30, ry, pw - 60, rowh - 10), WHITE, 1) else shape(rrect(px + 30, ry, pw - 60, rowh - 10, (rowh - 10) / 2), CREAM, 1) end end
+    text(px + 60, ry + (rowh - 10) / 2, e.label, 32, on and (T90 and BLACK or INK) or (T90 and WHITE or CREAM), 1, 4, true)
   end
 end
 local function open_power()
@@ -829,7 +905,7 @@ local function render()
   lines, hits = {}, {}
   if S.pfade > 0 and not T90 then draw_pause_overlay(S.pfade) end
   if S.fade > 0 then draw_controls(S.fade) end
-  if S.loaded then draw_next_card() end
+  if S.loaded and not S.menu then draw_next_card() end
   draw_power()
   draw_toast()
 
@@ -949,7 +1025,7 @@ mp.add_forced_key_binding('n', 'nf_next', function() if playlist_info().next the
 --                     when its card is showing)
 --   progress bar highlighted: left/right skip 10 s
 local function focus_rows()
-  local buttons = { 'play', 'rew', 'fwd', 'mute' }
+  local buttons = { 'mute', 'rew', 'play', 'fwd' }
   if playlist_info().next then buttons[#buttons + 1] = 'next' end
   buttons[#buttons + 1] = 'subs'
   if o.tv ~= 'yes' then buttons[#buttons + 1] = 'full' end

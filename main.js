@@ -460,8 +460,8 @@ function backgroundScan() {
 }
 
 const scriptPath = () => (app.isPackaged
-  ? path.join(process.resourcesPath, 'mpv', 'netflix.lua')
-  : path.join(__dirname, 'mpv', 'netflix.lua'));
+  ? path.join(process.resourcesPath, 'mpv', 'screenroom-player.lua')
+  : path.join(__dirname, 'mpv', 'screenroom-player.lua'));
 
 // Episodes of one series in watch order (season, then episode, then path).
 function seriesEpisodes(seriesName) {

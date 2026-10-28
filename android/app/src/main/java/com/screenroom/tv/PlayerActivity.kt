@@ -102,7 +102,7 @@ class PlayerActivity : Activity() {
     private var lastSave = 0L
     private var pausedSince = 0L
     private var lastId: String? = null
-    private val red = Color.parseColor("#E50914")
+    private val red = Color.parseColor("#F0A73A")
 
     // ---- setup -------------------------------------------------------------------------------------------
 

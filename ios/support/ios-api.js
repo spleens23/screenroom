@@ -65,7 +65,7 @@
   const THEMES = ['2020s', '1990s', 'heirloom'];
 
   // ---- profiles (the same rules as lib/profiles.js) -------------------------------------------------------
-  const COLORS = ['#e50914', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
+  const COLORS = ['#b5523a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
   const MAX_PROFILES = 8;
   let pdata = null;         // { profiles: [...], last }
   let currentId = 'main';
@@ -89,7 +89,7 @@
     if (!p) return null;
     const photo = p.photo ? `${env.avatars}/${p.photo}` : '';
     return {
-      id: p.id, name: p.name, color: p.color, kids: !!p.kids, maxLevel: p.maxLevel || 1, allowUnrated: !!p.allowUnrated,
+      id: p.id, name: p.name, color: p.color === '#e50914' ? '#b5523a' : p.color, kids: !!p.kids, maxLevel: p.maxLevel || 1, allowUnrated: !!p.allowUnrated,
       hasPin: !!p.pinHash, preferredLang: p.preferredLang || '', subLang: p.subLang || '',
       avatar: p.avatar === 'photo' && !photo ? '' : (p.avatar || ''), photo: photo || undefined,
       theme: p.theme || '', retroFx: !!p.retroFx,
@@ -319,7 +319,7 @@
       tracks,
       playlists: mine.playlists.map((pl) => ({ ...pl, tracks: pl.tracks.filter((id) => tracks[id]) })),
       recent: mine.recent.filter((k) => albums.some((a) => a.key === k)),
-      profiles: profilesList().map((p) => ({ id: p.id, name: p.name, color: p.color, kids: p.kids })),
+      profiles: profilesList().map((p) => ({ id: p.id, name: p.name, color: p.color === '#e50914' ? '#b5523a' : p.color, kids: p.kids })),
       player: player ? publicPlayer(player) : null,
     };
   }

@@ -1,6 +1,6 @@
 # Screenroom
 
-A Netflix-style browser and player for your local MP4 library. The interface is Electron; playback is [mpv](https://mpv.io), wrapped in a custom Netflix-style on-screen player.
+A home cinema for your own MP4 library: a warm, poster-led browser (the Matinee look) and a player that handles everything in your files. The interface is Electron; playback is [mpv](https://mpv.io), with Screenroom's own on-screen controls.
 
 **Why mpv?** Chromium (and so Electron) can't decode DTS and only partly handles Dolby audio. mpv plays everything in your files (H.264 / H.265, 480p to 4K, AC-3, E-AC-3, TrueHD, DTS, DTS-HD) with hardware decoding, and can pass Dolby/DTS bitstreams through to a receiver.
 
@@ -77,11 +77,11 @@ Playing a TV episode queues the rest of the series behind it, so it keeps going 
 | Fullscreen | corner-brackets button, double-click | `f` |
 | Back to the library | ← arrow, top left | Esc (leaves fullscreen first) |
 
-Pausing for a moment shows the title, episode and synopsis, like Netflix's pause screen. Audio tracks are labelled by what they really are (Dolby Digital, Dolby Digital Plus, TrueHD, Atmos, DTS, DTS-HD MA, DTS:X) with their channel layout.
+Pausing for a moment shows the title, episode and synopsis. Audio tracks are labelled by what they really are (Dolby Digital, Dolby Digital Plus, TrueHD, Atmos, DTS, DTS-HD MA, DTS:X) with their channel layout.
 
 ## Profiles
 
-Netflix-style **"Who's watching?"** (shown at start when there's more than one profile, or a PIN). Each profile has its own Continue Watching, resume points and watched ticks, its own audio/subtitle language, and an optional 4-digit PIN. You enter the PIN on an on-screen number pad, with the remote, a keyboard, or the phone remote's "Type on TV".
+A **profile picker** ("Take a seat", shown at start when there's more than one profile, or a PIN). Each profile has its own Continue Watching, resume points and watched ticks, its own audio/subtitle language, and an optional 4-digit PIN. You enter the PIN on an on-screen number pad, with the remote, a keyboard, or the phone remote's "Type on TV".
 
 - **Kids profiles** only see titles whose embedded rating fits their age: little kids (G, TV-Y, TV-G), older kids (up to PG, TV-Y7, TV-PG) or teens (up to PG-13, TV-14). The rating comes from the iTunes `iTunEXTC` tag (e.g. `mpaa|PG|200|`). Unrated titles are hidden unless the profile allows them. Kids profiles can't change profiles or settings.
 - **Managing profiles:** Settings → Profiles: add (up to 8), edit, colour, PIN, delete.
@@ -109,7 +109,7 @@ See [`deploy/M910Q.md`](deploy/M910Q.md).
 
 ## Android TV / Google TV (onn 4K Pro and others)
 
-`android/` is the Android TV version. It shows the same Netflix-style screens (it reuses `renderer/`, `remote/` and `lib/media-core.js`) and plays through Android's own video player (ExoPlayer/Media3) for hardware 4K, HDR, Dolby Vision and Dolby/DTS passthrough. It includes the phone remote, Wi-Fi uploads, USB drives, and an optional **Lock to Screenroom** mode.
+`android/` is the Android TV version. It shows the same screens (it reuses `renderer/`, `remote/` and `lib/media-core.js`) and plays through Android's own video player (ExoPlayer/Media3) for hardware 4K, HDR, Dolby Vision and Dolby/DTS passthrough. It includes the phone remote, Wi-Fi uploads, USB drives, and an optional **Lock to Screenroom** mode.
 
 - **Building:** every push to `main` builds an APK on GitHub (`.github/workflows/android.yml`) and attaches it to a Release. You can also build locally with Android Studio or `cd android && ./gradlew assembleRelease`.
 - **Installing:** see [`android/SETUP.md`](android/SETUP.md). In short: turn on network debugging on the box, then run `bash android/setup-onn.command <box-ip>` on your Mac.
@@ -130,7 +130,7 @@ Screenroom can run as a streaming box with no subscriptions: it boots straight i
 - **Nothing happens on Play / a red message appears:** mpv failed to start. Its log is at `<temp folder>/screenroom-mpv.log` (the message gives the exact path).
 - **mpv not found:** install it (`brew install mpv`), or set `mpvPath` in `config.json`.
 - **Unusual setup (audio device, video output):** put extra mpv options in `mpvArgs` in `config.json`, for example `"mpvArgs": "--audio-device=coreaudio/..."`, or set the `SCREENROOM_MPV_ARGS` environment variable.
-- **DTS/Atmos tracks labelled wrongly:** labels come from ffprobe/mpv codec profiles; the mapping is in `audioLabel()` in `lib/library.js` and `codec_label()` in `mpv/netflix.lua`.
+- **DTS/Atmos tracks labelled wrongly:** labels come from ffprobe/mpv codec profiles; the mapping is in `audioLabel()` in `lib/library.js` and `codec_label()` in `mpv/screenroom-player.lua`.
 - Your own mpv scripts and on-screen controllers are deliberately not loaded (a second OSC would clash). Your `mpv.conf` still applies, with Screenroom's options taking priority.
 
 ## Layout
@@ -140,7 +140,7 @@ main.js            Electron main process (config, library, playlists, watch hist
 preload.js         safe bridge to the UI
 lib/library.js     ffprobe scan, TV parsing, artwork, cache
 lib/player.js      launches mpv, per-file progress tracking over its IPC socket
-mpv/netflix.lua    the Netflix-style on-screen player (shipped inside the app)
+mpv/screenroom-player.lua  the on-screen player controls (shipped inside the app)
 renderer/          the browse UI (index.html, styles.css, app.js)
 build/icon.png     app icon
 ```
