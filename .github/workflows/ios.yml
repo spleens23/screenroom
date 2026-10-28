@@ -183,7 +183,7 @@ jobs:
               else echo "static, not shipped: $(basename "$f") ($kind)"; rm -rf "$f"; fi
             done
             echo "left:"; ls "$APPDIR/Frameworks" 2>&1
-          } 2>&1 | tee ../shots/frameworks.txt
+          } 2>&1 | tee ../shots/testflight-frameworks.txt
           sed "s/TEAM_ID_HERE/$TEAM_ID/" ExportOptions.plist > build/ExportOptions.plist
           xcodebuild -exportArchive -archivePath build/Screenroom.xcarchive -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/export "${AUTH[@]}" > export.log 2>&1 || true
