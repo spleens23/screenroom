@@ -11,16 +11,16 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ uc: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let id = body["id"] as? Int, let method = body["method"] as? String else { return }
-        #if DEBUG
         if method == "debugLog" {
             let line = ((try? JSONSerialization.jsonObject(with: Data((body["args"] as? String ?? "[]").utf8))) as? [Any])?.first as? String ?? ""
-            let url = st.docs.appendingPathComponent("debug.log")
+            let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            let url = caches.appendingPathComponent("page-errors.log")
+            if (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0) ?? 0 > 200_000 { try? FileManager.default.removeItem(at: url) }
             if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
             else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
             NSLog("Screenroom page: %@", line)
             return
         }
-        #endif
         let argsJson = body["args"] as? String ?? "[]"
         let args = (try? JSONSerialization.jsonObject(with: Data(argsJson.utf8))) as? [Any] ?? []
         Task { @MainActor in

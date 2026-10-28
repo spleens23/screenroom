@@ -41,6 +41,12 @@ jobs:
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
+      - name: Build the release version for the simulator
+        run: |
+          set -o pipefail
+          cd ios
+          xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-rel CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-rel.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
       - name: Try it in a simulated iPad
         run: |
           mkdir -p shots
@@ -55,6 +61,19 @@ jobs:
           print(c[-1][1]['udid'])")"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
+          # first, the release version on a fresh iPad with nothing on it yet (what someone installing it sees)
+          REL="$(find ios/build-rel/Build/Products -name Screenroom.app -maxdepth 3 | head -1)"
+          if [ -n "$REL" ]; then
+            xcrun simctl install "$UDID" "$REL"
+            xcrun simctl launch "$UDID" dev.screenroom.ipad; sleep 25; xcrun simctl io "$UDID" screenshot shots/first-run-release.png
+            RDATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
+            cat "$RDATA/Library/Caches/page-errors.log" > shots/page-errors-release.txt 2>/dev/null || echo "(no page errors)" > shots/page-errors-release.txt
+            cat shots/page-errors-release.txt
+            xcrun simctl terminate "$UDID" dev.screenroom.ipad || true
+            xcrun simctl uninstall "$UDID" dev.screenroom.ipad || true
+          else
+            echo "(release build missing)" > shots/page-errors-release.txt; tail -40 ios/build-rel.log >> shots/page-errors-release.txt
+          fi
           APP="$(find ios/build/Build/Products -name Screenroom.app -maxdepth 3 | head -1)"
           xcrun simctl install "$UDID" "$APP"
           DATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
@@ -70,7 +89,7 @@ jobs:
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Neon/i.test(x.textContent)); c && c.click()"; shot show 15
           run "api.state().then(s => api.play({ id: s.library.find(i => /Last Signal/.test(i.title)).id }))"; shot player 18
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
-          if [ -s "$DATA/Documents/debug.log" ]; then cp "$DATA/Documents/debug.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
+          if [ -s "$DATA/Library/Caches/page-errors.log" ]; then cp "$DATA/Library/Caches/page-errors.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
           cat shots/page-errors.txt
           ls "$DATA/Library/Application Support/Screenroom" | tee shots/data-files.txt
       - name: Share the screenshots

@@ -63,15 +63,20 @@ final class ScreenController: UIViewController, WKNavigationDelegate {
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(bridge, name: "screenroom")
         cfg.userContentController.addUserScript(WKUserScript(source: "window.S_IOS = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        #if DEBUG
-        // Test builds: page errors go to Documents/debug.log, so the automated check can read them.
+        // Page errors are kept in a small log (Library/Caches/page-errors.log), and a problem while the screens start
+        // up is shown on screen, so it can be reported instead of leaving a half-drawn page.
         cfg.userContentController.addUserScript(WKUserScript(source: """
-            (() => { const log = (m) => { try { window.webkit.messageHandlers.screenroom.postMessage({ id: 0, method: 'debugLog', args: JSON.stringify([String(m)]) }); } catch (e) {} };
-              window.addEventListener('error', (e) => log('error: ' + e.message + ' @ ' + e.filename + ':' + e.lineno));
-              window.addEventListener('unhandledrejection', (e) => log('rejection: ' + (e.reason && e.reason.message || e.reason)));
+            (() => { const t0 = Date.now();
+              const log = (m) => { try { window.webkit.messageHandlers.screenroom.postMessage({ id: 0, method: 'debugLog', args: JSON.stringify([String(m)]) }); } catch (e) {} };
+              const show = (m) => { if (Date.now() - t0 > 20000) return; const put = () => { let b = document.getElementById('ios-problem');
+                if (!b) { b = document.createElement('div'); b.id = 'ios-problem'; b.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;z-index:99999;background:#3A1E16;color:#FFE2D6;border:1px solid #D2553A;border-radius:14px;padding:14px 18px;font:15px -apple-system,sans-serif;white-space:pre-wrap;max-height:40vh;overflow:auto';
+                  b.onclick = () => b.remove(); document.body.appendChild(b); b.textContent = 'Screenroom hit a problem starting up (tap to hide). Please send a screenshot of this:'; }
+                b.textContent += '\\n• ' + m; }; document.body ? put() : addEventListener('DOMContentLoaded', put); };
+              const report = (m) => { log(m); show(m); };
+              window.addEventListener('error', (e) => report('error: ' + e.message + ' @ ' + String(e.filename).split('/').slice(-2).join('/') + ':' + e.lineno));
+              window.addEventListener('unhandledrejection', (e) => report('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
               const ce = console.error; console.error = (...a) => { log('console: ' + a.join(' ')); ce.apply(console, a); }; })();
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        #endif
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []
         let v = WKWebView(frame: .zero, configuration: cfg)
