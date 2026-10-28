@@ -17,6 +17,9 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
     private let audioTrack: Int?
     private let bridge: Bridge
     private let player = VLCMediaPlayer()
+    /// Switching soundtracks can make VLC wait for its sound output to restart: never on the main thread, so the
+    /// controls stay responsive.
+    private let trackQueue = DispatchQueue(label: "screenroom.vlc.tracks")
     private var controller: VLCPlayerController!
     private var progressTimer: Timer?
     private var finished = false
@@ -123,16 +126,18 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         for (n, id) in aIds.enumerated() where id >= 0 {
             let label = n < aNames.count ? aNames[n] : "Track \(n)"
             audio.append(UIAction(title: label, state: id == curA ? .on : .off) { [weak self] _ in
-                self?.player.currentAudioTrackIndex = id
-                self?.controller.poke()
+                guard let self else { return }
+                self.trackQueue.async { self.player.currentAudioTrackIndex = id }
+                self.controller.poke()
             })
         }
         var subs: [UIAction] = []
         for (n, id) in sIds.enumerated() {
             let label = id < 0 ? "Off" : (n < sNames.count ? sNames[n] : "Subtitle \(n)")
             subs.append(UIAction(title: label, state: id == curS ? .on : .off) { [weak self] _ in
-                self?.player.currentVideoSubTitleIndex = id
-                self?.controller.poke()
+                guard let self else { return }
+                self.trackQueue.async { self.player.currentVideoSubTitleIndex = id }
+                self.controller.poke()
             })
         }
         if subs.isEmpty { subs = [UIAction(title: "None in this file", attributes: .disabled) { _ in }] }
@@ -149,17 +154,17 @@ final class VLCPlayback: NSObject, VLCMediaPlayerDelegate {
         guard !aIds.isEmpty else { return }
         tracksChosen = true
         let aNames = (player.audioTrackNames ?? []).map { "\($0)".lowercased() }
-        if let n = audioTrack, n >= 1, n <= aIds.count {
-            player.currentAudioTrackIndex = aIds[n - 1]
-        } else if let k = matchIndex(aNames.filter { $0 != "disable" }, lang: audioLang) {
-            player.currentAudioTrackIndex = aIds[k]
-        }
+        var pickA: Int32?
+        if let n = audioTrack, n >= 1, n <= aIds.count { pickA = aIds[n - 1] }
+        else if let k = matchIndex(aNames.filter { $0 != "disable" }, lang: audioLang) { pickA = aIds[k] }
+        if let a = pickA, a != player.currentAudioTrackIndex { trackQueue.async { self.player.currentAudioTrackIndex = a } }
         let sIds = (player.videoSubTitlesIndexes ?? []).compactMap { ($0 as? NSNumber)?.int32Value }
         let sNames = (player.videoSubTitlesNames ?? []).map { "\($0)".lowercased() }
         if subLang.isEmpty {
-            player.currentVideoSubTitleIndex = -1
+            if player.currentVideoSubTitleIndex != -1 { trackQueue.async { self.player.currentVideoSubTitleIndex = -1 } }
         } else if let k = matchIndex(sNames, lang: subLang), k < sIds.count {
-            player.currentVideoSubTitleIndex = sIds[k]
+            let sid = sIds[k]
+            trackQueue.async { self.player.currentVideoSubTitleIndex = sid }
         }
     }
 
@@ -290,6 +295,7 @@ final class VLCPlayerController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         videoView.backgroundColor = .black
+        videoView.isUserInteractionEnabled = false
         videoView.frame = view.bounds
         videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(videoView)
@@ -297,7 +303,9 @@ final class VLCPlayerController: UIViewController {
         overlay.frame = view.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(overlay)
-        view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        tap.cancelsTouchesInView = false
+        view.addGestureRecognizer(tap)
 
         let close = roundButton(symbol: "xmark", size: 52, filled: false)
         close.addAction(UIAction { [weak self] _ in self?.onClose?() }, for: .touchUpInside)
@@ -430,7 +438,9 @@ final class VLCPlayerController: UIViewController {
     @objc private func scrubMove() { if duration > 0 { elapsed.text = fmt(Double(slider.value) * duration) } }
     @objc private func scrubEnd() { scrubbing = false; onSeek?(slider.value); poke() }
 
-    @objc private func tapped() {
+    @objc private func tapped(_ g: UITapGestureRecognizer) {
+        let hit = view.hitTest(g.location(in: view), with: nil)
+        if hit is UIControl || hit?.superview is UIControl { poke(); return }
         if overlay.alpha > 0.5 { show(false) } else { poke() }
     }
 
