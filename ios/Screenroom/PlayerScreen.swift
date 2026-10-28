@@ -184,6 +184,7 @@ final class PlayerScreen: UIViewController {
     func setHasNext(_ has: Bool) { nextButton.isHidden = !has }
 
     func setPlaying(_ playing: Bool) {
+        trace("setPlaying(\(playing))")
         styleRound(playButton, symbol: playing ? "pause.fill" : "play.fill", size: 54, filled: true)
         playButton.accessibilityLabel = playing ? "Pause" : "Play"
         if !playing { show(true) } else { poke() }
@@ -206,6 +207,7 @@ final class PlayerScreen: UIViewController {
     @objc private func scrubEnd() { scrubbing = false; onSeek?(slider.value); poke() }
 
     @objc private func tapped() {
+        trace("tap (shown=\(shown), alpha=\(overlay.alpha), hidden=\(overlay.isHidden))")
         if shown { show(false) } else { poke() }
     }
 
@@ -225,6 +227,7 @@ final class PlayerScreen: UIViewController {
     /// Hidden controls are taken out of the way entirely (not just faded), so the next tap always lands on the
     /// catcher and brings them back.
     private func show(_ on: Bool) {
+        if on != shown { trace(on ? "show" : "hide") }
         shown = on
         if !on { hideTimer?.invalidate() }
         if on { overlay.isHidden = false }
@@ -234,6 +237,15 @@ final class PlayerScreen: UIViewController {
             if !self.shown { self.overlay.isHidden = true }
         }
     }
+}
+
+/// Test builds note what the controls did (Library/Caches/ui.log, read by the automated check).
+func trace(_ line: String) {
+    #if DEBUG
+    let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("ui.log")
+    let data = Data("\(String(format: "%.2f", CACurrentMediaTime())) \(line)\n".utf8)
+    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(data); try? h.close() } else { try? data.write(to: url) }
+    #endif
 }
 
 /// A view that only takes touches meant for what's on it.
