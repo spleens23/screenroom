@@ -24,8 +24,8 @@ targets:
         type: folder
         buildPhase: resources
     dependencies:
-      # VLC 4 engine (scripts/fetch-vlckit.sh puts it in vendor/): DTS / TrueHD sound, MKV and other files
-      - framework: vendor/VLCKit.xcframework
+      # VLC's engine (scripts/fetch-vlckit.sh puts it in vendor/): DTS / TrueHD sound, MKV and other files
+      - framework: vendor/MobileVLCKit.xcframework
         embed: false
       - sdk: libc++.tbd
       - sdk: libiconv.tbd
