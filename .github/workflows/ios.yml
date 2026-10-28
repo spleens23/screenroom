@@ -39,7 +39,7 @@ jobs:
           set -o pipefail
           ios/scripts/fetch-vlckit.sh 2>&1 | tee -a shots-vlc.txt
           # a dynamic framework has to be copied into the app; a static one is linked in
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -path '*ios-arm64/*' -name MobileVLCKit -type f | head -1)"
+          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
           if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           grep -n "embed:" ios/project.yml
       - name: Generate the Xcode project
@@ -146,7 +146,7 @@ jobs:
           set -o pipefail
           brew install xcodegen
           ios/scripts/fetch-vlckit.sh
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -path '*ios-arm64/*' -name MobileVLCKit -type f | head -1)"
+          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
           if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           ios/scripts/prepare-web.sh
           cd ios && xcodegen generate

@@ -21,6 +21,6 @@ X="$(find "$TMP" -name 'MobileVLCKit.xcframework' -maxdepth 4 -type d | head -1)
 mv "$X" "$OUT/"
 find "$TMP" -maxdepth 3 -iname 'COPYING*' -exec cp {} "$OUT/MobileVLCKit-COPYING.txt" \; || true
 echo "$VER" > "$OUT/MobileVLCKit-version.txt"
-BIN="$(find "$OUT/MobileVLCKit.xcframework" -path '*ios-arm64/*' -name MobileVLCKit -type f | head -1)"
+BIN="$(find "$OUT/MobileVLCKit.xcframework" -name MobileVLCKit -type f | head -1)"; ls "$OUT/MobileVLCKit.xcframework"
 file "$BIN" || true
 rm -rf "$TMP"
