@@ -2,12 +2,18 @@
 # Screenroom TV session: what runs when the TV box logs in automatically.
 # Installed to /usr/local/bin/screenroom-session by install-tv.sh.
 
+# The mouse pointer only shows while a mouse / touchpad is actually being moved (never on the TV otherwise).
+# Started first, so the pointer is hidden from the very first moment.
+if command -v unclutter >/dev/null; then
+  unclutter --start-hidden --timeout 2 --hide-on-touch >/dev/null 2>&1 &
+fi
+
 # Keep the screen on while the box is on (the TV handles its own sleep / power).
 xset s off
 xset -dpms
 xset s noblank
 # Dark background straight away (no grey flash before Screenroom draws).
-xsetroot -solid '#141414' 2>/dev/null || true
+xsetroot -solid '#16110D' 2>/dev/null || true
 
 # Smooth, unhinted text at 96 dpi (the app scales itself up for the TV).
 xrdb -merge <<'XRES'
@@ -27,10 +33,6 @@ if [ -x /usr/local/bin/screenroom-display ]; then
   /usr/local/bin/screenroom-display >/tmp/screenroom-display.log 2>&1 &
 fi
 
-# The mouse pointer only shows while a mouse / touchpad is actually being moved (never on the TV otherwise).
-if command -v unclutter >/dev/null; then
-  unclutter --start-hidden --timeout 2 --hide-on-touch >/dev/null 2>&1 &
-fi
 
 # A tiny window manager so full-screen windows (Screenroom, then the mpv player) stack properly.
 openbox &

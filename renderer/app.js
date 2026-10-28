@@ -1798,21 +1798,26 @@
     // Picture: the initial, one of the characters, or a photo
     const pics = h('div', { class: 'pics' });
     const pick = (a) => { d.avatar = a; drawPics(); drawPreview(); };
+    const canPhoto = !!p && S.platform !== 'android';
+    async function choosePhoto() {
+      let file = null;
+      if (isLinuxApp()) { file = await pickPath({ title: 'Choose a photo', mode: 'image', hint: 'A picture from a USB drive or this computer. OK opens a folder or uses a picture; Back goes up a folder.' }); if (!file) return; }
+      const r = await api.profilePhoto(p.id, authPin, file);
+      if (!r.ok) { flash(r.error); return; }
+      if (r.profile) { d.photo = r.profile.photo; d.avatar = 'photo'; S = r.state; drawPics(); drawPreview(); drawProfileButton(); }
+    }
     const drawPics = () => pics.replaceChildren(
       h('button', { class: 'pic' + (!d.avatar ? ' on' : ''), title: 'Initial', onclick: () => pick('') }, avatar({ name: name.value || '?', color: d.color })),
       ...(window.Avatars ? window.Avatars.list : []).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => pick('char:' + c.id) },
         avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))),
-      ...(d.photo ? [h('button', { class: 'pic' + (d.avatar === 'photo' ? ' on' : ''), title: 'Photo', onclick: () => pick('photo') }, avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo }))] : []));
+      ...(d.photo ? [h('button', { class: 'pic' + (d.avatar === 'photo' ? ' on' : ''), title: 'Photo', onclick: () => pick('photo') }, avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo }))] : []),
+      // upload a photo of your own, right here with the other pictures
+      canPhoto ? h('button', { class: 'pic pic-add', title: d.photo ? 'Choose a different photo' : 'Use a photo', onclick: choosePhoto },
+        h('span', { class: 'avatar pic-add-face' }, h('span', { class: 'pic-add-ico', 'aria-hidden': 'true' }, '+'), h('small', {}, 'Photo'))) : null);
     drawPics();
     const photoHint = !p ? h('p', { class: 'am-hint' }, 'Save the profile first to give it a photo.')
       : h('div', { class: 'photo-hint' },
-        S.platform === 'android' ? null : h('button', { class: 'btn secondary', onclick: async () => {
-          let file = null;
-          if (isLinuxApp()) { file = await pickPath({ title: 'Choose a photo', mode: 'image', hint: 'A picture from a USB drive or this computer. OK opens a folder or uses a picture; Back goes up a folder.' }); if (!file) return; }
-          const r = await api.profilePhoto(p.id, authPin, file);
-          if (!r.ok) { flash(r.error); return; }
-          if (r.profile) { d.photo = r.profile.photo; d.avatar = 'photo'; S = r.state; drawPics(); drawPreview(); drawProfileButton(); }
-        } }, 'Choose a photo…'),
+        canPhoto ? h('button', { class: 'btn secondary', onclick: choosePhoto }, d.photo ? 'Choose a different photo…' : 'Choose a photo…') : null,
         h('p', { class: 'am-hint' }, 'Or send one from your phone: in the phone remote, open Profiles → Photo, pick this profile and take or choose a picture.'));
     const swatches = h('div', { class: 'swatches' });
     const drawSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPreview(); drawPics(); } })));
@@ -2627,7 +2632,7 @@
     if (EDITION === 'music') {
       // Parlor on its own: straight into the music
       document.body.classList.add('parlor', 'ed-music');
-      $('#nav .brand').textContent = 'PARLOR';
+      $('#nav .brand').textContent = 'Parlor';
       $('#search').placeholder = 'Search music…';
     }
     document.querySelectorAll('#pnav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); parlorUI.go(a.dataset.pview); }));
@@ -2635,5 +2640,6 @@
 
   document.body.classList.toggle('ed-films', EDITION === 'films');
   document.title = EDITION === 'music' ? 'Parlor' : 'Screenroom';
-  (async () => { S = await api.state(); render(); wake(); })();
+  // TV: start with the pointer hidden (it appears only once the mouse really moves)
+  (async () => { S = await api.state(); render(); if (S.tv) hidePointer(1500); else wake(); })();
 })();

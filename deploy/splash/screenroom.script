@@ -1,9 +1,9 @@
-// Screenroom boot splash: the wordmark on a dark background, with a slow pulse.
-Window.SetBackgroundTopColor(0.078, 0.078, 0.078);
-Window.SetBackgroundBottomColor(0.078, 0.078, 0.078);
+// Screenroom boot splash (Matinee): the italic wordmark and its amber dot on the warm ink background, with a slow pulse.
+Window.SetBackgroundTopColor(0.086, 0.067, 0.051);
+Window.SetBackgroundBottomColor(0.086, 0.067, 0.051);
 
 logo.image = Image("logo.png");
-scale = Math.Min(Window.GetWidth() * 0.42 / logo.image.GetWidth(), 1.6);
+scale = Math.Min(Window.GetWidth() * 0.34 / logo.image.GetWidth(), 1.6);
 logo.scaled = logo.image.Scale(logo.image.GetWidth() * scale, logo.image.GetHeight() * scale);
 logo.sprite = Sprite(logo.scaled);
 logo.sprite.SetX(Window.GetWidth() / 2 - logo.scaled.GetWidth() / 2);
@@ -12,7 +12,7 @@ logo.sprite.SetY(Window.GetHeight() / 2 - logo.scaled.GetHeight() / 2);
 t = 0;
 fun refresh() {
   t++;
-  logo.sprite.SetOpacity(0.65 + 0.35 * Math.Sin(t / 30));
+  logo.sprite.SetOpacity(0.75 + 0.25 * Math.Sin(t / 40));
 }
 Plymouth.SetRefreshFunction(refresh);
 

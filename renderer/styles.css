@@ -735,7 +735,8 @@ body.navmode .pic:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255
 .watched-by { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 14px; }
 .watched-by small { color: #aaa; }
 .rec-banner { display: flex; align-items: center; gap: 12px; background: linear-gradient(90deg, rgba(229,9,20,.25), rgba(229,9,20,.05)); border-left: 3px solid #e50914; padding: 10px 14px; border-radius: 6px; margin: 4px 0 14px; font-weight: 600; }
-.rec-banner > span { flex: 1; }
+.rec-banner > span:not(.avatar) { flex: 1; }
+.rec-banner > .avatar { width: 32px; height: 32px; flex: none; }
 .btn.small { padding: 6px 14px; font-size: 14px; }
 body.big .btn.small { padding: 8px 18px; font-size: 16px; }
 
@@ -909,4 +910,22 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 
 /* the remote's highlight on the round top-bar buttons (the popcorn had none, so it looked unselectable) */
 body.navmode #vote-btn:focus, body.navmode #parlor-btn:focus, body.navmode #settings-btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
-body.mat.navmode #vote-btn:focus, body.mat.navmode #parlor-btn:focus, body.mat.navmode #settings-btn:focus, body.mat.navmode #profile-btn:focus { outline: 3px solid #F0A73A; outline-offset: 3px; border-radius: 50%; }
+body.mat.navmode #vote-btn:focus, body.mat.navmode #parlor-btn:focus, body.mat.navmode #settings-btn:focus { outline: 3px solid #F0A73A; outline-offset: 3px; border-radius: 50%; }
+
+/* the "use a photo" tile in the profile editor's pictures */
+.pic-add-face { width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; background: transparent; border: 2px dashed currentColor; color: inherit;
+  flex-direction: column; gap: 0; text-shadow: none; opacity: .8; }
+.pic-add-ico { font-size: 26px; line-height: 1; font-weight: 400; }
+.pic-add-face small { font-size: 11px; font-weight: 600; }
+.pic.pic-add { color: var(--muted); }
+.pic.pic-add:hover, .pic.pic-add:focus { color: var(--fg); }
+
+/* things that react to the mouse hovering don't, while the remote is in use or the pointer is hidden (a hidden
+   pointer resting on an album used to slide its record out while the highlight was somewhere else) */
+body.navmode .card.pcard:hover:not(:focus) .vinyl.peek, body.idle .card.pcard:hover:not(:focus) .vinyl.peek { transform: none; }
+body.navmode .card.pcard:hover:not(:focus) .sleeve .cover, body.idle .card.pcard:hover:not(:focus) .sleeve .cover { transform: none; }
+body.navmode .card.pcard:hover:not(:focus), body.idle .card.pcard:hover:not(:focus) { transform: none; }
+body.navmode .card:not(.pcard):hover:not(:focus), body.idle .card:not(.pcard):hover:not(:focus) { transform: none; outline: none; box-shadow: none; z-index: auto; }
+body.navmode .who-tile:hover:not(:focus) .avatar, body.idle .who-tile:hover:not(:focus) .avatar { border-color: transparent; transform: none; }
+/* the profile picker never scrolls sideways */
+.who { overflow: clip; }

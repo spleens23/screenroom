@@ -39,8 +39,10 @@ body.mat #settings-btn { width: 42px; height: 42px; border-radius: 50%; backgrou
 body.mat #settings-btn:hover { background: var(--m-panel2); }
 body.mat #parlor-btn, body.mat #vote-btn { width: 42px; height: 42px; border-radius: 50%; background: var(--m-panel); color: var(--m-cream); }
 body.mat #parlor-btn:hover, body.mat #vote-btn:hover { background: var(--m-panel2); color: var(--m-amber2); }
-body.mat #profile-btn { border-radius: 50%; padding: 0; }
-body.mat #profile-btn .avatar { width: 42px; height: 42px; border-radius: 50%; box-shadow: 0 0 0 2px var(--m-amber); font-size: 17px; }
+body.mat #profile-btn { width: 42px; height: 42px; flex: none; border-radius: 50%; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center; overflow: visible; }
+body.mat #profile-btn .avatar { width: 42px; height: 42px; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px var(--m-amber); font-size: 17px; overflow: hidden; }
+body.mat.navmode #profile-btn:focus { outline: none; }
+body.mat.navmode #profile-btn:focus .avatar { box-shadow: 0 0 0 3px var(--m-ink), 0 0 0 6px var(--m-amber); }
 body.mat #np-chip { border-color: var(--m-edge); background: var(--m-panel); color: var(--m-cream); }
 body.mat #np-chip .npc-disc { background: radial-gradient(circle, var(--m-amber) 0 22%, #111 24%, #333 60%, #111 62%); }
 body.mat #battery { color: var(--m-muted); }
@@ -181,7 +183,7 @@ body.mat .who-list { gap: 40px; align-items: flex-start; }
 body.mat .who-list:has(> .who-tile:nth-child(3)) > .who-tile:first-child,
 body.mat .who-list:has(> .who-tile:nth-child(3)) > .who-tile:last-child { margin-top: 34px; }
 body.mat .who-tile { color: var(--m-text); }
-body.mat .who-tile .avatar.big { width: 150px; height: 150px; border-radius: 50%; font-family: var(--m-serif); font-weight: 600; font-size: 60px; border: 4px solid transparent; box-sizing: border-box; }
+body.mat .who-tile .avatar.big { flex: none; aspect-ratio: 1; width: 150px; height: 150px; border-radius: 50%; font-family: var(--m-serif); font-weight: 600; font-size: 60px; border: 4px solid transparent; box-sizing: border-box; }
 body.mat .who-tile:hover .avatar, body.mat .who-tile:focus .avatar { border-color: var(--m-amber); transform: translateY(-4px); }
 body.mat .who-tile:hover, body.mat .who-tile:focus { color: var(--m-cream); }
 body.mat .who-name { font-size: 20px; font-weight: 500; }

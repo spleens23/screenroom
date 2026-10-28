@@ -105,6 +105,14 @@ fi
 # ---- sound outputs switched on ------------------------------------------------------------------------
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session
+# ---- boot splash: kept in step with the app's look (rebuilds the boot image only when it changed) ------
+if [ -d "$HERE/splash" ] && [ -d /usr/share/plymouth ]; then
+  SPL=/usr/share/plymouth/themes/screenroom
+  if ! diff -rq "$HERE/splash" "$SPL" >/dev/null 2>&1; then
+    mkdir -p "$SPL" && cp "$HERE/splash/"* "$SPL/"
+    command -v update-initramfs >/dev/null && update-initramfs -u >/dev/null 2>&1 || true
+  fi
+fi
 install -m 0755 "$HERE/screenroom-display" /usr/local/bin/screenroom-display
 [ -f "$HERE/screenroom-keys.py" ] && install -m 0755 "$HERE/screenroom-keys.py" /usr/local/bin/screenroom-keys
 # screenroom-dedupe: keep only the best copy of each film / episode (also in Settings → Free up space).

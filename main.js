@@ -161,7 +161,7 @@ function watchDisplay() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
-    backgroundColor: '#141414',
+    backgroundColor: '#16110D',
     fullscreen: process.platform === 'darwin' ? false : wantFull(),
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
