@@ -269,8 +269,13 @@ body.mat .pcard-t { color: var(--m-cream); }
   body.mat .brand { font-size: 25px; }
   body.mat #nav nav:not(#pnav) a[data-view="4k"], body.mat #nav nav:not(#pnav) a[data-view="hd"], body.mat #nav nav:not(#pnav) a[data-view="sd"] { display: none; }
   body.mat #nav nav a { padding: 8px 14px; }
-  body.mat #search { width: 140px; }
-  body.mat .nav-right { gap: 10px; }
+  body.mat #nav nav:not(#pnav), body.mat.parlor #nav #pnav { flex-shrink: 0; }
+  body.mat .nav-right { gap: 10px; flex: 1 1 0; min-width: 0; justify-content: flex-end; }
+  body.mat #search { flex: 1 1 auto; width: auto; min-width: 110px; max-width: 220px; }
+  body.mat.parlor #nav #pnav { flex-shrink: 0; }
+  body.mat.parlor #pnav a { padding: 8px 11px; font-size: 14px; }
+  body.mat.parlor #search { flex: 0 0 110px; width: 110px; min-width: 0; }
+  body.mat.parlor .nav-right { flex: 0 0 auto; }
   body.mat .hero { --hh: clamp(300px, 34vh, 430px); }
 }
 @media (max-width: 760px) {
