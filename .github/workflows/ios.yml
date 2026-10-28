@@ -114,6 +114,7 @@ jobs:
         run: |
           gh release view ios-ci-screens >/dev/null 2>&1 || gh release create ios-ci-screens --prerelease --latest=false \
             --title "iPad app: test screenshots (not for installing)" --notes "From the latest automated check in a simulated iPad."
+          [ -f shots-vlc.txt ] && cp shots-vlc.txt shots/vlckit.txt
           for f in shots/*; do [ -s "$f" ] && gh release upload ios-ci-screens "$f" --clobber || echo "couldn't upload $f"; done
 
   # Signs the app and sends it to TestFlight (needs the App Store Connect key in this repository's secrets).
