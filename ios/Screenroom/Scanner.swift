@@ -9,7 +9,7 @@ import MobileVLCKit
 final class Scanner {
     static let shared = Scanner()
     private let st = Storage.shared
-    private let videoCacheName = "scan-films-3"
+    private let videoCacheName = "scan-films-4"
     private let audioCacheName = "scan-music"
     private var videoBusy = false
     private var audioBusy = false

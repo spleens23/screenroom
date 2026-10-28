@@ -49,3 +49,17 @@ targets:
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: Screenroom/Info.plist
         GENERATE_INFOPLIST_FILE: NO
+    scheme:
+      testTargets: [ScreenroomUITests]
+  # Taps through the player in a simulated iPad (the build workflow runs it)
+  ScreenroomUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Screenroom
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.ipad.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic

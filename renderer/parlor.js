@@ -10,7 +10,7 @@ window.createParlor = function createParlor(ctx) {
   const main = $('#main');
 
   // ---- helpers -----------------------------------------------------------------------------------------
-  const fileUrl = (p) => (p ? 'file://' + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '');
+  const fileUrl = (p) => (p ? (window.S_IOS ? 'srfile://f' : 'file://') + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '');
   const mmss = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   const longDur = (s) => { const m = Math.round((s || 0) / 60); return m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`; };
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;

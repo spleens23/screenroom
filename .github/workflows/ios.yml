@@ -75,6 +75,7 @@ jobs:
           print(c[-1][1]['udid'])")"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
+          echo "$UDID" > udid.txt
           # first, the release version on a fresh iPad with nothing on it yet (what someone installing it sees)
           REL="$(find ios/build-rel/Build/Products -name Screenroom.app -maxdepth 3 | head -1)"
           if [ -n "$REL" ]; then
@@ -105,11 +106,22 @@ jobs:
           run "api.state().then(s => { const f = s.library.find(i => /Desert Signal/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS film in the library'); })"; shot player-vlc 11
           run "api.state().then(s => { const f = s.library.find(i => /Harbor Lights/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS mp4 in the library'); })"; shot player-vlc-mp4 11
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Harbor Lights/i.test(x.title)); c && c.click()"; shot film-dts-mp4 12
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-3.json" > shots/engines.txt 2>&1 || true
+          run "const c=[...document.querySelectorAll('.card')].find(x=>/Paper Lanterns/i.test(x.textContent + x.title)); c ? c.click() : console.error('no Paper Lanterns card')"; shot film-tagged 12
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1], json.dumps(v['probe']['format'].get('tags',{}))[:300]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-4.json" > shots/engines.txt 2>&1 || true
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
           if [ -s "$DATA/Library/Caches/page-errors.log" ]; then cp "$DATA/Library/Caches/page-errors.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
           cat shots/page-errors.txt
           ls "$DATA/Library/Application Support/Screenroom" | tee shots/data-files.txt
+      - name: Tap through the player
+        run: |
+          UDID="$(cat udid.txt)"
+          mkdir -p shots
+          cd ios
+          set -o pipefail
+          TEST_RUNNER_SHOTS="$PWD/../shots" xcodebuild test -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
+            | tee uitest.log | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)" || true
+          { grep -E "Test Case .*(passed|failed)|: error:|TEST (SUCCEEDED|FAILED)" uitest.log; echo ---; tail -25 uitest.log; } > ../shots/uitest.txt
       - name: Share the screenshots
         if: always()
         env:

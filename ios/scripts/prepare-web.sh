@@ -19,6 +19,9 @@ s = s.replace('<meta name="viewport" content="width=device-width, initial-scale=
               '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">')
 # the page's own folder only (file: pages count each folder separately on the iPad)
 s = s.replace("script-src 'self'", "script-src 'self' file:")
+# pictures from the app's folder come through the app (srfile:), see LocalFiles.swift
+assert "img-src 'self' file:" in s, 'CSP changed: update prepare-web.sh'
+s = s.replace("img-src 'self' file:", "img-src 'self' file: srfile:")
 s = s.replace('<link rel="stylesheet" href="theme-heirloom.css">',
               '<link rel="stylesheet" href="theme-heirloom.css">\n<link rel="stylesheet" href="ios.css">')
 s = s.replace('<script src="../lib/media-core.js"></script>',

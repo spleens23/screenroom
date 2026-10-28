@@ -34,7 +34,7 @@
     }
     return el;
   }
-  const fileUrl = (p) => p ? 'file://' + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
+  const fileUrl = (p) => p ? (window.S_IOS ? 'srfile://f' : 'file://') + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
   // The iPad app keeps films and music in its own Documents folder ("On My iPad › Screenroom" in the Files app).
   const isIOS = () => !!(window.S_IOS || (typeof S !== 'undefined' && S && S.platform === 'ios'));
   const here = () => (isIOS() ? 'this iPad' : 'this box');

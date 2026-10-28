@@ -77,6 +77,7 @@ final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInte
               window.addEventListener('unhandledrejection', (e) => report('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
               const ce = console.error; console.error = (...a) => { log('console: ' + a.join(' ')); ce.apply(console, a); }; })();
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.setURLSchemeHandler(LocalFiles(), forURLScheme: LocalFiles.scheme)
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []
         let v = WKWebView(frame: .zero, configuration: cfg)

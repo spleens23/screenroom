@@ -297,7 +297,11 @@ final class VLCPlayerController: UIViewController {
     private let amber = UIColor(red: 0.941, green: 0.655, blue: 0.227, alpha: 1)
     private let edge = UIColor(red: 0.353, green: 0.275, blue: 0.212, alpha: 1)
 
-    private let overlay = UIView()
+    /// Lets taps through where there's no control, so they reach the catcher underneath.
+    private let overlay = PassthroughView()
+    /// Fills the screen under the controls: a tap on the picture shows or hides them. (A plain control rather than
+    /// a gesture recogniser, so nothing else on the screen can swallow the tap.)
+    private let catcher = UIControl()
     private let panel = UIView()
     private let titleLabel = UILabel()
     private let subLabel = UILabel()
@@ -323,23 +327,27 @@ final class VLCPlayerController: UIViewController {
         videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(videoView)
 
+        catcher.frame = view.bounds
+        catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        catcher.backgroundColor = .clear
+        catcher.isAccessibilityElement = true
+        catcher.accessibilityLabel = "Show or hide the controls"
+        catcher.addTarget(self, action: #selector(tapped), for: .touchUpInside)
+        view.addSubview(catcher)
         overlay.frame = view.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(overlay)
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
-        tap.cancelsTouchesInView = false
-        view.addGestureRecognizer(tap)
 
-        let close = roundButton(symbol: "xmark", size: 52, filled: false)
+        let close = roundButton(symbol: "xmark", size: 40, filled: false)
         close.addAction(UIAction { [weak self] _ in self?.onClose?() }, for: .touchUpInside)
         close.accessibilityLabel = "Close"
 
-        panel.backgroundColor = ink.withAlphaComponent(0.9)
-        titleLabel.font = UIFont(descriptor: UIFont.systemFont(ofSize: 30, weight: .semibold).fontDescriptor.withDesign(.serif)!, size: 30)
+        panel.backgroundColor = ink.withAlphaComponent(0.82)
+        titleLabel.font = UIFont(descriptor: UIFont.systemFont(ofSize: 21, weight: .semibold).fontDescriptor.withDesign(.serif)!, size: 21)
         titleLabel.textColor = cream
-        subLabel.font = .systemFont(ofSize: 18)
+        subLabel.font = .systemFont(ofSize: 14)
         subLabel.textColor = muted
-        for l in [elapsed, remaining] { l.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular); l.textColor = muted }
+        for l in [elapsed, remaining] { l.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular); l.textColor = muted }
         slider.minimumTrackTintColor = amber
         slider.maximumTrackTintColor = edge
         slider.thumbTintColor = cream
@@ -347,13 +355,14 @@ final class VLCPlayerController: UIViewController {
         slider.addTarget(self, action: #selector(scrubMove), for: .valueChanged)
         slider.addTarget(self, action: #selector(scrubEnd), for: [.touchUpInside, .touchUpOutside, .touchCancel])
 
-        let back = roundButton(symbol: "gobackward.10", size: 56, filled: false)
+        let back = roundButton(symbol: "gobackward.10", size: 42, filled: false)
         back.addAction(UIAction { [weak self] _ in self?.onSkip?(-10) }, for: .touchUpInside)
         back.accessibilityLabel = "Back 10 seconds"
-        let fwd = roundButton(symbol: "goforward.10", size: 56, filled: false)
+        let fwd = roundButton(symbol: "goforward.10", size: 42, filled: false)
         fwd.addAction(UIAction { [weak self] _ in self?.onSkip?(10) }, for: .touchUpInside)
         fwd.accessibilityLabel = "Forward 10 seconds"
-        styleRound(playButton, symbol: "pause.fill", size: 72, filled: true)
+        styleRound(playButton, symbol: "pause.fill", size: 54, filled: true)
+        sizeRound(playButton, 54)
         playButton.addAction(UIAction { [weak self] _ in self?.onToggle?() }, for: .touchUpInside)
 
         stylePill(tracksButton, title: "Audio & subtitles")
@@ -367,31 +376,31 @@ final class VLCPlayerController: UIViewController {
         let titles = UIStackView(arrangedSubviews: [titleLabel, subLabel])
         titles.axis = .vertical; titles.spacing = 2
         let bar = UIStackView(arrangedSubviews: [elapsed, slider, remaining])
-        bar.spacing = 14; bar.alignment = .center
+        bar.spacing = 12; bar.alignment = .center
         let transport = UIStackView(arrangedSubviews: [back, playButton, fwd])
-        transport.spacing = 28; transport.alignment = .center
+        transport.spacing = 22; transport.alignment = .center
         let right = UIStackView(arrangedSubviews: [nextButton, tracksButton])
-        right.spacing = 12; right.alignment = .center
+        right.spacing = 10; right.alignment = .center
 
         for v in [close, panel] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; overlay.addSubview(v) }
         for v in [titles, bar, transport, right] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; panel.addSubview(v) }
         let g = overlay.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            close.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 28),
-            close.topAnchor.constraint(equalTo: g.topAnchor, constant: 20),
+            close.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 22),
+            close.topAnchor.constraint(equalTo: g.topAnchor, constant: 16),
             panel.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
             panel.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
             panel.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
-            titles.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 36),
-            titles.trailingAnchor.constraint(lessThanOrEqualTo: g.trailingAnchor, constant: -36),
-            titles.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22),
-            bar.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 36),
-            bar.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -36),
-            bar.topAnchor.constraint(equalTo: titles.bottomAnchor, constant: 14),
+            titles.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 28),
+            titles.trailingAnchor.constraint(lessThanOrEqualTo: g.trailingAnchor, constant: -28),
+            titles.topAnchor.constraint(equalTo: panel.topAnchor, constant: 14),
+            bar.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 28),
+            bar.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -28),
+            bar.topAnchor.constraint(equalTo: titles.bottomAnchor, constant: 8),
             transport.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
-            transport.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 12),
-            transport.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
-            right.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -36),
+            transport.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 6),
+            transport.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -10),
+            right.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -28),
             right.centerYAnchor.constraint(equalTo: transport.centerYAnchor),
             right.leadingAnchor.constraint(greaterThanOrEqualTo: transport.trailingAnchor, constant: 20),
         ])
@@ -402,6 +411,7 @@ final class VLCPlayerController: UIViewController {
     private func roundButton(symbol: String, size: CGFloat, filled: Bool) -> UIButton {
         let b = UIButton(type: .system)
         styleRound(b, symbol: symbol, size: size, filled: filled)
+        sizeRound(b, size)
         return b
     }
 
@@ -411,23 +421,26 @@ final class VLCPlayerController: UIViewController {
         c.baseForegroundColor = filled ? ink : cream
         c.background.backgroundColor = filled ? amber : ink.withAlphaComponent(0.6)
         c.background.strokeColor = filled ? .clear : edge
-        c.background.strokeWidth = filled ? 0 : 1.5
+        c.background.strokeWidth = filled ? 0 : 1.2
         c.background.cornerRadius = size / 2
         b.configuration = c
+    }
+
+    private func sizeRound(_ b: UIButton, _ size: CGFloat) {
         b.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: size), b.heightAnchor.constraint(equalToConstant: size)])
     }
 
     private func stylePill(_ b: UIButton, title: String) {
         var c = UIButton.Configuration.plain()
-        var t = AttributedString(title); t.font = .systemFont(ofSize: 17, weight: .medium)
+        var t = AttributedString(title); t.font = .systemFont(ofSize: 14, weight: .medium)
         c.attributedTitle = t
         c.baseForegroundColor = cream
         c.background.backgroundColor = .clear
         c.background.strokeColor = edge
-        c.background.strokeWidth = 1.5
-        c.background.cornerRadius = 24
-        c.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 22, bottom: 12, trailing: 22)
+        c.background.strokeWidth = 1.2
+        c.background.cornerRadius = 18
+        c.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         b.configuration = c
     }
 
@@ -440,7 +453,7 @@ final class VLCPlayerController: UIViewController {
     func setHasNext(_ has: Bool) { nextButton.isHidden = !has }
 
     func setPlaying(_ playing: Bool) {
-        styleRound(playButton, symbol: playing ? "pause.fill" : "play.fill", size: 72, filled: true)
+        styleRound(playButton, symbol: playing ? "pause.fill" : "play.fill", size: 54, filled: true)
         playButton.accessibilityLabel = playing ? "Pause" : "Play"
         if !playing { show(true) } else { poke() }
     }
@@ -461,10 +474,8 @@ final class VLCPlayerController: UIViewController {
     @objc private func scrubMove() { if duration > 0 { elapsed.text = fmt(Double(slider.value) * duration) } }
     @objc private func scrubEnd() { scrubbing = false; onSeek?(slider.value); poke() }
 
-    @objc private func tapped(_ g: UITapGestureRecognizer) {
-        let hit = view.hitTest(g.location(in: view), with: nil)
-        if hit is UIControl || hit?.superview is UIControl { poke(); return }
-        if overlay.alpha > 0.5 { show(false) } else { poke() }
+    @objc private func tapped() {
+        if shown { show(false) } else { poke() }
     }
 
     /// Show the controls for a few seconds.
@@ -477,7 +488,26 @@ final class VLCPlayerController: UIViewController {
         }
     }
 
+    private var shown = true
+
+    /// Hidden controls are taken out of the way entirely (not just faded), so the next tap always lands on the
+    /// catcher and brings them back.
     private func show(_ on: Bool) {
-        UIView.animate(withDuration: 0.25) { self.overlay.alpha = on ? 1 : 0 }
+        shown = on
+        if !on { hideTimer?.invalidate() }
+        if on { overlay.isHidden = false }
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.overlay.alpha = on ? 1 : 0
+        } completion: { _ in
+            if !self.shown { self.overlay.isHidden = true }
+        }
+    }
+}
+
+/// A view that only takes touches meant for what's on it.
+final class PassthroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let v = super.hitTest(point, with: event)
+        return v === self ? nil : v
     }
 }
