@@ -46,8 +46,8 @@ final class PlayerControlsTests: XCTestCase {
         }
         save("\(tag)-7-end", app)
         // close the player properly (test builds then note whether sound played)
-        if !close.isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap(); sleep(1) }
-        if close.isHittable { close.tap(); sleep(2) }
+        if !close.isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap() }
+        if close.waitForExistence(timeout: 2), close.isHittable { close.tap(); sleep(2) }
         app.terminate()
     }
 

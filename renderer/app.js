@@ -688,7 +688,8 @@
     if (!e) return;
     const from = document.activeElement;
     open = { key, season: null, focusEp: focusEp || null, returnKey: key, version: null,
-      returnSel: from && from.closest && from.closest('.hero') ? '.hero .btn.secondary' : null, returnEl: from && from !== document.body ? from : null, scrollY: window.scrollY };
+      returnSel: from && from.closest && from.closest('.hero') ? '.hero .btn.secondary' : null, returnEl: from && from !== document.body ? from : null, scrollY: window.scrollY,
+      returnRow: from && from.closest && from.closest('section.row') ? (from.closest('section.row').querySelector('h2') || {}).textContent || null : null };
     if (e.kind === 'series') {
       const n = nextUp(e);
       open.season = (focusEp ? S.library.find((i) => i.id === focusEp) : n.ep).tv.season;
@@ -706,11 +707,17 @@
     // back to exactly what opened it (the hero's More Info, or the same poster in the same row), staying where the page was
     let el = o.returnEl && document.body.contains(o.returnEl) ? o.returnEl : null;
     if (!el && o.returnSel) el = document.querySelector(o.returnSel);
+    // the page was redrawn (back from the film): the same poster in the same row, not its new copy in Continue Watching
+    if (!el && o.returnKey && o.returnRow) {
+      const row = [...document.querySelectorAll('section.row')].find((r) => (r.querySelector('h2') || {}).textContent === o.returnRow);
+      el = row && row.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"]`);
+    }
     if (!el) el = o.returnKey && document.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"]`);
     if (!el) return;
     el.focus({ preventScroll: true });
+    // whatever happens, the highlighted poster is on screen
     const r = el.getBoundingClientRect();
-    if (r.bottom < 60 || r.top > innerHeight - 40) el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    if (r.top < 70 || r.bottom > innerHeight - 10 || r.left < 0 || r.right > innerWidth) el.scrollIntoView({ block: 'center', inline: 'nearest' });
   };
 
   function renderModal() {

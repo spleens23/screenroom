@@ -32,6 +32,8 @@ body.mat #nav nav a { color: var(--m-muted); opacity: 1; padding: 8px 17px; bord
 body.mat #nav nav a:hover { color: var(--m-cream); font-weight: 500; }
 body.mat #nav nav a.active, body.mat.parlor #pnav a.active { background: var(--m-cream); color: var(--m-ink); font-weight: 700; box-shadow: none; text-shadow: none; }
 body.mat.big #nav nav a { font-size: 17px; padding: 9px 19px; }
+/* the remote's highlight sits inside the pill, so it never runs into the tab beside it */
+body.mat.navmode #nav nav a:focus { outline: 3px solid var(--m-amber); outline-offset: -3px; }
 body.mat #search { background: var(--m-panel); border: 1px solid transparent; border-radius: 999px; padding: 9px 16px; color: var(--m-cream); box-shadow: none; }
 body.mat #search::placeholder { color: var(--m-dim); }
 body.mat #search:focus { outline: 2px solid var(--m-amber); outline-offset: 1px; }
@@ -48,13 +50,15 @@ body.mat #np-chip .npc-disc { background: radial-gradient(circle, var(--m-amber)
 body.mat #battery { color: var(--m-muted); }
 
 /* ---- the hero: an inset panel, the film's picture to the right ---- */
-body.mat .hero { --hh: clamp(320px, 46vh, 540px); height: var(--hh); min-height: 0; margin: 86px var(--m-gut) 0; border-radius: 24px; overflow: hidden;
+/* (the panel grows with a long title or description instead of letting them spill over the rows below) */
+body.mat .hero { --hh: clamp(320px, 46vh, 540px); height: auto; min-height: var(--hh); display: flex; align-items: center; margin: 86px var(--m-gut) 0; border-radius: 24px; overflow: hidden;
   background-color: var(--m-panel); background-repeat: no-repeat; background-size: auto 100%; background-position: right center; }
 body.mat .hero::after { background: linear-gradient(to right, var(--m-panel) 0, var(--m-panel) max(42%, calc(100% - var(--hh) * 1.78)),
   rgba(34,26,20,0) calc(max(42%, calc(100% - var(--hh) * 1.78)) + 140px)); }
-body.mat .hero-info { left: 48px; top: 0; bottom: 0; max-width: min(540px, 44%); display: flex; flex-direction: column; justify-content: center; }
+body.mat .hero-info { position: relative; left: auto; top: auto; bottom: auto; margin-left: 48px; padding: 36px 0; max-width: min(540px, 44%); display: flex; flex-direction: column; justify-content: center; }
 body.mat .hero-info::before { content: "Tonight's feature"; font-size: 13px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--m-amber); margin-bottom: 12px; }
-body.mat .hero h1 { font-family: var(--m-serif); font-weight: 600; font-size: clamp(36px, 4.3vw, 66px); letter-spacing: -1px; line-height: 1.02; text-shadow: none; margin: 0 0 12px; }
+body.mat .hero h1 { font-family: var(--m-serif); font-weight: 600; font-size: clamp(36px, 4.3vw, 66px); letter-spacing: -1px; line-height: 1.02; text-shadow: none; margin: 0 0 12px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; padding-bottom: .08em; }
 body.mat .hero .meta { color: var(--m-muted); }
 body.mat .hero p { color: var(--m-text); font-size: 16px; line-height: 1.5; }
 body.mat.big .hero p { font-size: 19px; }
@@ -257,7 +261,7 @@ body.mat .npb:focus, body.mat .npb-art:focus, body.mat .lcd:focus, body.mat .npf
   body.mat .card:not(.pcard):hover { transform: none; outline: none; box-shadow: none; }
 }
 @media (max-width: 900px) {
-  body.mat .hero-info { max-width: 60%; left: 28px; }
+  body.mat .hero-info { max-width: 60%; margin-left: 28px; }
   body.mat .hero::after { background: linear-gradient(to right, var(--m-panel) 0, var(--m-panel) 50%, rgba(34,26,20,.35) 100%); }
 }
 
