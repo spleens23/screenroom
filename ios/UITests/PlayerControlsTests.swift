@@ -7,7 +7,19 @@ final class PlayerControlsTests: XCTestCase {
 
     private func save(_ name: String, _ app: XCUIApplication) {
         guard let dir = ProcessInfo.processInfo.environment["SHOTS"] else { return }
-        try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ui-\(name).png"))
+        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ui-\(name).png"))
+    }
+
+    /// A system question (local network, notifications …) would swallow the first tap: answer it.
+    private func dismissSystemAlerts() {
+        let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for _ in 0..<3 {
+            let alert = sb.alerts.firstMatch
+            guard alert.waitForExistence(timeout: 1) else { return }
+            print("system alert: \(alert.label)")
+            let b = ["Allow", "OK", "Allow While Using App", "Don’t Allow", "Don't Allow"].map { alert.buttons[$0] }.first { $0.exists } ?? alert.buttons.firstMatch
+            b.tap()
+        }
     }
 
     private func run(film: String, tag: String) {
@@ -18,6 +30,7 @@ final class PlayerControlsTests: XCTestCase {
         let close = app.buttons["Close"]
         XCTAssertTrue(close.waitForExistence(timeout: 40), "\(tag): the player didn't open")
         save("\(tag)-1-start", app)
+        dismissSystemAlerts()
         sleep(7) // the controls fade after 4 s
         save("\(tag)-2-faded", app)
         XCTAssertFalse(close.isHittable, "\(tag): controls didn't fade")

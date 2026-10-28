@@ -39,6 +39,7 @@ final class PlayerScreen: UIViewController {
     private let nextButton = UIButton(type: .system)
     private let tracksButton = MenuButton(type: .system)
     private var menuOpen = false
+    private var playing = true
     private var hideTimer: Timer?
     private var scrubbing = false
     private var duration: Double = 0
@@ -185,6 +186,7 @@ final class PlayerScreen: UIViewController {
 
     func setPlaying(_ playing: Bool) {
         trace("setPlaying(\(playing))")
+        self.playing = playing
         styleRound(playButton, symbol: playing ? "pause.fill" : "play.fill", size: 54, filled: true)
         playButton.accessibilityLabel = playing ? "Pause" : "Play"
         if !playing { show(true) } else { poke() }
@@ -218,6 +220,7 @@ final class PlayerScreen: UIViewController {
         hideTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
             guard let self else { return }
             if self.scrubbing || self.menuOpen { self.poke(); return } // still in use: look again later
+            if !self.playing { return } // paused: the controls stay up
             self.show(false)
         }
     }
