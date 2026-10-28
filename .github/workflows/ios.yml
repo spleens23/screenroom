@@ -172,13 +172,18 @@ jobs:
           grep -q "ARCHIVE SUCCEEDED" archive.log || { grep -E "error:" -B2 -A3 archive.log | head -100 | tee ../shots/testflight-errors.txt; tail -30 archive.log >> ../shots/testflight-errors.txt; exit 1; }
           # mpv's libraries are static (already linked into the app); Xcode still copies their empty framework folders
           # into the app, which App Store Connect rejects as unsigned code. Take them out before signing.
-          APPDIR=build/Screenroom.xcarchive/Products/Applications/Screenroom.app
-          for f in "$APPDIR"/Frameworks/*.framework; do
-            [ -d "$f" ] || continue
-            b="$f/$(basename "$f" .framework)"
-            if [ ! -f "$b" ] || file "$b" | grep -q "ar archive"; then echo "static, not shipped: $(basename "$f")"; rm -rf "$f"; fi
-          done
-          ls "$APPDIR/Frameworks" || true
+          APPDIR="$(find build/Screenroom.xcarchive/Products -maxdepth 3 -name '*.app' -type d | head -1)"
+          {
+            echo "app: $APPDIR"
+            for f in "$APPDIR"/Frameworks/*.framework; do
+              [ -d "$f" ] || continue
+              b="$f/$(basename "$f" .framework)"
+              kind="$(file -b "$b" 2>&1 | tr '\n' ' ')"
+              if echo "$kind" | grep -q "dynamically linked"; then echo "keep: $(basename "$f") ($kind)"
+              else echo "static, not shipped: $(basename "$f") ($kind)"; rm -rf "$f"; fi
+            done
+            echo "left:"; ls "$APPDIR/Frameworks" 2>&1
+          } 2>&1 | tee ../shots/frameworks.txt
           sed "s/TEAM_ID_HERE/$TEAM_ID/" ExportOptions.plist > build/ExportOptions.plist
           xcodebuild -exportArchive -archivePath build/Screenroom.xcarchive -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/export "${AUTH[@]}" > export.log 2>&1 || true
