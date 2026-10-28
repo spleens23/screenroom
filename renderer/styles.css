@@ -906,3 +906,7 @@ body.big .choice { font-size: 22px; padding: 15px 18px; }
 .drive.disk .btn { white-space: nowrap; }
 .disk-eject { flex: none; }
 .disk-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 12px; font-weight: 600; opacity: .7; vertical-align: 2px; }
+
+/* the remote's highlight on the round top-bar buttons (the popcorn had none, so it looked unselectable) */
+body.navmode #vote-btn:focus, body.navmode #parlor-btn:focus, body.navmode #settings-btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
+body.mat.navmode #vote-btn:focus, body.mat.navmode #parlor-btn:focus, body.mat.navmode #settings-btn:focus, body.mat.navmode #profile-btn:focus { outline: 3px solid #F0A73A; outline-offset: 3px; border-radius: 50%; }

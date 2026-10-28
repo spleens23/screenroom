@@ -2119,6 +2119,7 @@
   // Spatial navigation: jump to the nearest focusable thing in the direction pressed.
   function move(dir) {
     document.body.classList.add('navmode');
+    hidePointer();
     const els = scopeEls();
     if (!els.length) return;
     const cur = els.includes(document.activeElement) ? document.activeElement : null;
@@ -2170,6 +2171,9 @@
         const r = R(el);
         const dy = r.top + r.height / 2 - ay;
         if (dir === 'down' ? dy <= 2 || r.bottom <= a.bottom - 2 : dy >= -2 || r.top >= a.top + 2) continue;
+        // mostly side by side with this one (e.g. the posters next to a raised, highlighted poster): same line
+        const overlap = Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top);
+        if (overlap > 0.5 * Math.min(r.height, a.height)) continue;
         const gapY = Math.max(0, r.top - a.bottom, a.top - r.bottom);
         cands.push({ el, r, gapY });
       }
@@ -2505,14 +2509,27 @@
   window.addEventListener('mousedown', () => document.body.classList.remove('navmode'));
   window.addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) document.body.classList.remove('navmode'); });
 
-  // Hide the mouse pointer after a few seconds in TV mode.
-  let idleTimer = null;
-  function wake() {
+  // Hide the mouse pointer after a few seconds in TV mode. It only comes back when the mouse really moves: not
+  // for the "moves" the screen reports when a film closes and Screenroom is back under the pointer, and not
+  // while the remote is in use.
+  let idleTimer = null, quietUntil = 0;
+  function hidePointer(quietMs = 0) {
+    if (!S.tv) return;
+    clearTimeout(idleTimer);
+    document.body.classList.add('idle');
+    quietUntil = Math.max(quietUntil, performance.now() + quietMs);
+  }
+  function wake(e) {
+    if (e && e.type === 'mousemove') {
+      if (!e.movementX && !e.movementY) return;
+      if (performance.now() < quietUntil) return;
+    }
     document.body.classList.remove('idle');
     clearTimeout(idleTimer);
     if (S.tv) idleTimer = setTimeout(() => document.body.classList.add('idle'), 3000);
   }
   window.addEventListener('mousemove', wake);
+  window.addEventListener('keydown', () => hidePointer());
 
   let flashTimer = null;
   function flash(text) {
@@ -2560,6 +2577,7 @@
 
   api.onPlaybackEnded((s) => {
     S = s; filmPlaying = false; lastInput = Date.now();
+    hidePointer(2000); // back from the film: no pointer in the middle of the screen
     const keep = open ? { ...open, focusEp: null } : null;
     renderKeepFocus();
     if (keep && !$('#modal').hidden) { open = keep; renderModal(); }
