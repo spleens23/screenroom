@@ -9,7 +9,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT/lib" "$OUT/ios"
 cp -R "$ROOT/renderer" "$OUT/renderer"
 cp "$ROOT/lib/media-core.js" "$OUT/lib/"
-cp "$IOS/web/ios-api.js" "$IOS/web/ios.css" "$OUT/ios/"
+cp "$IOS/support/ios-api.js" "$IOS/support/ios.css" "$OUT/ios/"
 python3 - "$OUT/renderer/index.html" <<'PY'
 import sys
 p = sys.argv[1]
