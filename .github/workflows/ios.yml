@@ -29,29 +29,29 @@ jobs:
           xcodebuild -version
       - name: Tools
         run: brew install xcodegen ffmpeg
-      - name: mpv's engine (Swift packages, cached)
+      - name: mpv's engine (cached)
         uses: actions/cache@v4
         with:
-          path: ios/.spm
-          key: spm-${{ hashFiles('ios/project.yml') }}
+          path: ios/vendor/mpvkit
+          key: mpvkit-${{ hashFiles('ios/scripts/fetch-mpvkit.sh') }}
       - name: Generate the Xcode project
         run: |
           mkdir -p shots
           set -o pipefail
-          { ios/scripts/prepare-web.sh && cd ios && xcodegen generate; } 2>&1 | tee shots/generate.txt
+          { ios/scripts/fetch-mpvkit.sh && ios/scripts/prepare-web.sh && cd ios && xcodegen generate; } 2>&1 | tee shots/generate.txt
       - name: Build for the simulator
         run: |
           set -o pipefail
           cd ios
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build -clonedSourcePackagesDirPath .spm CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
       - name: Build the release version for the simulator
         run: |
           set -o pipefail
           cd ios
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-rel -clonedSourcePackagesDirPath .spm CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-rel.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-rel CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-rel.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
       - name: Try it in a simulated iPad
         run: |
           mkdir -p shots
@@ -112,7 +112,7 @@ jobs:
           cd ios
           set -o pipefail
           TEST_RUNNER_SHOTS="$PWD/../shots" xcodebuild test -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build -clonedSourcePackagesDirPath .spm CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
             | tee uitest.log | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)" || true
           { grep -E "Test Case .*(passed|failed)|: error:|TEST (SUCCEEDED|FAILED)" uitest.log; echo ---; tail -25 uitest.log; } > ../shots/uitest.txt
           DATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
@@ -157,6 +157,7 @@ jobs:
         run: |
           set -o pipefail
           brew install xcodegen
+          ios/scripts/fetch-mpvkit.sh
           ios/scripts/prepare-web.sh
           cd ios && xcodegen generate
           KEY="$RUNNER_TEMP/AuthKey.p8"
@@ -166,7 +167,7 @@ jobs:
           # The archive is built unsigned: signing it for development would need a registered iPad. The export below
           # signs it for the App Store with Apple's cloud-managed distribution certificate (needs an Admin key).
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath build/Screenroom.xcarchive -clonedSourcePackagesDirPath .spm DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            -archivePath build/Screenroom.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
           mkdir -p ../shots

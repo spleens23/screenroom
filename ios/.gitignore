@@ -2,4 +2,3 @@ Web/
 *.xcodeproj/
 build/
 vendor/
-.spm/

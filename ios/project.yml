@@ -6,10 +6,6 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
-packages:
-  MPVKit:
-    url: https://github.com/mpvkit/MPVKit
-    revision: 98c3453e252922e3136422da3fbb2e341ed9edc8  # 1.1.0-n9.0.2
 settings:
   base:
     MARKETING_VERSION: "0.5.0"
@@ -29,8 +25,8 @@ targets:
         buildPhase: resources
     dependencies:
       # mpv's engine and FFmpeg (MPVKit, LGPL build): DTS / TrueHD sound (also inside MP4), MKV and other files
-      - package: MPVKit
-        product: MPVKit
+      # (filled in by scripts/fetch-mpvkit.sh)
+      # MPVKIT_FRAMEWORKS
       - sdk: libc++.tbd
       - sdk: libiconv.tbd
       - sdk: libbz2.tbd
@@ -44,6 +40,13 @@ targets:
       - sdk: OpenGLES.framework
       - sdk: Security.framework
       - sdk: CFNetwork.framework
+      - sdk: CoreVideo.framework
+      - sdk: CoreFoundation.framework
+      - sdk: Metal.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreAudio.framework
+      - sdk: libexpat.tbd
+      - sdk: libresolv.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.ipad
