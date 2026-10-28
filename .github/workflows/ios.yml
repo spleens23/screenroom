@@ -64,7 +64,8 @@ jobs:
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Neon/i.test(x.textContent)); c && c.click()"; shot show 15
           run "api.state().then(s => api.play({ id: s.library.find(i => /Last Signal/.test(i.title)).id }))"; shot player 18
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
-          cat "$DATA/Documents/debug.log" 2>/dev/null | tee shots/page-errors.txt || echo "(no page errors)" | tee shots/page-errors.txt
+          if [ -s "$DATA/Documents/debug.log" ]; then cp "$DATA/Documents/debug.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
+          cat shots/page-errors.txt
           ls "$DATA/Library/Application Support/Screenroom" | tee shots/data-files.txt
       - name: Share the screenshots
         if: always()
@@ -73,7 +74,7 @@ jobs:
         run: |
           gh release view ios-ci-screens >/dev/null 2>&1 || gh release create ios-ci-screens --prerelease --latest=false \
             --title "iPad app: test screenshots (not for installing)" --notes "From the latest automated check in a simulated iPad."
-          [ -d shots ] && gh release upload ios-ci-screens shots/* --clobber || true
+          for f in shots/*; do [ -s "$f" ] && gh release upload ios-ci-screens "$f" --clobber || echo "couldn't upload $f"; done
 
   # Signs the app and sends it to TestFlight (needs the App Store Connect key in this repository's secrets).
   testflight:
@@ -117,4 +118,4 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: '[ -d shots ] && gh release upload ios-ci-screens shots/* --clobber || true'
+        run: 'for f in shots/*; do [ -s "$f" ] && gh release upload ios-ci-screens "$f" --clobber || true; done'
