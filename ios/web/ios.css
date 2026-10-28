@@ -1,0 +1,12 @@
+/* Screenroom on iPad: the desktop screens, made for fingers. */
+html, body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+/* the page has no mouse: keep scrollbars out of the way */
+::-webkit-scrollbar { display: none; }
+/* room for the rounded corners and the home bar */
+#nav { padding-left: max(4%, env(safe-area-inset-left)); padding-right: max(4%, env(safe-area-inset-right)); }
+/* a little more room to tap */
+.btn, .chip, button { min-height: 40px; }
+.ios-ways { margin: 10px 0 4px; }
+.ios-ways p { margin: 6px 0; }

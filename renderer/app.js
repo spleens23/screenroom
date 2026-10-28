@@ -35,6 +35,10 @@
     return el;
   }
   const fileUrl = (p) => p ? 'file://' + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
+  // The iPad app keeps films and music in its own Documents folder ("On My iPad › Screenroom" in the Files app).
+  const isIOS = () => !!(window.S_IOS || (typeof S !== 'undefined' && S && S.platform === 'ios'));
+  const here = () => (isIOS() ? 'this iPad' : 'this box');
+  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My iPad › Screenroom${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
   const bg = (p) => (p ? `background-image:url("${fileUrl(p)}")` : '');
   const fmtDur = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const fmtTime = (s) => { s = Math.floor(s); const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
@@ -555,7 +559,31 @@
       h('span', { class: 'shine', 'aria-hidden': 'true' }));
   }
 
+  // The iPad: films arrive through the Files app, Finder (from a Mac), AirDrop or a USB-C drive.
+  function iosAddPanel(kind) {
+    const music = kind === 'music';
+    const what = music ? 'music' : 'films and shows';
+    return h('div', { class: 'addmedia' }, h('div', { class: 'am-card' },
+      h('h3', {}, music ? 'Put music on this iPad' : 'Put films on this iPad'),
+      h('p', { class: 'am-hint' }, `Screenroom keeps ${what} in its own folder, so they play anywhere, even without internet. In the Files app it's On My iPad › Screenroom (${music ? 'Music' : 'Films'}).`),
+      h('div', { class: 'ios-ways' },
+        h('p', { class: 'am-hint' }, h('b', {}, 'From a Mac: '), 'connect the iPad, select it in Finder, open the Files tab and drag them onto Screenroom.'),
+        h('p', { class: 'am-hint' }, h('b', {}, 'AirDrop: '), 'send them to the iPad and choose Screenroom.'),
+        h('p', { class: 'am-hint' }, h('b', {}, 'A USB-C drive or iCloud Drive: '), 'press Import and pick them.')),
+      h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: async () => {
+        setScanning(true, 'Importing…');
+        try { const r = await api.importFiles(kind); if (r && r.state) S = r.state; } finally { setScanning(false); }
+        render();
+      } }, 'Import…'))));
+  }
+
   function renderEmpty() {
+    if (isIOS()) {
+      main.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, 'Add your films'),
+        h('p', {}, 'Screenroom reads titles, descriptions, genres and cover art straight from each MP4. TV shows are grouped from Series / Season / S#E# Name.mp4.'),
+        iosAddPanel('films')));
+      return;
+    }
     main.replaceChildren(h('div', { class: 'empty' },
       h('h2', {}, 'Add your media'),
       h('p', {}, EDITION === 'all' ? 'Add your MP4 files and Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.' : 'Put your films in Videos, or choose the folders they’re in. Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.'),
@@ -942,7 +970,7 @@
           h('div', {}, h('b', {}, 'Video: '), [v.codec, v.width && `${v.width}×${v.height}`, v.fps && `${v.fps}fps`, v.hdr].filter(Boolean).join(' · ')),
           h('div', {}, h('b', {}, 'Subtitles: '), item.subs.length ? item.subs.map((s) => s.lang || s.codec).join(', ') : 'none'),
           h('div', {}, h('b', {}, 'Size: '), (item.size / 1e9).toFixed(2) + ' GB'),
-          h('div', {}, h('button', { class: 'link', onclick: () => api.reveal(item.path) }, 'Show in folder')))),
+          isIOS() ? null : h('div', {}, h('button', { class: 'link', onclick: () => api.reveal(item.path) }, 'Show in folder')))),
     ];
   }
 
@@ -999,7 +1027,7 @@
           h('div', {}, h('b', {}, 'Seasons: '), e.seasons.size),
           h('div', {}, h('b', {}, 'Episodes: '), e.eps.length),
           h('div', {}, h('b', {}, 'Watched: '), `${e.eps.filter((x) => isDone(x.id)).length} of ${e.eps.length}`),
-          h('div', {}, h('button', { class: 'link', onclick: () => api.reveal(e.eps[0].path) }, 'Show in folder')))),
+          isIOS() ? null : h('div', {}, h('button', { class: 'link', onclick: () => api.reveal(e.eps[0].path) }, 'Show in folder')))),
     ];
     // scroll the focused episode into view after the modal paints
     if (open.focusEp) setTimeout(() => { const el = document.querySelector(`.ep[data-ep="${open.focusEp}"]`); el && el.scrollIntoView({ block: 'center' }); }, 30);
@@ -1348,8 +1376,8 @@
   // Settings → Free up space: delete films, shows and music from the box's own storage (to make room for
   // the next lot; USB drives are never touched).
   function freeSpaceBlock() {
-    const free = h('p', { class: 'am-hint' }, 'Delete films, shows and music stored on this box, to make room for others. Copies on USB drives are never touched.');
-    api.deleteList().then((r) => { if (r && r.free != null) free.textContent = `${fmtBytes(r.free)} free on this box. Delete films, shows and music stored on it to make room for others (copies on USB drives are never touched).`; }).catch(() => {});
+    const free = h('p', { class: 'am-hint' }, `Delete films, shows and music stored on ${here()}, to make room for others. Copies on USB drives are never touched.`);
+    api.deleteList().then((r) => { if (r && r.free != null) free.textContent = `${fmtBytes(r.free)} free on ${here()}. Delete films, shows and music stored on it to make room for others${isIOS() ? '' : ' (copies on USB drives are never touched)'}.`; }).catch(() => {});
     return h('div', { class: 'am-card' }, free,
       h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', 'data-key': 'del-video', onclick: () => deleteSheet('video') }, 'Delete films & shows…'),
@@ -1491,7 +1519,7 @@
   async function deleteSheet(kind) {
     const music = kind === 'music';
     const res = await api.deleteList();
-    if (!res || res.error) { flash((res && res.error) || 'Could not list what’s on this box'); return; }
+    if (!res || res.error) { flash((res && res.error) || `Could not list what’s on ${here()}`); return; }
     // ticked: 'f:<id>' films, 's:<series>' whole shows, 's:<series>|<season>' seasons, 'a:<key>' albums
     const picked = new Map(); // key -> size
     const open = new Set();   // shows / artists expanded
@@ -1524,7 +1552,7 @@
         }
         if (res.films.length) rows.push(head('Films'));
         for (const f of res.films) rows.push(row('f:' + f.id, f.title, f.year ? String(f.year) : '', f.size));
-        if (!res.films.length && !res.shows.length) rows.push(h('p', { class: 'am-hint' }, 'No films or shows are stored on this box.'));
+        if (!res.films.length && !res.shows.length) rows.push(h('p', { class: 'am-hint' }, `No films or shows are stored on ${here()}.`));
       } else {
         const byArtist = new Map();
         for (const a of res.albums) { const l = byArtist.get(a.artist) || []; l.push(a); byArtist.set(a.artist, l); }
@@ -1535,7 +1563,7 @@
           rows.push(row(k, artist, `${albums.length} album${albums.length === 1 ? '' : 's'} · ${n} song${n === 1 ? '' : 's'}`, albums.reduce((x, a) => x + a.size, 0), { expand: 'Albums ›', children: keys }));
           if (open.has(k)) for (const a of albums) rows.push(row('a:' + a.key, a.title, `${a.year ? a.year + ' · ' : ''}${a.count} song${a.count === 1 ? '' : 's'}`, a.size, { indent: true, parent: k }));
         }
-        if (!res.albums.length) rows.push(h('p', { class: 'am-hint' }, 'No music is stored on this box.'));
+        if (!res.albums.length) rows.push(h('p', { class: 'am-hint' }, `No music is stored on ${here()}.`));
       }
       list.replaceChildren(...rows);
       drawFoot();
@@ -1558,7 +1586,7 @@
         }
       }
       const ok = await askConfirm(`Delete ${picked.size} ${picked.size === 1 ? 'thing' : 'things'} (${fmtBytes(total())})?`,
-        'They’re deleted from this box for good (with their subtitles and covers). Copies on USB drives or other computers stay where they are.', 'Delete', 'Cancel', true);
+        `They’re deleted from ${here()} for good (with their subtitles and covers). Copies on USB drives or other computers stay where they are.`, 'Delete', 'Cancel', true);
       if (!ok) { delBtn.focus(); return; }
       closeSheet(true);
       flash('Deleting…');
@@ -2134,6 +2162,7 @@
 
     const canPower = S.platform === 'linux' && !!S.appliance;
     const isAndroid = S.platform === 'android';
+    const mobile = isAndroid || isIOS();
     const films = EDITION !== 'music', music = EDITION !== 'films', box = EDITION === 'all';
     $('#settings-body').replaceChildren(...[
       h('h2', {}, 'Settings'),
@@ -2147,43 +2176,44 @@
       !S.mpvFound ? h('div', { class: 'warn' }, 'mpv was not found, so playback will not work. Install it with “brew install mpv” (Mac) or “sudo apt install mpv” (Linux).') : null,
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg to scan your library.') : null,
       S.storageWarning ? h('div', { class: 'warn' }, S.storageWarning) : null,
-      isAndroid || !box ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
-      isAndroid || !films ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
-      isAndroid || !films || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
-      isAndroid || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
-      isAndroid || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
-      isAndroid || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
-      isAndroid || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
-      isAndroid || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
-      isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
+      mobile || !box ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
+      mobile || !films ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
+      mobile || !films || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
+      mobile || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
+      mobile || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
+      mobile || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
+      mobile || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
+      mobile || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
+      isIOS() ? h('p', { class: 'am-hint' }, 'Sound plays from the iPad, AirPlay (to a TV or speaker) or Bluetooth headphones. Dolby Atmos plays where the film, and your headphones or TV, support it.')
+      : isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
           : 'Pick your HDMI / optical device for surround or passthrough.')), deviceSel),
-      !isAndroid && api.soundTest ? h('div', { class: 'btns' }, h('button', { class: 'btn secondary', 'data-key': 'sound-test', onclick: async (ev) => {
+      !mobile && api.soundTest ? h('div', { class: 'btns' }, h('button', { class: 'btn secondary', 'data-key': 'sound-test', onclick: async (ev) => {
         const b = ev.currentTarget; b.textContent = 'Playing a test sound…';
         const r = await api.soundTest();
         b.textContent = 'Test sound';
         flash(r.ok ? `Test sound played on ${r.where}${r.notice ? ` (${r.notice})` : ''}. Didn't hear it? Check the volume, or pick another output above.` : `No sound on ${r.where || 'that output'}: ${r.error || 'it failed'}`);
       } }, 'Test sound')) : null,
-      h('label', { class: 'row-set' }, h('span', {}, 'Screensaver', h('small', {}, `The ${APP} name bounces around the screen when nothing has been pressed for a while${films ? ' (not during a film)' : ''}.`)),
+      isIOS() ? null : h('label', { class: 'row-set' }, h('span', {}, 'Screensaver', h('small', {}, `The ${APP} name bounces around the screen when nothing has been pressed for a while${films ? ' (not during a film)' : ''}.`)),
         h('select', { class: 'dev-select', 'data-key': 'screensaverMin', onchange: async (e) => { S = await api.setConfig({ screensaverMin: Number(e.target.value) }); } },
           [[0, 'Off'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes'], [20, 'After 20 minutes'], [30, 'After 30 minutes']]
             .map(([v, l]) => h('option', { value: v, selected: Number(S.config.screensaverMin != null ? S.config.screensaverMin : 5) === v }, l)))),
-      box ? toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote') : null,
-      box ? remoteBox : null,
+      box && !isIOS() ? toggle('Phone remote', 'Control Screenroom from a web page on your phone.', 'remote') : null,
+      box && !isIOS() ? remoteBox : null,
       parlorUI ? h('h3', { id: 'set-parlor' }, EDITION === 'music' ? 'Music' : 'Parlor (music)') : null,
       parlorUI ? parlorUI.settingsBlock() : null,
       films ? h('h3', {}, 'Add media') : null,
-      films ? addMediaPanel() : null,
+      films ? (isIOS() ? iosAddPanel('films') : addMediaPanel()) : null,
       films && api.subsPlan && S.platform !== 'android' ? h('h3', {}, 'Subtitles') : null,
       films && api.subsPlan && S.platform !== 'android' ? subsBlock() : null,
       S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? h('h3', {}, 'Free up space') : null,
       S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? freeSpaceBlock() : null,
-      films ? h('h3', {}, 'Library folders') : null,
-      !films ? null : h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
-        h('div', { class: 'dir' }, d, h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),
+      films && !isIOS() ? h('h3', {}, 'Library folders') : null,
+      !films || isIOS() ? null : h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
+        h('div', { class: 'dir' }, prettyPath(d), h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),
       !films ? null : h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', onclick: async () => { if (await addFilmFolder()) { renderSettings(); render(); } } }, 'Add folder…'),
+        isIOS() ? null : h('button', { class: 'btn secondary', onclick: async () => { if (await addFilmFolder()) { renderSettings(); render(); } } }, 'Add folder…'),
         h('button', { class: 'btn secondary', onclick: async () => { setScanning(true); S = await api.scan(); setScanning(false); renderSettings(); render(); } }, 'Rescan')),
       S.duplicates ? h('div', { class: 'am-hint' }, `${S.duplicates} duplicate episode file${S.duplicates === 1 ? ' was' : 's were'} hidden (the same episode found twice; the best quality copy is kept).`) : null,
       S.appliance && api.wifiStatus ? h('h3', {}, 'Wi-Fi') : null,
@@ -2201,9 +2231,9 @@
       isAndroid && api.kioskStatus ? kioskBlock() : null,
       S.appliance && api.applianceInfo ? h('h3', {}, 'System') : null,
       S.appliance && api.applianceInfo ? systemBlock() : null,
-      isAndroid ? null : h('h3', {}, 'Power'),
+      mobile ? null : h('h3', {}, 'Power'),
       S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
-      isAndroid ? null : h('div', { class: 'btns' },
+      mobile ? null : h('div', { class: 'btns' },
         // The TV box always runs Screenroom (quitting used to leave a login screen), so offer a restart instead.
         S.appliance ? h('button', { class: 'btn secondary', onclick: () => api.power('suspend') }, 'Sleep') : null,
         S.appliance
@@ -2752,7 +2782,7 @@
   const FILM_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.6"/></svg>';
   if (window.createParlor && api.parlorState && EDITION !== 'films') {
     parlorUI = window.createParlor({
-      h, $, api, flash, focusEl,
+      h, $, api, flash, focusEl, here, prettyPath, isIOS,
       query: () => query,
       clearQuery: () => { query = ''; $('#search').value = ''; },
       isOpen: () => mode === 'parlor',

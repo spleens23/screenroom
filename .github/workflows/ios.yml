@@ -1,0 +1,116 @@
+name: iPad app
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", "renderer/**", "lib/media-core.js", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios
+  cancel-in-progress: true
+
+jobs:
+  # Builds the app and tries it in a simulated iPad with a few test films and songs. Screenshots go to the
+  # "ios-ci-screens" release (not an app to install).
+  check:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tools
+        run: brew install xcodegen ffmpeg
+      - name: Generate the Xcode project
+        run: |
+          ios/scripts/prepare-web.sh
+          cd ios && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          cd ios
+          xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+          mkdir -p ../shots
+          grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
+      - name: Try it in a simulated iPad
+        run: |
+          set -x
+          mkdir -p shots
+          TYPE="$(xcrun simctl list devicetypes | grep -m1 -E 'iPad Pro 11' | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
+          [ -n "$TYPE" ] || TYPE="$(xcrun simctl list devicetypes | grep -m1 iPad | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
+          RUNTIME="$(xcrun simctl list runtimes | grep -m1 -E '^iOS' | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')"
+          UDID="$(xcrun simctl create test-ipad "$TYPE" "$RUNTIME")"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          APP="$(find ios/build/Build/Products -name Screenroom.app -maxdepth 3 | head -1)"
+          xcrun simctl install "$UDID" "$APP"
+          DATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
+          ios/scripts/make-test-media.sh "$DATA/Documents"
+          xcrun simctl status_bar "$UDID" override --time "9:41" || true
+          shot() { sleep "$2"; xcrun simctl io "$UDID" screenshot "shots/$1.png"; }
+          run() { xcrun simctl terminate "$UDID" dev.screenroom.ipad 2>/dev/null || true; xcrun simctl launch "$UDID" dev.screenroom.ipad --ui-script "$1"; }
+          xcrun simctl launch "$UDID" dev.screenroom.ipad; shot home 25
+          run "document.querySelector('#parlor-btn').click()"; shot parlor 16
+          run "document.querySelector('#parlor-btn').click(); setTimeout(() => document.querySelector('.card.pcard').click(), 800)"; shot album 18
+          run "document.querySelector('#parlor-btn').click(); setTimeout(async () => { const p = await api.parlorState(); await api.musicPlay({ trackIds: p.albums[0].tracks }); }, 1500)"; shot music 18
+          run "document.querySelector('#settings-btn').click()"; shot settings 14
+          run "const c=[...document.querySelectorAll('.card')].find(x=>/Neon/i.test(x.textContent)); c && c.click()"; shot show 15
+          run "api.state().then(s => api.play({ id: s.library.find(i => /Last Signal/.test(i.title)).id }))"; shot player 18
+          xcrun simctl io "$UDID" screenshot shots/player2.png || true
+          cat "$DATA/Documents/debug.log" 2>/dev/null | tee shots/page-errors.txt || echo "(no page errors)" | tee shots/page-errors.txt
+          ls "$DATA/Library/Application Support/Screenroom" | tee shots/data-files.txt
+      - name: Share the screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-ci-screens >/dev/null 2>&1 || gh release create ios-ci-screens --prerelease --latest=false \
+            --title "iPad app: test screenshots (not for installing)" --notes "From the latest automated check in a simulated iPad."
+          [ -d shots ] && gh release upload ios-ci-screens shots/* --clobber || true
+
+  # Signs the app and sends it to TestFlight (needs the App Store Connect key in this repository's secrets).
+  testflight:
+    needs: check
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Is the App Store Connect key set up?
+        id: key
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ] && [ -n "$TEAM_ID" ]; then echo "ready=yes" >> "$GITHUB_OUTPUT"
+          else echo "::notice title=TestFlight::Not sent to TestFlight: add ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID to the repository's secrets."; echo "ready=no" >> "$GITHUB_OUTPUT"; fi
+      - name: Build, sign and upload
+        if: steps.key.outputs.ready == 'yes'
+        run: |
+          set -o pipefail
+          brew install xcodegen
+          ios/scripts/prepare-web.sh
+          cd ios && xcodegen generate
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$ASC_KEY_P8" | (base64 --decode 2>/dev/null || cat) > "$KEY"
+          grep -q "BEGIN PRIVATE KEY" "$KEY" || printf '%s' "$ASC_KEY_P8" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/Screenroom.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            "${AUTH[@]}" archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
+          mkdir -p ../shots
+          grep -q "ARCHIVE SUCCEEDED" archive.log || { grep -E "error:" -B2 -A3 archive.log | head -100 | tee ../shots/testflight-errors.txt; tail -30 archive.log >> ../shots/testflight-errors.txt; exit 1; }
+          sed "s/TEAM_ID_HERE/$TEAM_ID/" ExportOptions.plist > build/ExportOptions.plist
+          xcodebuild -exportArchive -archivePath build/Screenroom.xcarchive -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export "${AUTH[@]}" 2>&1 | tee export.log | tail -20
+          grep -qiE "EXPORT SUCCEEDED|Upload succeeded|Uploaded" export.log || { mkdir -p ../shots; tail -60 export.log > ../shots/testflight-errors.txt; exit 1; }
+          echo "::notice title=TestFlight::Build $GITHUB_RUN_NUMBER sent to App Store Connect. It shows up in TestFlight once Apple has processed it (usually 10–30 minutes)."
+      - name: Share what went wrong
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '[ -d shots ] && gh release upload ios-ci-screens shots/* --clobber || true'

@@ -89,8 +89,11 @@ window.createParlor = function createParlor(ctx) {
       svg(cdIcon(), 'big-cd'),
       h('h1', {}, 'Welcome to the Parlor'),
       P.canManage
-        ? [h('p', {}, 'Your music library is empty. Add the folder your music is in: albums found there are yours, and you can share any album with other profiles.'),
-            h('button', { class: 'btn primary', onclick: () => ctx.openSettings('parlor') }, 'Add music')]
+        ? (ctx.isIOS && ctx.isIOS()
+          ? [h('p', {}, 'Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My iPad › Screenroom, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.'),
+              h('button', { class: 'btn primary', onclick: async () => { const r = await api.parlorAddDir(null); if (r.ok) { P = r.state; render(); } else ctx.flash(r.error); } }, 'Import music…')]
+          : [h('p', {}, 'Your music library is empty. Add the folder your music is in: albums found there are yours, and you can share any album with other profiles.'),
+              h('button', { class: 'btn primary', onclick: () => ctx.openSettings('parlor') }, 'Add music')])
         : h('p', {}, 'No music yet. Ask a grown-up to share some albums with you.')));
   }
 
@@ -599,19 +602,20 @@ window.createParlor = function createParlor(ctx) {
       box.replaceChildren();
       if (!P.canManage) { box.append(h('p', { class: 'am-hint' }, 'Your music is shared with you by a grown-up.')); return; }
       box.append(h('p', { class: 'am-hint' }, 'Your music folders. Albums found here are yours; share any album with other profiles from its page. Each profile has its own folders.'));
-      if (P.dirs.length) box.append(h('div', { class: 'dirs' }, P.dirs.map((d) => h('div', { class: 'dir' }, d,
+      const pretty = (d) => (ctx.prettyPath ? ctx.prettyPath(d) : d);
+      if (P.dirs.length) box.append(h('div', { class: 'dirs' }, P.dirs.map((d) => h('div', { class: 'dir' }, pretty(d),
         h('button', { onclick: async () => { const r = await api.parlorRemoveDir(d); P = r.state; draw(); } }, 'Remove')))));
       else box.append(h('p', {}, 'No music folders yet.'));
       if (P.suggestions.length) {
-        box.append(h('p', { class: 'am-hint' }, 'Found on this box:'), h('div', { class: 'btns' }, P.suggestions.map((d) =>
-          h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '+ ' + d))));
+        box.append(h('p', { class: 'am-hint' }, `Found on ${ctx.here ? ctx.here() : 'this box'}:`), h('div', { class: 'btns' }, P.suggestions.map((d) =>
+          h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '+ ' + pretty(d)))));
       }
       box.append(h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: async () => {
           let dir = null;
           if (ctx.isLinux && ctx.isLinux()) { dir = await ctx.pickPath({ title: 'Add a music folder', mode: 'folder' }); if (!dir) return; }
           const r = await api.parlorAddDir(dir); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error);
-        } }, 'Add music folder…'),
+        } }, ctx.isIOS && ctx.isIOS() ? 'Import music…' : 'Add music folder…'),
         P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Scanning…'; P = await api.parlorRescan(); draw(); } }, 'Rescan music') : null));
       const noArt = P.albums.filter((a) => !a.art).length;
       if (noArt && api.parlorCoversAuto) {
