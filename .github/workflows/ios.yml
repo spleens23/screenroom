@@ -25,15 +25,15 @@ jobs:
         run: brew install xcodegen ffmpeg
       - name: Generate the Xcode project
         run: |
-          ios/scripts/prepare-web.sh
-          cd ios && xcodegen generate
+          mkdir -p shots
+          set -o pipefail
+          { ios/scripts/prepare-web.sh && cd ios && xcodegen generate; } 2>&1 | tee shots/generate.txt
       - name: Build for the simulator
         run: |
           set -o pipefail
           cd ios
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
-          mkdir -p ../shots
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
       - name: Try it in a simulated iPad
         run: |
