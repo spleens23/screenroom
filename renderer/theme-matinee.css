@@ -173,7 +173,7 @@ body.mat .osk-key:focus, body.mat .osk-key:hover { background: var(--m-cream); c
 
 /* ---- profiles: "Take a seat" ---- */
 body.mat .avatar { border-radius: 50%; }
-body.mat .who { background: var(--m-ink); overflow: hidden; }
+body.mat .who { background: var(--m-ink); overflow: clip; }
 body.mat .who::before { content: ""; position: absolute; left: -20%; right: -20%; top: -142vh; height: 180vh; border-radius: 50%; background: var(--m-panel); }
 body.mat .who-inner { position: relative; }
 body.mat .who-brand { position: static; display: inline-block; font-size: 25px; color: var(--m-muted); margin-bottom: 10px; }
