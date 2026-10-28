@@ -103,7 +103,9 @@ jobs:
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Neon/i.test(x.textContent)); c && c.click()"; shot show 15
           run "api.state().then(s => api.play({ id: s.library.find(i => /Last Signal/.test(i.title)).id }))"; shot player 18
           run "api.state().then(s => { const f = s.library.find(i => /Desert Signal/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS film in the library'); })"; shot player-vlc 11
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-2.json" > shots/engines.txt 2>&1 || true
+          run "api.state().then(s => { const f = s.library.find(i => /Harbor Lights/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS mp4 in the library'); })"; shot player-vlc-mp4 11
+          run "const c=[...document.querySelectorAll('.card')].find(x=>/Harbor Lights/i.test(x.title)); c && c.click()"; shot film-dts-mp4 12
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-3.json" > shots/engines.txt 2>&1 || true
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
           if [ -s "$DATA/Library/Caches/page-errors.log" ]; then cp "$DATA/Library/Caches/page-errors.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
           cat shots/page-errors.txt

@@ -23,6 +23,12 @@ film "$D/Films/Neon Harbor/Season 01/S01E02 The Tide.mp4" "The Tide" teal -metad
 ffmpeg -v error -y -f lavfi -i "color=c=darkorange:s=1280x720:r=24" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 20 \
   -c:v libx264 -pix_fmt yuv420p -c:a dca -strict -2 -ac 2 -metadata title="Desert Signal" "$D/Films/Desert Signal.mkv" || echo "no DTS encoder"
 ffmpeg -v error -y -f lavfi -i "color=c=sienna:s=600x900" -frames:v 1 "$D/Films/Desert Signal.jpg"
+# an MP4 like most people's: AAC and DTS soundtracks, with a cover built in (Apple's reader skips the DTS track)
+ffmpeg -v error -y -f lavfi -i "color=c=olive:s=600x900" -frames:v 1 /tmp/sr-cover.png
+ffmpeg -v error -y -f lavfi -i "color=c=darkgreen:s=1280x720:r=24" -f lavfi -i "sine=frequency=350:sample_rate=48000" -f lavfi -i "sine=frequency=550:sample_rate=48000" \
+  -i /tmp/sr-cover.png -t 20 -map 0 -map 1 -map 2 -map 3 -c:v:0 libx264 -pix_fmt yuv420p -c:v:1 png -disposition:v:1 attached_pic \
+  -c:a:0 aac -c:a:1 dca -strict -2 -ac 2 -metadata:s:a:0 language=eng -metadata:s:a:1 language=eng \
+  -metadata title="Harbor Lights" -metadata description="A test film with DTS sound and a built-in cover." -movflags +faststart "$D/Films/Harbor Lights.mp4" || echo "no DTS-in-MP4"
 # a film with two soundtracks (English and French)
 ffmpeg -v error -y -f lavfi -i "color=c=navy:s=1280x720:r=24" -f lavfi -i "sine=frequency=300:sample_rate=48000" -f lavfi -i "sine=frequency=500:sample_rate=48000" \
   -t 20 -map 0 -map 1 -map 2 -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata:s:a:0 language=eng -metadata:s:a:1 language=fre \
