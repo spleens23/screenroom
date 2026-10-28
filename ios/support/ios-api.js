@@ -282,9 +282,17 @@
   // Folders are stored relative to Documents ("Music", "Music/Jazz"), since the app's folder moves between installs.
   const absDir = (rel) => (rel === '' ? env.docs : `${env.docs}/${rel}`);
   const relDir = (abs) => (abs === env.docs ? '' : abs.startsWith(env.docs + '/') ? abs.slice(env.docs.length + 1) : abs);
-  const owners = (album) => Object.entries(pstore.profiles || {})
-    .filter(([, p]) => (p.dirs || []).some((d) => album.dirs.some((ad) => ad === absDir(d) || under(ad, absDir(d)))))
-    .map(([id]) => id);
+  // Every grown-up profile has Screenroom's whole folder on the iPad unless it took it away, so songs added from
+  // Files, AirDrop or the import button show up for whoever is using the iPad, wherever in the folder they landed.
+  const dirsOf = (pid) => {
+    const p = (pstore.profiles || {})[pid];
+    const own = p && Array.isArray(p.dirs) ? p.dirs : [];
+    const pr = pget(pid);
+    if ((pr && pr.kids) || (p && p.musicSet)) return own;
+    return own.includes('') ? own : ['', ...own];
+  };
+  const owners = (album) => pall().map((p) => p.id)
+    .filter((id) => dirsOf(id).some((d) => album.dirs.some((ad) => ad === absDir(d) || under(ad, absDir(d)))));
   const canSee = (pid, album) => owners(album).includes(pid) || pOf(pid).shared.includes(album.key);
   const audience = (album) => { const s = new Set(owners(album)); for (const [id, p] of Object.entries(pstore.profiles || {})) if ((p.shared || []).includes(album.key)) s.add(id); return [...s]; };
   const prof = () => pget(currentId) || { id: 'main', kids: false };
@@ -308,9 +316,9 @@
     const musicRel = relDir(env.music);
     return {
       profile: me.id, canManage: canManage(),
-      dirs: mine.dirs.map(absDir),
-      // The iPad's own music folder, one tap away for a profile that hasn't got it yet.
-      suggestions: canManage() && !mine.dirs.includes(musicRel) ? [env.music] : [],
+      dirs: dirsOf(me.id).map(absDir),
+      // The iPad's own music folder, one tap away for a profile that hasn't got it.
+      suggestions: canManage() && !dirsOf(me.id).some((d) => d === '' || d === musicRel) ? [env.music] : [],
       scanning: !!musicScanning,
       albums: albums.map((a) => ({
         key: a.key, title: a.title, artist: a.artist, year: a.year, genre: a.genre, art: a.art, added: a.added,
@@ -686,7 +694,8 @@
       if (!canManage()) return fail('Kids profiles can\'t change music folders.');
       const p = pOf(prof().id);
       const rel = relDir(dir);
-      p.dirs = p.dirs.filter((d) => d !== rel);
+      p.dirs = dirsOf(prof().id).filter((d) => d !== rel);
+      if (rel === '') p.musicSet = true;
       savePar();
       return ok({ state: parlorState() });
     },

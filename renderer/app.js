@@ -2392,10 +2392,10 @@
       return;
     }
     if (isTextInput(t) && !pinState) {
-      // Backspace deletes; it only means "back" in an empty box, and only for remote users (holding it down
-      // on a keyboard never throws away the screen you were typing in).
+      // Backspace deletes; it only means "back" in an empty box, and only on the TV box with its remote (holding
+      // it down on a keyboard, or the iPad's keyboard, never throws away the screen you were typing in).
       if (e.key === 'Backspace') {
-        if (t.value || kbInUse() || e.repeat) return;
+        if (t.value || kbInUse() || e.repeat || !S.tv || isIOS()) return;
         e.preventDefault(); goBack(); return;
       }
       // Left/right move the cursor inside the text; at either end they move on to the next thing.
