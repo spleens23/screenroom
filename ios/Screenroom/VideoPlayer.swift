@@ -32,6 +32,7 @@ final class VideoPlayback: NSObject, AVPlayerViewControllerDelegate {
     static func start(_ opts: [String: Any], from presenter: UIViewController, bridge: Bridge) throws {
         guard let q = opts["queue"] as? [[String: Any]], !q.isEmpty else { throw ScreenroomError("Nothing to play.") }
         current?.stop()
+        VLCPlayback.current?.stop()
         MusicPlayer.shared.pauseForVideo()
         let p = VideoPlayback(queue: q, audioLang: opts["audioLang"] as? String ?? "eng", subLang: opts["subLang"] as? String ?? "",
                               audioTrack: (opts["audioTrack"] as? NSNumber)?.intValue, bridge: bridge)

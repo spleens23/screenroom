@@ -19,6 +19,14 @@ film "$D/Films/Paper Kingdom.mp4" "Paper Kingdom" saddlebrown -metadata date=202
 film "$D/Films/Neon Harbor/Season 01/S01E01 Pilot.mp4" "Pilot" midnightblue -metadata show="Neon Harbor" -metadata season_number=1 -metadata episode_sort=1 \
   -metadata description="A detective arrives in a rain-soaked port city."
 film "$D/Films/Neon Harbor/Season 01/S01E02 The Tide.mp4" "The Tide" teal -metadata show="Neon Harbor" -metadata season_number=1 -metadata episode_sort=2
+# a film with DTS sound in an MKV (plays with VLC's engine), with a poster beside it
+ffmpeg -v error -y -f lavfi -i "color=c=darkorange:s=1280x720:r=24" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 20 \
+  -c:v libx264 -pix_fmt yuv420p -c:a dca -strict -2 -ac 2 -metadata title="Desert Signal" "$D/Films/Desert Signal.mkv" || echo "no DTS encoder"
+ffmpeg -v error -y -f lavfi -i "color=c=sienna:s=600x900" -frames:v 1 "$D/Films/Desert Signal.jpg"
+# a film with two soundtracks (English and French)
+ffmpeg -v error -y -f lavfi -i "color=c=navy:s=1280x720:r=24" -f lavfi -i "sine=frequency=300:sample_rate=48000" -f lavfi -i "sine=frequency=500:sample_rate=48000" \
+  -t 20 -map 0 -map 1 -map 2 -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata:s:a:0 language=eng -metadata:s:a:1 language=fre \
+  -metadata title="Two Voices" -movflags +faststart "$D/Films/Two Voices.mp4"
 song() { # out, title, artist, album, track, freq
   ffmpeg -v error -y -f lavfi -i "sine=frequency=$6:sample_rate=44100" -t 30 -c:a aac -b:a 128k \
     -metadata title="$2" -metadata artist="$3" -metadata album="$4" -metadata track="$5" -metadata date=2019 "$1"

@@ -29,9 +29,23 @@ jobs:
           xcodebuild -version
       - name: Tools
         run: brew install xcodegen ffmpeg
+      - name: VLC's engine (cached)
+        uses: actions/cache@v4
+        with:
+          path: ios/vendor
+          key: mobilevlckit-v1
+      - name: Fetch VLC's engine
+        run: |
+          set -o pipefail
+          ios/scripts/fetch-vlckit.sh 2>&1 | tee -a shots-vlc.txt
+          # a dynamic framework has to be copied into the app; a static one is linked in
+          BIN="$(find ios/vendor/MobileVLCKit.xcframework -path '*ios-arm64/*' -name MobileVLCKit -type f | head -1)"
+          if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
+          grep -n "embed:" ios/project.yml
       - name: Generate the Xcode project
         run: |
           mkdir -p shots
+          [ -f shots-vlc.txt ] && cp shots-vlc.txt shots/vlckit.txt
           set -o pipefail
           { ios/scripts/prepare-web.sh && cd ios && xcodegen generate; } 2>&1 | tee shots/generate.txt
       - name: Build for the simulator
@@ -88,6 +102,7 @@ jobs:
           run "document.querySelector('#settings-btn').click()"; shot settings 14
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Neon/i.test(x.textContent)); c && c.click()"; shot show 15
           run "api.state().then(s => api.play({ id: s.library.find(i => /Last Signal/.test(i.title)).id }))"; shot player 18
+          run "api.state().then(s => { const f = s.library.find(i => /Desert Signal/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS film in the library'); })"; shot player-vlc 20
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
           if [ -s "$DATA/Library/Caches/page-errors.log" ]; then cp "$DATA/Library/Caches/page-errors.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
           cat shots/page-errors.txt
@@ -129,6 +144,9 @@ jobs:
         run: |
           set -o pipefail
           brew install xcodegen
+          ios/scripts/fetch-vlckit.sh
+          BIN="$(find ios/vendor/MobileVLCKit.xcframework -path '*ios-arm64/*' -name MobileVLCKit -type f | head -1)"
+          if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           ios/scripts/prepare-web.sh
           cd ios && xcodegen generate
           KEY="$RUNNER_TEMP/AuthKey.p8"

@@ -23,9 +23,27 @@ targets:
       - path: Web
         type: folder
         buildPhase: resources
+    dependencies:
+      # VLC's engine (scripts/fetch-vlckit.sh puts it in vendor/): DTS / TrueHD sound, MKV and other files
+      - framework: vendor/MobileVLCKit.xcframework
+        embed: false
+      - sdk: libc++.tbd
+      - sdk: libiconv.tbd
+      - sdk: libbz2.tbd
+      - sdk: libz.tbd
+      - sdk: libxml2.tbd
+      - sdk: AudioToolbox.framework
+      - sdk: VideoToolbox.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreText.framework
+      - sdk: QuartzCore.framework
+      - sdk: OpenGLES.framework
+      - sdk: Security.framework
+      - sdk: CFNetwork.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.ipad
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC"]
         PRODUCT_NAME: Screenroom
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic

@@ -40,7 +40,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func bringIn(_ contexts: Set<UIOpenURLContext>) {
         guard !contexts.isEmpty else { return }
         var n = 0
-        for c in contexts where screen.importer.bringIn(c.url, copy: c.options.openInPlace) { n += 1 }
+        for c in contexts { n += screen.importer.bringIn(c.url, copy: c.options.openInPlace) }
         n += screen.importer.tidyInbox()
         if n > 0 { screen.filesChanged() }
     }
@@ -53,7 +53,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 
 /// The whole app is one full-screen page: the same screens as the desktop Screenroom and Parlor.
-final class ScreenController: UIViewController, WKNavigationDelegate {
+final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInteractionDelegate {
     let bridge = Bridge()
     let importer = Importer()
     private var web: WKWebView!
@@ -93,7 +93,41 @@ final class ScreenController: UIViewController, WKNavigationDelegate {
         web = v
         bridge.web = v
         bridge.host = self
-        view = v
+        // The page sits in a plain view that takes films, songs and folders dropped onto Screenroom (from Files,
+        // in Split View or Stage Manager). The web view's own drop handling is taken out so drops reach it.
+        let root = UIView()
+        root.backgroundColor = .black
+        v.frame = root.bounds
+        v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        root.addSubview(v)
+        root.addInteraction(UIDropInteraction(delegate: self))
+        view = root
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        removeWebDrops(web)
+    }
+
+    private func removeWebDrops(_ v: UIView) {
+        for i in v.interactions where i is UIDropInteraction { v.removeInteraction(i) }
+        for sub in v.subviews { removeWebDrops(sub) }
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
+        session.hasItemsConforming(toTypeIdentifiers: Importer.dropTypes)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: UIDropSession) -> UIDropProposal {
+        UIDropProposal(operation: .copy)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: UIDropSession) {
+        bridge.emit("notice", "Importing…")
+        importer.takeDrop(session.items.map { $0.itemProvider }) { [weak self] n in
+            self?.bridge.emit("notice", n > 0 ? "Added \(n) \(n == 1 ? "file" : "files")" : "Nothing to add there: films and songs only")
+            self?.filesChanged()
+        }
     }
 
     override func viewDidLoad() {

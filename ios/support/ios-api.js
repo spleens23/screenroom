@@ -131,6 +131,7 @@
       const it = MediaCore.buildItemFromProbe(r.path, { mtimeMs: r.mtime, size: r.size }, r.probe || {}, r.id);
       it.art = r.art || null;
       it.backdrop = r.backdrop || null;
+      it.engine = r.engine || ''; // 'vlc': plays with VLC's engine (DTS / TrueHD sound, MKV, subtitles beside it)
       return MediaCore.applyTv(it);
     });
     MediaCore.fillSeriesRatings(all);
@@ -482,7 +483,7 @@
       const queue = queueFor(item).map((i, n) => {
         const pr = progress[i.id];
         const start = n === 0 && !fromStart && pr && !pr.done && pr.pos > 10 && (!pr.dur || pr.pos < pr.dur - 30) ? pr.pos : 0;
-        return { id: i.id, path: i.path, duration: i.duration, start, art: i.art || i.backdrop || '', ...playerMeta(i), fmt: MediaCore.formatBadges(i) };
+        return { id: i.id, path: i.path, duration: i.duration, start, art: i.art || i.backdrop || '', engine: i.engine || '', ...playerMeta(i), fmt: MediaCore.formatBadges(i) };
       });
       return native('playVideo', {
         queue, audioTrack: audioTrack || null,
