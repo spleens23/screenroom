@@ -35,6 +35,9 @@ ffmpeg -v error -y -f lavfi -i "color=c=slategray:s=1280x720:r=24" -f lavfi -i "
   -t 120 -map 0 -map 1 -map 2 -c:v:0 libx264 -pix_fmt yuv420p -c:v:1 png -disposition:v:1 attached_pic -c:a aac -ac 2 \
   -metadata title="Paper Lanterns" -metadata date=1987 -metadata genre=Drama -metadata synopsis="Two sisters run a lantern shop through one long winter." \
   -metadata description="Two sisters, one winter." -metadata media_type=9 -movflags +faststart "$D/Films/paper_lanterns_1987_1080p.m4v" || echo "no tagged m4v"
+# TrueHD sound inside an MP4 ('mlpa'), the only soundtrack (mpv's engine plays it)
+ffmpeg -v error -y -f lavfi -i "color=c=teal:s=1280x720:r=24" -f lavfi -i "sine=frequency=420:sample_rate=48000" -t 120 \
+  -c:v libx264 -pix_fmt yuv420p -c:a truehd -strict -2 -ac 2 -metadata title="Night Ferry" -movflags +faststart "$D/Films/Night Ferry.mp4" || echo "no TrueHD-in-MP4"
 # a film with two soundtracks (English and French)
 ffmpeg -v error -y -f lavfi -i "color=c=navy:s=1280x720:r=24" -f lavfi -i "sine=frequency=300:sample_rate=48000" -f lavfi -i "sine=frequency=500:sample_rate=48000" \
   -t 120 -map 0 -map 1 -map 2 -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata:s:a:0 language=eng -metadata:s:a:1 language=fre \

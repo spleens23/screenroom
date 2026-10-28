@@ -2,7 +2,7 @@ import AVKit
 import UIKit
 
 /// Plays the films Apple's engine handles (MP4 / MOV with AAC, AC-3 or E-AC-3 sound; keeps HDR and Dolby Vision),
-/// behind the same Screenroom controls as the VLC films: title, scrub bar, back / forward 10 s, play / pause,
+/// behind the same Screenroom controls as the mpv films: title, scrub bar, back / forward 10 s, play / pause,
 /// an Audio & subtitles menu and Next episode. Reports where you are every few seconds (Continue Watching) and
 /// goes on to the next episode by itself.
 final class VideoPlayback: NSObject {
@@ -15,7 +15,7 @@ final class VideoPlayback: NSObject {
     private let audioTrack: Int?
     private let bridge: Bridge
     private let player = AVPlayer()
-    private var controller: VLCPlayerController!
+    private var controller: PlayerScreen!
     private let layerView = PlayerLayerView()
     private var timeObserver: Any?
     private var tickObserver: Any?
@@ -37,7 +37,7 @@ final class VideoPlayback: NSObject {
     static func start(_ opts: [String: Any], from presenter: UIViewController, bridge: Bridge) throws {
         guard let q = opts["queue"] as? [[String: Any]], !q.isEmpty else { throw ScreenroomError("Nothing to play.") }
         current?.stop()
-        VLCPlayback.current?.stop()
+        MPVPlayback.current?.stop()
         MusicPlayer.shared.pauseForVideo()
         let p = VideoPlayback(queue: q, audioLang: opts["audioLang"] as? String ?? "eng", subLang: opts["subLang"] as? String ?? "",
                               audioTrack: (opts["audioTrack"] as? NSNumber)?.intValue, bridge: bridge)
@@ -48,7 +48,7 @@ final class VideoPlayback: NSObject {
     private func present(from presenter: UIViewController) {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
-        controller = VLCPlayerController()
+        controller = PlayerScreen()
         controller.modalPresentationStyle = .fullScreen
         controller.loadViewIfNeeded()
         layerView.frame = controller.videoView.bounds

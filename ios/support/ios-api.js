@@ -131,7 +131,7 @@
       const it = MediaCore.buildItemFromProbe(r.path, { mtimeMs: r.mtime, size: r.size }, r.probe || {}, r.id);
       it.art = r.art || null;
       it.backdrop = r.backdrop || null;
-      it.engine = r.engine || ''; // 'vlc': plays with VLC's engine (DTS / TrueHD sound, MKV, subtitles beside it)
+      it.engine = r.engine || ''; // 'mpv': plays with mpv's engine (DTS / TrueHD sound, MKV, subtitles beside it)
       return MediaCore.applyTv(it);
     });
     MediaCore.fillSeriesRatings(all);

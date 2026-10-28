@@ -57,7 +57,7 @@ final class MusicPlayer {
     // ---- commands -------------------------------------------------------------------------------------------
     func play(tracks: [[String: Any]], start: Int, context: Any?) {
         VideoPlayback.current?.stop()
-        VLCPlayback.current?.stop()
+        MPVPlayback.current?.stop()
         queue = tracks
         self.context = context
         go(to: max(0, min(start, tracks.count - 1)))

@@ -6,6 +6,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+packages:
+  MPVKit:
+    url: https://github.com/mpvkit/MPVKit
+    revision: 98c3453e252922e3136422da3fbb2e341ed9edc8  # 1.1.0-n9.0.2
 settings:
   base:
     MARKETING_VERSION: "0.5.0"
@@ -24,9 +28,9 @@ targets:
         type: folder
         buildPhase: resources
     dependencies:
-      # VLC's engine (scripts/fetch-vlckit.sh puts it in vendor/): DTS / TrueHD sound, MKV and other files
-      - framework: vendor/MobileVLCKit.xcframework
-        embed: false
+      # mpv's engine and FFmpeg (MPVKit, LGPL build): DTS / TrueHD sound (also inside MP4), MKV and other files
+      - package: MPVKit
+        product: MPVKit
       - sdk: libc++.tbd
       - sdk: libiconv.tbd
       - sdk: libbz2.tbd

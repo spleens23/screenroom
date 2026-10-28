@@ -29,23 +29,14 @@ jobs:
           xcodebuild -version
       - name: Tools
         run: brew install xcodegen ffmpeg
-      - name: VLC's engine (cached)
+      - name: mpv's engine (Swift packages, cached)
         uses: actions/cache@v4
         with:
-          path: ios/vendor
-          key: mobilevlckit-v1
-      - name: Fetch VLC's engine
-        run: |
-          set -o pipefail
-          ios/scripts/fetch-vlckit.sh 2>&1 | tee -a shots-vlc.txt
-          # a dynamic framework has to be copied into the app; a static one is linked in
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
-          if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
-          grep -n "embed:" ios/project.yml
+          path: ios/.spm
+          key: spm-${{ hashFiles('ios/project.yml') }}
       - name: Generate the Xcode project
         run: |
           mkdir -p shots
-          [ -f shots-vlc.txt ] && cp shots-vlc.txt shots/vlckit.txt
           set -o pipefail
           { ios/scripts/prepare-web.sh && cd ios && xcodegen generate; } 2>&1 | tee shots/generate.txt
       - name: Build for the simulator
@@ -53,14 +44,14 @@ jobs:
           set -o pipefail
           cd ios
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build -clonedSourcePackagesDirPath .spm CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" -B2 -A3 build.log | head -150 | tee ../shots/build-errors.txt; tail -40 build.log >> ../shots/build-errors.txt; exit 1; }
       - name: Build the release version for the simulator
         run: |
           set -o pipefail
           cd ios
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-rel CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-rel.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-rel -clonedSourcePackagesDirPath .spm CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-rel.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
       - name: Try it in a simulated iPad
         run: |
           mkdir -p shots
@@ -107,7 +98,7 @@ jobs:
           run "api.state().then(s => { const f = s.library.find(i => /Harbor Lights/.test(i.title || i.path)); f ? api.play({ id: f.id }) : console.error('no DTS mp4 in the library'); })"; shot player-vlc-mp4 11
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Harbor Lights/i.test(x.title)); c && c.click()"; shot film-dts-mp4 12
           run "const c=[...document.querySelectorAll('.card')].find(x=>/Paper Lanterns/i.test(x.textContent + x.title)); c ? c.click() : console.error('no Paper Lanterns card')"; shot film-tagged 12
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1], json.dumps(v['probe']['format'].get('tags',{}))[:300]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-4.json" > shots/engines.txt 2>&1 || true
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print(v.get('engine','apple'), v.get('art','-')[-30:], v['path'].split('/')[-1], [x.get('codec_name') for x in v['probe']['streams']], json.dumps(v['probe']['format'].get('tags',{}))[:200]) for v in d.values()]" "$DATA/Library/Application Support/Screenroom/scan-films-5.json" > shots/engines.txt 2>&1 || true
           xcrun simctl io "$UDID" screenshot shots/player2.png || true
           if [ -s "$DATA/Library/Caches/page-errors.log" ]; then cp "$DATA/Library/Caches/page-errors.log" shots/page-errors.txt; else echo "(no page errors)" > shots/page-errors.txt; fi
           cat shots/page-errors.txt
@@ -119,9 +110,12 @@ jobs:
           cd ios
           set -o pipefail
           TEST_RUNNER_SHOTS="$PWD/../shots" xcodebuild test -project Screenroom.xcodeproj -scheme Screenroom -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
+            -destination "id=$UDID" -derivedDataPath build -clonedSourcePackagesDirPath .spm CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
             | tee uitest.log | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)" || true
           { grep -E "Test Case .*(passed|failed)|: error:|TEST (SUCCEEDED|FAILED)" uitest.log; echo ---; tail -25 uitest.log; } > ../shots/uitest.txt
+          DATA="$(xcrun simctl get_app_container "$UDID" dev.screenroom.ipad data)"
+          cat "$DATA/Library/Caches/mpv.log" > ../shots/mpv-log.txt 2>/dev/null || echo "(no mpv log)" > ../shots/mpv-log.txt
+          tail -60 ../shots/mpv-log.txt
       - name: Share the screenshots
         if: always()
         env:
@@ -160,9 +154,6 @@ jobs:
         run: |
           set -o pipefail
           brew install xcodegen
-          ios/scripts/fetch-vlckit.sh
-          BIN="$(find ios/vendor/MobileVLCKit.xcframework -name MobileVLCKit -type f | head -1)"; echo "$BIN"; file "$BIN"
-          if file "$BIN" | grep -q dynamically; then sed -i '' 's/        embed: false/        embed: true/' ios/project.yml; fi
           ios/scripts/prepare-web.sh
           cd ios && xcodegen generate
           KEY="$RUNNER_TEMP/AuthKey.p8"
@@ -172,7 +163,7 @@ jobs:
           # The archive is built unsigned: signing it for development would need a registered iPad. The export below
           # signs it for the App Store with Apple's cloud-managed distribution certificate (needs an Admin key).
           xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath build/Screenroom.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            -archivePath build/Screenroom.xcarchive -clonedSourcePackagesDirPath .spm DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
           mkdir -p ../shots

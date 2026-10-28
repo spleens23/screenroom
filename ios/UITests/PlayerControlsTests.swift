@@ -1,7 +1,7 @@
 import XCTest
 
 /// Plays a film, lets the controls fade, taps the picture and checks they come back: for a film Apple's engine
-/// plays and one VLC's engine plays, and again after switching the soundtrack. Screenshots go to $SHOTS.
+/// plays and ones mpv's engine plays, and again after switching the soundtrack. Screenshots go to $SHOTS.
 final class PlayerControlsTests: XCTestCase {
     override func setUp() { continueAfterFailure = true }
 
@@ -35,6 +35,7 @@ final class PlayerControlsTests: XCTestCase {
             if items.count > 1 { items[1].tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap() }
             sleep(7)
             save("\(tag)-5-after-switch-faded", app)
+            XCTAssertFalse(close.isHittable, "\(tag): after the menu, the controls didn't fade")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
             sleep(1)
             save("\(tag)-6-after-switch-tapped", app)
@@ -44,10 +45,14 @@ final class PlayerControlsTests: XCTestCase {
             if pause.isHittable { pause.tap(); sleep(1); XCTAssertTrue(app.buttons["Play"].exists, "\(tag): pause didn't work") }
         }
         save("\(tag)-7-end", app)
+        // close the player properly (test builds then note whether sound played)
+        if !close.isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap(); sleep(1) }
+        if close.isHittable { close.tap(); sleep(2) }
         app.terminate()
     }
 
     func testAppleEngineFilm() { run(film: "Last Signal", tag: "apple") }
     func testVLCFilm() { run(film: "Desert Signal", tag: "vlc") }
     func testVLCMP4Film() { run(film: "Harbor Lights", tag: "vlcmp4") }
+    func testTrueHDInMP4() { run(film: "Night Ferry", tag: "truehd") }
 }

@@ -92,10 +92,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return randomHex((arg(a, 0) as NSNumber?)?.intValue ?? 8)
         case "playVideo":
             guard let opts: [String: Any] = arg(a, 0), let host else { throw ScreenroomError("Nothing to play.") }
-            // Apple's player when it can play the film (picture-in-picture, AirPlay); VLC's engine for DTS / TrueHD
-            // sound, MKV and other files, and films with subtitles beside them.
-            if let q = opts["queue"] as? [[String: Any]], (q.first?["engine"] as? String) == "vlc" {
-                VLCPlayback.start(opts, queue: q, from: host.presentedViewController ?? host, bridge: self)
+            // Apple's engine when it can play the film (HDR, Dolby Vision); mpv's engine for DTS / TrueHD sound, MKV and
+            // other files, and films with subtitles beside them. Both behind Screenroom's controls.
+            if let q = opts["queue"] as? [[String: Any]], ["mpv", "vlc"].contains(q.first?["engine"] as? String ?? "") {
+                MPVPlayback.start(opts, queue: q, from: host.presentedViewController ?? host, bridge: self)
             } else {
                 try VideoPlayback.start(opts, from: host.presentedViewController ?? host, bridge: self)
             }

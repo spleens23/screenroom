@@ -1,7 +1,6 @@
 import Foundation
 import AVFoundation
 import UIKit
-import MobileVLCKit
 
 /// Finds the films and songs in Documents and describes each one: films the way ffprobe does on the desktop
 /// (so the shared JavaScript builds the same library items), songs by their tags. Results are cached by path +
@@ -9,7 +8,7 @@ import MobileVLCKit
 final class Scanner {
     static let shared = Scanner()
     private let st = Storage.shared
-    private let videoCacheName = "scan-films-4"
+    private let videoCacheName = "scan-films-5"
     private let audioCacheName = "scan-music"
     private var videoBusy = false
     private var audioBusy = false
@@ -49,7 +48,7 @@ final class Scanner {
             } else {
                 next[url.path] = avVideoExtensions.contains(url.pathExtension.lowercased())
                     ? await probeVideo(url, mtime: s.mtime, size: s.size)
-                    : await probeWithVLC(url, mtime: s.mtime, size: s.size)
+                    : await probeWithFF(url, mtime: s.mtime, size: s.size)
             }
             done += 1
             if done % 3 == 0 || done == list.count { progress(done, list.count) }
@@ -80,7 +79,7 @@ final class Scanner {
         var tags: [String: String] = [:]
         var duration = 0.0
         var cover: Data?
-        var needsVLC = false
+        var needsMPV = false
         var readable = true
         do {
             duration = try await asset.load(.duration).seconds
@@ -128,14 +127,14 @@ final class Scanner {
                 streams.append(s)
             }
             // Apple's player can't play DTS / TrueHD / Opus … sound, and only offers a soundtrack menu when the
-            // file groups its soundtracks: anything else plays with VLC's engine.
+            // file groups its soundtracks: anything else plays with mpv's engine.
             let audioCodecs = streams.filter { ($0["codec_type"] as? String) == "audio" }.compactMap { $0["codec_name"] as? String }
-            if audioCodecs.contains(where: { !avAudio.contains($0) }) { needsVLC = true }
+            if audioCodecs.contains(where: { !avAudio.contains($0) }) { needsMPV = true }
             if audioCodecs.count > 1 {
                 let options = (try? await asset.loadMediaSelectionGroup(for: .audible))?.options.count ?? 0
-                if options < audioCodecs.count { needsVLC = true }
+                if options < audioCodecs.count { needsMPV = true }
             }
-            if !((try? await asset.load(.isPlayable)) ?? true) { needsVLC = true }
+            if !((try? await asset.load(.isPlayable)) ?? true) { needsMPV = true }
             // MP4 / iTunes tags, named as ffprobe names them.
             var items = (try? await asset.load(.metadata)) ?? []
             items += (try? await asset.loadMetadata(for: .iTunesMetadata)) ?? []
@@ -166,113 +165,64 @@ final class Scanner {
             NSLog("Screenroom: couldn't read \(url.lastPathComponent): \(error)")
             readable = false
         }
-        // Apple's frameworks couldn't open it at all: let VLC read it
-        if !readable || streams.isEmpty { return await probeWithVLC(url, mtime: mtime, size: size) }
-        if !sidecarSubtitles(url).isEmpty { needsVLC = true }
-        // Apple's reader leaves out soundtracks it can't play (DTS in an MP4) and sometimes the built-in cover:
-        // VLC sees them. A film with sound Apple can't play goes to VLC's engine, with every soundtrack listed.
-        let v = await vlcRead(url)
-        let isAudio: ([String: Any]) -> Bool = { ($0["codec_type"] as? String) == "audio" }
-        let vAudio = v.streams.filter(isAudio)
-        let aAudio = streams.filter(isAudio)
-        if vAudio.count > aAudio.count || vAudio.contains(where: { !avAudio.contains($0["codec_name"] as? String ?? "") }) {
-            streams = streams.filter { !isAudio($0) } + vAudio
-            needsVLC = true
+        // Apple's frameworks couldn't open it at all: let FFmpeg read it
+        if !readable || streams.isEmpty { return await probeWithFF(url, mtime: mtime, size: size) }
+        if !sidecarSubtitles(url).isEmpty { needsMPV = true }
+        // Apple's reader leaves out soundtracks it can't play (DTS or TrueHD in an MP4): FFmpeg sees every stream,
+        // named exactly as ffprobe names them on the desktop. A film with sound Apple can't play goes to mpv's engine.
+        if let ff = FFProbe.read(url), !ff.streams.isEmpty {
+            let isAudio: ([String: Any]) -> Bool = { ($0["codec_type"] as? String) == "audio" }
+            let ffAudio = ff.streams.filter(isAudio)
+            if ffAudio.count > streams.filter(isAudio).count || ffAudio.contains(where: { !avAudio.contains($0["codec_name"] as? String ?? "") }) {
+                needsMPV = true
+            }
+            // keep Apple's HDR / Dolby Vision reading for the video, FFmpeg's for everything else
+            let avVideo = streams.filter { ($0["codec_type"] as? String) == "video" }
+            streams = ff.streams.filter { ($0["codec_type"] as? String) != "video" || ($0["disposition"] as? [String: Int])?["attached_pic"] == 1 }
+            streams = (avVideo.isEmpty ? ff.streams.filter { ($0["codec_type"] as? String) == "video" } : avVideo) + streams
+            for (k, v) in ff.tags where tags[k] == nil { tags[k] = v }
+            if cover == nil { cover = ff.cover }
+            if duration <= 0 { duration = ff.duration }
         }
-        if v.streams.filter({ ($0["codec_type"] as? String) == "subtitle" }).count > streams.filter({ ($0["codec_type"] as? String) == "subtitle" }).count {
-            streams = streams.filter { ($0["codec_type"] as? String) != "subtitle" } + v.streams.filter { ($0["codec_type"] as? String) == "subtitle" }
-        }
-        var vlcCover = v.cover
         var entry: [String: Any] = [
             "id": id, "path": url.path, "mtime": mtime, "size": size,
             "probe": ["format": ["duration": String(duration), "tags": tags], "streams": streams],
         ]
-        if let img = cover.flatMap({ UIImage(data: $0) }) ?? vlcCover,
+        if let img = cover.flatMap({ UIImage(data: $0) }),
            let saved = saveJPEG(img, width: 600, to: st.art.appendingPathComponent("\(id)-cover.jpg"), quality: 0.85) {
             entry["art"] = saved
         }
-        vlcCover = nil
         if entry["art"] == nil, let side = sidecarArt(url) { entry["art"] = side.path }
         if let back = await grabFrame(asset, duration: duration, to: st.art.appendingPathComponent("\(id)-back.jpg")) {
             entry["backdrop"] = back
         }
         if entry["art"] == nil, let back = entry["backdrop"] { entry["art"] = back } // like the desktop: a frame from the film
-        if needsVLC { entry["engine"] = "vlc" }
+        if needsMPV { entry["engine"] = "mpv" }
         return entry
     }
 
-    // ---- films Apple's frameworks can't read (MKV, AVI …): VLC reads them ----------------------------------
-    private func probeWithVLC(_ url: URL, mtime: Double, size: Int64) async -> [String: Any] {
+    // ---- films Apple's frameworks can't read (MKV, AVI …): FFmpeg reads them, mpv plays them ---------------
+    private func probeWithFF(_ url: URL, mtime: Double, size: Int64) async -> [String: Any] {
         let id = String(sha1Hex(st.relativeToDocs(url)).prefix(16))
-        let v = await vlcRead(url)
-        let duration = v.duration
+        let ff = FFProbe.read(url) ?? FFProbe.Result()
+        var tags = ff.tags
+        // a title that's just the file name isn't a real title
+        if tags["title"] == url.lastPathComponent || tags["title"] == url.deletingPathExtension().lastPathComponent { tags["title"] = nil }
         var entry: [String: Any] = [
-            "id": id, "path": url.path, "mtime": mtime, "size": size, "engine": "vlc",
-            "probe": ["format": ["duration": String(max(0, duration)), "tags": v.tags], "streams": v.streams],
+            "id": id, "path": url.path, "mtime": mtime, "size": size, "engine": "mpv",
+            "probe": ["format": ["duration": String(max(0, ff.duration)), "tags": tags], "streams": ff.streams],
         ]
-        if let img = v.cover, let saved = saveJPEG(img, width: 600, to: self.st.art.appendingPathComponent("\(id)-cover.jpg"), quality: 0.85) {
+        if let img = ff.cover.flatMap({ UIImage(data: $0) }),
+           let saved = saveJPEG(img, width: 600, to: self.st.art.appendingPathComponent("\(id)-cover.jpg"), quality: 0.85) {
             entry["art"] = saved
         }
         if entry["art"] == nil, let side = sidecarArt(url) { entry["art"] = side.path }
-        if let cg = await VLCProbe.thumbnail(url, at: duration > 10 ? 0.2 : 0.5),
+        if let cg = FFProbe.frame(url, at: ff.duration > 10 ? 0.2 : 0.5),
            let back = saveJPEG(UIImage(cgImage: cg), width: 1280, to: self.st.art.appendingPathComponent("\(id)-back.jpg"), quality: 0.8) {
             entry["backdrop"] = back
         }
         if entry["art"] == nil, let back = entry["backdrop"] { entry["art"] = back }
         return entry
-    }
-
-    /// What VLC sees in a file: every track (Apple's reader skips soundtracks it can't play, like DTS in an MP4),
-    /// the tags, the length and the built-in cover.
-    private func vlcRead(_ url: URL) async -> (streams: [[String: Any]], tags: [String: String], duration: Double, cover: UIImage?) {
-        let media = VLCMedia(url: url)
-        await VLCProbe.parse(media)
-        var streams: [[String: Any]] = []
-        var firstAudio = true
-        for case let t as [String: Any] in (media.tracksInformation ?? []) {
-            let type = t[VLCMediaTracksInformationType] as? String ?? ""
-            let code = (t[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value ?? 0
-            let cc = vlcFourCC(code)
-            let lang = (t[VLCMediaTracksInformationLanguage] as? String) ?? ""
-            var st: [String: Any] = ["tags": ["language": lang]]
-            if type == VLCMediaTracksInformationTypeVideo {
-                st["codec_type"] = "video"
-                st["codec_name"] = ["h264": "h264", "avc1": "h264", "hevc": "hevc", "h265": "hevc", "av01": "av1", "VP90": "vp9", "VP80": "vp8",
-                                    "mpgv": "mpeg2video", "mp2v": "mpeg2video", "mp4v": "mpeg4", "WVC1": "vc1", "XVID": "mpeg4", "DIVX": "mpeg4"][cc] ?? cc.trimmingCharacters(in: .whitespaces).lowercased()
-                st["width"] = (t[VLCMediaTracksInformationVideoWidth] as? NSNumber)?.intValue ?? 0
-                st["height"] = (t[VLCMediaTracksInformationVideoHeight] as? NSNumber)?.intValue ?? 0
-                st["disposition"] = ["default": 1, "attached_pic": 0]
-            } else if type == VLCMediaTracksInformationTypeAudio {
-                st["codec_type"] = "audio"
-                st["codec_name"] = ["dts ": "dts", "a52 ": "ac3", "eac3": "eac3", "mp4a": "aac", "trhd": "truehd", "mlp ": "truehd", "mpga": "mp3",
-                                    "mp3 ": "mp3", "flac": "flac", "opus": "opus", "vorb": "vorbis", "araw": "pcm_s16le", "s16l": "pcm_s16le", "lpcm": "pcm_s16le"][cc]
-                    ?? cc.trimmingCharacters(in: .whitespaces).lowercased()
-                st["channels"] = (t[VLCMediaTracksInformationAudioChannelsNumber] as? NSNumber)?.intValue ?? 2
-                st["disposition"] = ["default": firstAudio ? 1 : 0]
-                firstAudio = false
-            } else if type == VLCMediaTracksInformationTypeText {
-                st["codec_type"] = "subtitle"
-                st["codec_name"] = ["subt": "subrip", "tx3g": "mov_text", "ssa ": "ass", "pgs ": "hdmv_pgs_subtitle", "spu ": "dvd_subtitle"][cc] ?? "subrip"
-            } else { continue }
-            streams.append(st)
-        }
-        var tags: [String: String] = [:]
-        for (k, n) in [("title", "title"), ("description", "description"), ("genre", "genre"), ("date", "date"), ("showName", "show"),
-                       ("season", "season_number"), ("episode", "episode_sort"), ("artist", "artist")] {
-            if let v = media.metadata(forKey: k), !v.isEmpty { tags[n] = v }
-        }
-        // VLC calls an untitled file by its file name: that's not a real title
-        if tags["title"] == url.lastPathComponent || tags["title"] == url.deletingPathExtension().lastPathComponent { tags["title"] = nil }
-        let duration = Double(media.length.intValue) / 1000
-        var cover: UIImage?
-        if let art = media.metadata(forKey: "artworkURL"), let au = URL(string: art), au.isFileURL { cover = UIImage(contentsOfFile: au.path) }
-        return (streams, tags, max(0, duration), cover)
-    }
-
-    /// VLC packs a codec name in four characters, lowest byte first.
-    private func vlcFourCC(_ code: UInt32) -> String {
-        let bytes = [UInt8(code & 0xff), UInt8((code >> 8) & 0xff), UInt8((code >> 16) & 0xff), UInt8((code >> 24) & 0xff)]
-        return String(bytes: bytes, encoding: .ascii) ?? ""
     }
 
     /// Subtitles beside a film: Film.srt, Film.en.srt …
@@ -472,68 +422,3 @@ func saveJPEG(_ img: UIImage, width: CGFloat, to dest: URL, quality: CGFloat) ->
     return dest.path
 }
 
-/// Waits for VLC to read a file's tracks and tags, and grabs a picture from it (with time limits, so a damaged
-/// file can't stall the scan).
-final class VLCProbe: NSObject, VLCMediaDelegate, VLCMediaThumbnailerDelegate {
-    private var cont: CheckedContinuation<Void, Never>?
-    private var thumbCont: CheckedContinuation<CGImage?, Never>?
-    private var thumbnailer: VLCMediaThumbnailer?
-    private static var alive: [VLCProbe] = []
-
-    static func parse(_ media: VLCMedia) async {
-        let p = VLCProbe()
-        await MainActor.run { alive.append(p) }
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            DispatchQueue.main.async {
-                p.cont = c
-                media.delegate = p
-                let started = media.parse(options: [.fetchLocal], timeout: 15000)
-                if started != 0 { p.finish() }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 16) { p.finish() }
-            }
-        }
-        await MainActor.run { alive.removeAll { $0 === p } }
-    }
-
-    private func finish() {
-        cont?.resume()
-        cont = nil
-    }
-
-    func mediaDidFinishParsing(_ aMedia: VLCMedia) {
-        DispatchQueue.main.async { self.finish() }
-    }
-
-    static func thumbnail(_ url: URL, at position: Float) async -> CGImage? {
-        let p = VLCProbe()
-        await MainActor.run { alive.append(p) }
-        let img: CGImage? = await withCheckedContinuation { (c: CheckedContinuation<CGImage?, Never>) in
-            DispatchQueue.main.async {
-                p.thumbCont = c
-                let t = VLCMediaThumbnailer(media: VLCMedia(url: url), andDelegate: p)
-                t.snapshotPosition = position
-                t.thumbnailWidth = 1280
-                t.thumbnailHeight = 720
-                p.thumbnailer = t
-                t.fetchThumbnail()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 20) { p.thumbDone(nil) }
-            }
-        }
-        await MainActor.run { alive.removeAll { $0 === p } }
-        return img
-    }
-
-    private func thumbDone(_ img: CGImage?) {
-        thumbCont?.resume(returning: img)
-        thumbCont = nil
-        thumbnailer = nil
-    }
-
-    func mediaThumbnailerDidTimeOut(_ mediaThumbnailer: VLCMediaThumbnailer) {
-        DispatchQueue.main.async { self.thumbDone(nil) }
-    }
-
-    func mediaThumbnailer(_ mediaThumbnailer: VLCMediaThumbnailer, didFinishThumbnail thumbnail: CGImage) {
-        DispatchQueue.main.async { self.thumbDone(thumbnail) }
-    }
-}

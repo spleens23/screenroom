@@ -171,7 +171,7 @@ func randomHex(_ bytes: Int) -> String {
 }
 
 let videoExtensions: Set<String> = ["mp4", "m4v", "mov", "mkv", "avi", "webm", "ts", "m2ts", "mts", "wmv", "flv", "mpg", "mpeg", "vob", "ogv", "3gp"]
-/// Films Apple's own player (AVFoundation) opens; everything else plays with VLC's engine.
+/// Films Apple's own player (AVFoundation) opens; everything else plays with mpv's engine.
 let avVideoExtensions: Set<String> = ["mp4", "m4v", "mov"]
 /// Pictures and subtitles that travel with films and songs when a folder is imported.
 let sidecarExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "srt", "vtt", "ass", "ssa"]
