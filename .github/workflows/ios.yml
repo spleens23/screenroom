@@ -40,10 +40,13 @@ jobs:
           mkdir -p shots
           exec > >(tee shots/simulator.txt) 2>&1
           set -x
-          TYPE="$(xcrun simctl list devicetypes | grep -m1 -E 'iPad Pro 11' | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
-          [ -n "$TYPE" ] || TYPE="$(xcrun simctl list devicetypes | grep -m1 iPad | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')"
-          RUNTIME="$(xcrun simctl list runtimes | grep -m1 -E '^iOS' | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')"
-          UDID="$(xcrun simctl create test-ipad "$TYPE" "$RUNTIME")"
+          # an iPad simulator that came with this Xcode (newest iOS, preferring an 11-inch iPad Pro)
+          UDID="$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          c = [(rt, x) for rt, l in d.items() if 'iOS' in rt for x in l if 'iPad' in x['name']]
+          c.sort(key=lambda t: (t[0], 'Pro 11' in t[1]['name']))
+          print(c[-1][1]['udid'])")"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           APP="$(find ios/build/Build/Products -name Screenroom.app -maxdepth 3 | head -1)"
