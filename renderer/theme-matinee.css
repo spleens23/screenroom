@@ -80,14 +80,14 @@ body.mat .row h2 { font-family: var(--m-serif); font-weight: 600; font-size: 23p
 body.mat.big .row h2 { font-size: 27px; }
 body.mat .strip { gap: 18px; padding: 16px var(--m-gut) 64px; }
 body.mat.big .strip { padding-top: 20px; padding-bottom: 72px; }
-body.mat .card { border-radius: 12px; overflow: visible; background-color: var(--m-panel2); transition: transform .2s, box-shadow .2s; }
-body.mat .card:hover, body.mat .card:focus-visible, body.mat.navmode .card:focus, body.mat.big .card:hover, body.mat.big .card:focus {
+body.mat .card:not(.pcard) { border-radius: 12px; overflow: visible; background-color: var(--m-panel2); transition: transform .2s, box-shadow .2s; }
+body.mat .card:not(.pcard):hover, body.mat .card:not(.pcard):focus-visible, body.mat.navmode .card:not(.pcard):focus, body.mat.big .card:not(.pcard):hover, body.mat.big .card:not(.pcard):focus {
   transform: translateY(-6px); outline: 3px solid var(--m-amber); outline-offset: 3px; box-shadow: 0 14px 30px rgba(0,0,0,.55); z-index: 5; }
 body.mat .card .ttl { top: calc(100% + 9px); bottom: auto; padding: 0; background: none; font-size: 14px; font-weight: 500; color: var(--m-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.mat .card .ttl .sub { font-size: 12px; color: var(--m-dim); }
 body.mat.big .card .ttl { font-size: 16px; } body.mat.big .card .ttl .sub { font-size: 14px; }
-body.mat .card:not([style*="url("])::before { content: attr(title); position: absolute; left: 14px; right: 14px; bottom: 16px; font-family: var(--m-serif);
+body.mat .card:not(.pcard):not([style*="url("])::before { content: attr(title); position: absolute; left: 14px; right: 14px; bottom: 16px; font-family: var(--m-serif);
   font-weight: 600; font-size: 19px; line-height: 1.12; color: var(--m-cream); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 body.mat .card .bar { height: 5px; background: var(--m-amber); border-radius: 0 0 0 12px; }
 body.mat .card .card-stars { background: rgba(22,17,13,.85); color: var(--m-amber2); border-color: rgba(240,167,58,.45); }
@@ -252,9 +252,13 @@ body.mat .npb:focus, body.mat .npb-art:focus, body.mat .lcd:focus, body.mat .npf
 
 /* touch screens (the iPad): no hover lift that sticks after a tap */
 @media (hover: none) {
-  body.mat .card:hover { transform: none; outline: none; box-shadow: none; }
+  body.mat .card:not(.pcard):hover { transform: none; outline: none; box-shadow: none; }
 }
 @media (max-width: 900px) {
   body.mat .hero-info { max-width: 60%; left: 28px; }
   body.mat .hero::after { background: linear-gradient(to right, var(--m-panel) 0, var(--m-panel) 50%, rgba(34,26,20,.35) 100%); }
 }
+
+/* Parlor's album cards keep their record-sliding-out highlight, framed in amber */
+body.mat.navmode .card.pcard:focus .cover, body.mat.navmode .card.pcard:focus .sleeve .cover { outline-color: var(--m-amber); box-shadow: 0 0 0 8px rgba(240,167,58,.2), 0 6px 18px rgba(0,0,0,.4); }
+body.mat .pcard-t { color: var(--m-cream); }
