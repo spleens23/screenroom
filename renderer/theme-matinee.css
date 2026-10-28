@@ -283,3 +283,7 @@ body.mat .pcard-t { color: var(--m-cream); }
 @media (max-width: 760px) {
   body.mat #search { display: none; }
 }
+
+/* the profile picker: the highlighted seat gets the amber ring on its picture, not a box around the whole tile */
+body.mat.navmode .who-tile:focus { outline: none; }
+body.mat .who-tile:focus .avatar.big { border-color: var(--m-amber); box-shadow: 0 0 0 4px rgba(240,167,58,.25); }
