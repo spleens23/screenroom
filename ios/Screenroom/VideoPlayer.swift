@@ -46,8 +46,7 @@ final class VideoPlayback: NSObject {
     }
 
     private func present(from presenter: UIViewController) {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        prepareFilmAudio()
         controller = PlayerScreen()
         controller.modalPresentationStyle = .fullScreen
         controller.loadViewIfNeeded()
@@ -93,6 +92,7 @@ final class VideoPlayback: NSObject {
         let asset = AVURLAsset(url: URL(fileURLWithPath: path))
         let pi = AVPlayerItem(asset: asset)
         pi.externalMetadata = metadata(entry)
+        pi.allowedAudioSpatializationFormats = .monoStereoAndMultichannel // Spatial Audio on AirPods, stereo films too
         statusObserver = pi.observe(\.status, options: [.new]) { [weak self] it, _ in
             guard let self else { return }
             if it.status == .failed { DispatchQueue.main.async { self.failed(it.error) } }
@@ -281,4 +281,16 @@ final class VideoPlayback: NSObject {
 final class PlayerLayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+/// The audio setup for films (both engines): a film soundtrack that may have 5.1 / 7.1 channels. Telling iPadOS the
+/// app plays multichannel sound is what lets it offer Spatial Audio with head tracking on AirPods (and Dolby Atmos
+/// for Atmos tracks Apple's engine plays).
+func prepareFilmAudio() {
+    let s = AVAudioSession.sharedInstance()
+    try? s.setCategory(.playback, mode: .moviePlayback)
+    try? s.setSupportsMultichannelContent(true)
+    try? s.setActive(true)
+    // ask for as many channels as the route can take (AirPods with Spatial Audio take more than two)
+    try? s.setPreferredOutputNumberOfChannels(s.maximumOutputNumberOfChannels)
 }

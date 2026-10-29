@@ -52,8 +52,7 @@ final class MPVPlayback: NSObject {
     private var item: [String: Any] { queue[index] }
 
     private func present(from presenter: UIViewController) {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        prepareFilmAudio()
         controller = PlayerScreen()
         controller.modalPresentationStyle = .fullScreen
         controller.loadViewIfNeeded()
@@ -96,7 +95,10 @@ final class MPVPlayback: NSObject {
             ("video-rotate", "no"), ("idle", "yes"), ("keep-open", "no"), ("input-default-bindings", "no"),
             ("sub-auto", "fuzzy"), ("audio-file-auto", "no"), ("alang", langList(audioLang)),
             ("slang", subLang.isEmpty ? "" : langList(subLang)), ("subs-fallback", "yes"),
-            ("audio-channels", "auto-safe"), ("demuxer-max-bytes", "150MiB"),
+            // every channel of the soundtrack goes to iPadOS, which turns 5.1 / 7.1 into Spatial Audio (with head
+            // tracking) on AirPods and folds it down to stereo for other headphones and speakers; "exclusive"
+            // makes Screenroom the app that's playing (Control Center, Spatial Audio) instead of mixing with others
+            ("audio-channels", "auto"), ("audio-exclusive", "yes"), ("demuxer-max-bytes", "150MiB"),
         ]
         for (k, v) in opts { mpv_set_option_string(h, k, v) }
         #if DEBUG
@@ -361,7 +363,7 @@ final class MPVPlayback: NSObject {
         if MPVPlayback.current === self { MPVPlayback.current = nil }
         #if DEBUG
         // test builds note whether sound was decoded and played (the automated check reads it)
-        MPVPlayback.log("== stats \(item["title"] as? String ?? "?"): audio=\(getString("audio-codec-name") ?? "-") audio-pts=\(getString("audio-pts") ?? "-") time=\(getString("time-pos") ?? "-") ao=\(getString("current-ao") ?? "-") vo=\(getString("current-vo") ?? "-") hwdec=\(getString("hwdec-current") ?? "-")")
+        MPVPlayback.log("== stats \(item["title"] as? String ?? "?"): audio=\(getString("audio-codec-name") ?? "-") audio-pts=\(getString("audio-pts") ?? "-") time=\(getString("time-pos") ?? "-") ao=\(getString("current-ao") ?? "-") out-channels=\(getString("audio-out-params/channel-count") ?? "-") session-max=\(AVAudioSession.sharedInstance().maximumOutputNumberOfChannels) vo=\(getString("current-vo") ?? "-") hwdec=\(getString("hwdec-current") ?? "-")")
         #endif
         // shut the engine down off the main thread; this player stays alive until it has
         if let h = mpv {
