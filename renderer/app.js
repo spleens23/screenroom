@@ -2054,7 +2054,41 @@
           : h('button', { class: 'btn secondary', onclick: () => api.quit() }, `Quit ${APP}`),
         canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Restart this computer?', 'Screenroom will be back in about a minute.', 'Restart', 'Cancel').then((y) => { if (y) api.power('reboot'); }); } }, 'Restart') : null,
         canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Shut down this computer?', 'Turn it on again with its power button.', 'Shut down', 'Cancel', true).then((y) => { if (y) api.power('poweroff'); }); } }, 'Shut down') : null),
+      h('h3', {}, 'About'),
+      aboutBlock(isIOS() ? 'ios' : isAndroid ? 'android' : 'desktop'),
     ].filter(Boolean));
+  }
+
+  // ---- About: Screenroom is free software; the open-source parts it's built from, with their licenses -------
+  const SOURCE_URL = 'https://github.com/spleens23/screenroom';
+  function aboutBlock(plat) {
+    const list = (window.SR_LICENSES || []).filter((x) => x.platforms === 'all' || x.platforms === plat);
+    const link = 'github.com/spleens23/screenroom';
+    return h('div', { class: 'about' },
+      h('p', {}, 'Screenroom is free, open-source software: your own films and music, played on your own devices, with no accounts and no subscriptions. It is licensed under the GNU General Public License, version 3.'),
+      // (only the iPad opens web pages; elsewhere the address is shown to type in on a phone or computer)
+      h('p', {}, 'Source code: ', isIOS() ? h('a', { href: SOURCE_URL }, link) : h('strong', {}, link)),
+      h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: () => licensesSheet(list) }, 'Open-source licenses')));
+  }
+  function licensesSheet(list, pick) {
+    if (pick) {
+      sheet('licenses', h('h2', {}, pick.name),
+        h('p', { class: 'am-hint' }, `${pick.what} · ${pick.license}`, h('br'), isIOS() ? h('a', { href: pick.source }, pick.source) : pick.source),
+        h('pre', { class: 'lic-text', tabindex: '0' }, pick.text),
+        h('div', { class: 'sheet-foot btns' },
+          h('button', { class: 'btn secondary', onclick: () => licensesSheet(list) }, 'Back'),
+          h('button', { class: 'btn primary', onclick: () => closeSheet() }, 'Done')));
+      sheetBack = () => { licensesSheet(list, null, pick.id); return true; };
+      sheetFocus('.lic-text');
+      return;
+    }
+    const back = arguments[2];
+    sheet('licenses', h('h2', {}, 'Open-source licenses'),
+      h('p', { class: 'am-hint' }, 'Screenroom is built with these open-source projects. Thank you to everyone who makes them. Choose one to read its license.'),
+      h('div', { class: 'lic-list' }, list.map((x) => h('button', { class: 'lic-row', 'data-id': x.id, onclick: () => licensesSheet(list, x) },
+        h('strong', {}, x.name), h('span', {}, x.what), h('small', {}, x.license)))),
+      h('div', { class: 'sheet-foot btns' }, h('button', { class: 'btn primary', onclick: () => closeSheet() }, 'Done')));
+    sheetFocus(back ? `.lic-row[data-id="${back}"]` : '.lic-row');
   }
 
   function setScanning(on, text) {
@@ -2132,6 +2166,12 @@
   function move(dir) {
     document.body.classList.add('navmode');
     hidePointer();
+    // reading a license with the remote: up / down scroll the text
+    const lt = document.activeElement;
+    if (lt && lt.classList && lt.classList.contains('lic-text') && (dir === 'up' || dir === 'down')) {
+      const atEnd = dir === 'down' ? lt.scrollTop + lt.clientHeight >= lt.scrollHeight - 2 : lt.scrollTop <= 0;
+      if (!atEnd) { lt.scrollBy({ top: (dir === 'down' ? 1 : -1) * lt.clientHeight * 0.8, behavior: scrollMode() }); return; }
+    }
     const els = scopeEls();
     if (!els.length) return;
     const cur = els.includes(document.activeElement) ? document.activeElement : null;

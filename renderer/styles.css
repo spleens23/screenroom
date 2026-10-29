@@ -85,6 +85,8 @@ label.row-set { display: flex; justify-content: space-between; align-items: cent
 label.row-set small { display: block; color: var(--muted); margin-top: 2px; }
 .dirs { margin: 10px 0 18px; } .dir { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; background: #232323; border-radius: 4px; margin-bottom: 6px; font-size: 13px; word-break: break-all; }
 .dir button, .link { background: none; border: 0; color: #9cc6ff; }
+.dir button { white-space: nowrap; flex-shrink: 0; }
+.dir { overflow-wrap: anywhere; }
 .warn { background: #3a1d1d; border: 1px solid #6b2b2b; color: #ffb3b3; padding: 10px 12px; border-radius: 4px; margin: 10px 0; font-size: 13px; }
 .empty { text-align: center; margin: 22vh auto 0; max-width: 460px; color: var(--muted); }
 .empty h2 { color: var(--fg); }
@@ -929,3 +931,17 @@ body.navmode .card:not(.pcard):hover:not(:focus), body.idle .card:not(.pcard):ho
 body.navmode .who-tile:hover:not(:focus) .avatar, body.idle .who-tile:hover:not(:focus) .avatar { border-color: transparent; transform: none; }
 /* the profile picker never scrolls sideways */
 .who { overflow: clip; }
+
+/* ---- About › Open-source licenses ---- */
+.about p { line-height: 1.5; max-width: 720px; }
+.about a { color: inherit; text-decoration: underline; }
+.sheet.licenses .sheet-card { width: min(820px, 96vw); }
+.lic-list { display: flex; flex-direction: column; gap: 6px; }
+.lic-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto; gap: 14px; align-items: baseline; text-align: left;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: inherit; border-radius: 10px; padding: 11px 14px; font-size: 15px; cursor: pointer; }
+.lic-row span { opacity: .75; } .lic-row small { opacity: .6; white-space: nowrap; font-size: 12px; }
+.lic-row:hover, body.navmode .lic-row:focus { background: rgba(255,255,255,.1); }
+.lic-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 58vh; overflow-y: auto;
+  background: rgba(0,0,0,.25); border-radius: 10px; padding: 14px 16px; margin: 6px 0 0; }
+body.big .lic-text { font-size: 16px; }
+@media (max-width: 700px) { .lic-row { grid-template-columns: 1fr; gap: 2px; } }

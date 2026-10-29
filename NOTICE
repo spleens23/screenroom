@@ -1,0 +1,12 @@
+Screenroom
+Copyright (C) 2026 the Screenroom authors
+
+Screenroom is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+Screenroom is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License (the LICENSE file) for more details.
+
+The source code is at https://github.com/spleens23/screenroom
+
+Additional permission under GNU GPL version 3 section 7: as a special exception, the copyright holders of Screenroom give you permission to distribute Screenroom, and works based on it, through app stores (such as Apple's App Store, TestFlight and Google Play) whose terms of use add restrictions beyond those of the GNU GPL, provided that the complete corresponding source code is made available under the GNU GPL as described above.
+
+Screenroom uses open-source libraries under their own licenses (LGPL, MIT, BSD, Apache, ISC, zlib, OFL and others). The full list, with each license, is in the app under Settings › About › Open-source licenses, and in renderer/licenses.js.

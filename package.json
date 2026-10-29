@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.screenroom.app",
     "productName": "Screenroom",
-    "copyright": "Copyright \u00a9 Screenroom",
+    "copyright": "Copyright © 2026 the Screenroom authors",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -105,7 +105,7 @@
       "tools/*.py"
     ]
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "qrcode-generator": "^2.0.4"
   }

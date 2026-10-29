@@ -4,6 +4,8 @@ A home cinema for your own MP4 library: a warm, poster-led browser (the Matinee 
 
 **Why mpv?** Chromium (and so Electron) can't decode DTS and only partly handles Dolby audio. mpv plays everything in your files (H.264 / H.265, 480p to 4K, AC-3, E-AC-3, TrueHD, DTS, DTS-HD) with hardware decoding, and can pass Dolby/DTS bitstreams through to a receiver.
 
+**Free, forever.** Screenroom is free and open-source software, made so anyone can watch and listen to their own films and music on their own devices: no accounts, no subscriptions, no ads. See [License](#license).
+
 ## Run it
 
 ```bash
@@ -125,6 +127,20 @@ Screenroom can run as a streaming box with no subscriptions: it boots straight i
 - **Library updates itself** every 30 minutes and on launch.
 - **Not included:** recording live TV (DVR). Screenroom plays files you already have.
 
+## iPad
+
+`ios/` is the iPad version. It shows the same screens (the pages in `renderer/` with `ios/support/ios-api.js` in place of the desktop bridge) and plays films with Apple's player when it can (HDR, Dolby Vision) and with [mpv](https://mpv.io) for everything else (DTS, TrueHD including TrueHD inside MP4, MKV), both behind Screenroom's own controls.
+
+**Build it yourself** (a Mac with Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen)):
+
+```sh
+ios/scripts/fetch-mpvkit.sh     # mpv's engine and FFmpeg (MPVKit, LGPL), into ios/vendor/
+ios/scripts/prepare-web.sh      # the screens, into ios/Web/
+cd ios && xcodegen generate && open Screenroom.xcodeproj
+```
+
+Choose your own Apple ID as the team (a free one works) and run it on your iPad. This is also how to use your own build of mpv, FFmpeg or any other library: replace its `.xcframework` in `ios/vendor/mpvkit/` and build again. Every push to `main` also builds the app on GitHub (`.github/workflows/ios.yml`), tests it in a simulated iPad and sends it to TestFlight.
+
 ## Troubleshooting
 
 - **Nothing happens on Play / a red message appears:** mpv failed to start. Its log is at `<temp folder>/screenroom-mpv.log` (the message gives the exact path).
@@ -144,3 +160,12 @@ mpv/screenroom-player.lua  the on-screen player controls (shipped inside the app
 renderer/          the browse UI (index.html, styles.css, app.js)
 build/icon.png     app icon
 ```
+
+## License
+
+Copyright (C) 2026 the Screenroom authors.
+
+Screenroom is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 3** or (at your option) any later version. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE), which also gives permission to distribute Screenroom through app stores as long as the source stays available under the GPL.
+
+Screenroom is built with open-source projects under their own licenses: mpv, FFmpeg and their libraries (LGPL, MIT, BSD, Apache, ISC, zlib), Electron, AndroidX Media3, and the Fraunces, DM Sans and Noto Sans JP typefaces (OFL). The full list with every license text is in the app (Settings › About › Open-source licenses) and in [`renderer/licenses.js`](renderer/licenses.js), made by `tools/make-licenses.py`.
+
