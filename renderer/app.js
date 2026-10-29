@@ -1992,6 +1992,7 @@
       mobile || !box ? null : toggle('TV mode', 'Big layout for a TV, fullscreen, controlled with a remote or game controller.', 'tvMode'),
       mobile || !films ? null : toggle('Audio passthrough', 'Send Dolby / DTS bitstreams untouched to your receiver (HDMI/optical). Off = decode locally.', 'passthrough'),
       mobile || !films || !S.config.passthrough ? null : toggle('Dolby TrueHD untouched (Atmos)', 'On: TrueHD / Atmos goes to your receiver as it is. Off: Screenroom turns TrueHD into 7.1 surround itself — try that if Atmos films go quiet after a few seconds.', 'truehdPassthrough'),
+      mobile || !films || !S.config.passthrough ? null : toggle('DTS untouched', 'On: DTS and DTS-HD go to your receiver as they are. Off: Screenroom decodes DTS itself and sends lossless 7.1 / 5.1 surround (or Dolby Digital 5.1 if your TV only passes stereo) — for soundbars and receivers that don’t play DTS.', 'dtsPassthrough'),
       mobile || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
       mobile || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
       mobile || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),

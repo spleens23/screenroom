@@ -54,7 +54,7 @@ const cfgFile = () => path.join(dataDir(), 'config.json');
 const progFile = () => profiles.progressFile(currentId);
 
 const defaults = {
-  dirs: [], passthrough: false, downmix: false, levelVolume: true, truehdPassthrough: true, screensaverMin: 5, fullscreen: true, tvMode: false,
+  dirs: [], passthrough: false, downmix: false, levelVolume: true, truehdPassthrough: true, dtsPassthrough: true, screensaverMin: 5, fullscreen: true, tvMode: false,
   preferredLang: 'eng', subLang: '', audioDevice: '', mpvArgs: '', mpvPath: '', ffprobePath: '', ffmpegPath: '',
   remote: true, remotePort: 8686, remotePin: '',
 };
