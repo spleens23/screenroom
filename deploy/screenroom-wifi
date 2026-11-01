@@ -1,0 +1,169 @@
+#!/bin/bash
+# Screenroom: get the built-in Wi-Fi card working, and say plainly what's wrong when it can't.
+#   screenroom-wifi          check and fix everything it can (installs missing firmware; needs internet or the
+#                            installer stick's packages). Run by box-refresh.sh after every Screenroom update.
+#   screenroom-wifi --boot   quick check at every start-up: unblock Wi-Fi and write the report (no installs)
+# The report (/var/lib/screenroom/wifi-report.json) is what Settings → Wi-Fi shows when there's no Wi-Fi.
+set -u
+MODE="${1:-full}"
+STATE_DIR=/var/lib/screenroom
+REPORT="$STATE_DIR/wifi-report.json"
+mkdir -p "$STATE_DIR"
+log() { echo "screenroom-wifi: $*"; }
+export DEBIAN_FRONTEND=noninteractive
+REBOOT=0
+DID=()
+
+# ---- the card, if the computer shows it to Linux at all ------------------------------------------------------
+# PCI class 0280 = "network controller" (Wi-Fi). A card switched off in the BIOS doesn't appear here.
+card_line() { lspci -nn 2>/dev/null | grep -E '\[0280\]' | head -1; }
+card_slot() { card_line | awk '{print $1}'; }
+card_name() { card_line | sed -E 's/^[^ ]+ [^:]+: //; s/ \[[0-9a-f]{4}:[0-9a-f]{4}\].*//; s/ \(rev [0-9a-f]+\)//'; }
+card_driver() { local s; s="$(card_slot)"; [ -n "$s" ] && lspci -k -s "$s" 2>/dev/null | sed -n 's/.*Kernel driver in use: //p' | head -1; }
+card_modules() { local s; s="$(card_slot)"; [ -n "$s" ] && lspci -k -s "$s" 2>/dev/null | sed -n 's/.*Kernel modules: //p' | tr ',' ' ' | head -1; }
+wifi_iface() { for d in /sys/class/net/*; do [ -d "$d/wireless" ] && { basename "$d"; return; }; done; }
+fw_errors() { journalctl -k -b --no-pager 2>/dev/null | grep -iE 'iwlwifi|rtw88|rtw_8|ath10k|ath11k|mt76|rtl8' | grep -iE 'firmware|fw' | grep -iE 'fail|no suitable|not found|error' | tail -3; }
+
+# ---- 1. HP BIOS settings (HP business PCs, Linux 6.6 and newer show them in /sys/class/firmware-attributes) ----
+# Only two settings are ever touched: "LAN / WLAN Auto Switching" (turns Wi-Fi off while a network cable is in)
+# goes to Disable, and the built-in Wi-Fi device goes to Enable. Both take effect after a restart.
+bios_fix() {
+  local base a name vals cur want
+  for base in /sys/class/firmware-attributes/*/attributes; do
+    [ -d "$base" ] || continue
+    for a in "$base"/*/; do
+      [ -f "$a/display_name" ] && [ -f "$a/current_value" ] || continue
+      name="$(cat "$a/display_name" 2>/dev/null)"; [ -n "$name" ] || name="$(basename "$a")"
+      vals="$(cat "$a/possible_values" 2>/dev/null)"; cur="$(cat "$a/current_value" 2>/dev/null)"
+      want=""
+      if echo "$name" | grep -qiE '^LAN ?/ ?WLAN (Auto )?Switching$'; then
+        want="$(echo "$vals" | tr ';,' '\n\n' | grep -iE '^Disabled?$' | head -1)"
+      elif echo "$name" | grep -qiE '^(Embedded |Integrated |Built-?in )?(WLAN|Wireless LAN|Wireless Network)( Device| Radio)?$'; then
+        want="$(echo "$vals" | tr ';,' '\n\n' | grep -iE '^Enabled?$' | head -1)"
+      fi
+      [ -n "$want" ] || continue
+      [ "$cur" = "$want" ] && continue
+      if printf '%s' "$want" > "$a/current_value" 2>/dev/null; then
+        log "BIOS: '$name' $cur -> $want (after restart)"; DID+=("BIOS: $name → $want"); REBOOT=1
+        BIOS_CHANGED="${BIOS_CHANGED:-}$name; "
+      else
+        log "BIOS: couldn't change '$name' (a BIOS password may be set)"
+        BIOS_LOCKED="${BIOS_LOCKED:-}$name; "
+      fi
+    done
+  done
+}
+
+# ---- 2. firmware for the card ------------------------------------------------------------------------------
+fw_install() {
+  local pkgs=() p
+  for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree linux-firmware; do
+    apt-cache show "$p" >/dev/null 2>&1 && ! dpkg -s "$p" >/dev/null 2>&1 && pkgs+=("$p")
+  done
+  if [ "${#pkgs[@]}" -eq 0 ]; then
+    # Not offered yet: Debian keeps Wi-Fi firmware in the non-free-firmware section; make sure it's listed.
+    local changed=0 f
+    for f in /etc/apt/sources.list.d/debian.sources; do
+      [ -f "$f" ] && grep -q '^Components:' "$f" && ! grep -q 'non-free-firmware' "$f" && { sed -i -E 's/^Components:.*/Components: main contrib non-free non-free-firmware/' "$f"; changed=1; }
+    done
+    if [ -f /etc/apt/sources.list ] && grep -qE '^deb\s+\S*debian\S*\s+\S+\s+main' /etc/apt/sources.list && ! grep -q non-free-firmware /etc/apt/sources.list; then
+      sed -i -E 's/^(deb\s+\S*debian\S*\s+\S+\s+main)(.*)$/\1 contrib non-free non-free-firmware/' /etc/apt/sources.list; changed=1
+    fi
+    apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true
+    for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree linux-firmware; do
+      apt-cache show "$p" >/dev/null 2>&1 && ! dpkg -s "$p" >/dev/null 2>&1 && pkgs+=("$p")
+    done
+    [ "$changed" = 1 ] && log "added Debian's non-free-firmware section"
+  fi
+  [ "${#pkgs[@]}" -gt 0 ] || return 1
+  for p in "${pkgs[@]}"; do
+    if apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends install "$p" >/dev/null 2>&1; then
+      log "installed $p"; DID+=("installed $p")
+    else
+      log "couldn't install $p"
+    fi
+  done
+  return 0
+}
+
+reload_driver() {
+  local mods m
+  mods="$(card_modules)"; [ -n "$mods" ] || return
+  for m in $mods; do
+    [ "$m" = iwlwifi ] && modprobe -r iwlmvm iwldvm 2>/dev/null
+    modprobe -r "$m" 2>/dev/null
+  done
+  for m in $mods; do modprobe "$m" 2>/dev/null && { log "loaded driver $m"; DID+=("reloaded the Wi-Fi driver"); break; }; done
+  sleep 4
+}
+
+# ---- 3. switched off in software ------------------------------------------------------------------------------
+unblock() {
+  if command -v rfkill >/dev/null && rfkill list wifi 2>/dev/null | grep -q 'Soft blocked: yes'; then
+    rfkill unblock wifi && { log "unblocked Wi-Fi"; DID+=("switched Wi-Fi back on"); }
+  fi
+  if command -v nmcli >/dev/null && [ "$(nmcli radio wifi 2>/dev/null)" = "disabled" ]; then
+    nmcli radio wifi on && { log "turned on NetworkManager's Wi-Fi"; DID+=("turned Wi-Fi on in the network settings"); }
+  fi
+}
+
+# Power saving makes some Intel/Realtek cards drop off and never come back.
+powersave_off() {
+  local f=/etc/NetworkManager/conf.d/50-screenroom-wifi-powersave.conf
+  [ -f "$f" ] && return
+  mkdir -p /etc/NetworkManager/conf.d
+  printf '[connection]\nwifi.powersave = 2\n' > "$f"
+  DID+=("turned off Wi-Fi power saving")
+  RESTART_NM=1
+}
+
+# ---- run ------------------------------------------------------------------------------------------------------
+BIOS_CHANGED=""; BIOS_LOCKED=""; RESTART_NM=0
+bios_fix
+powersave_off
+unblock
+if [ "$MODE" != "--boot" ] && [ -n "$(card_line)" ]; then
+  if [ -z "$(card_driver)" ] || [ -z "$(wifi_iface)" ]; then
+    fw_install && reload_driver
+    unblock
+  fi
+fi
+[ "$RESTART_NM" = 1 ] && systemctl try-restart NetworkManager >/dev/null 2>&1 && sleep 3
+
+# ---- the report -----------------------------------------------------------------------------------------------
+CARD="$(card_name)"; DRV="$(card_driver)"; IF="$(wifi_iface)"; FWERR="$(fw_errors | tail -1)"
+HARD="no"; command -v rfkill >/dev/null && rfkill list wifi 2>/dev/null | grep -q 'Hard blocked: yes' && HARD="yes"
+SOFT="no"; command -v rfkill >/dev/null && rfkill list wifi 2>/dev/null | grep -q 'Soft blocked: yes' && SOFT="yes"
+NETS=0
+if [ -n "$IF" ] && command -v nmcli >/dev/null; then
+  NETS="$(nmcli -t -f SSID device wifi list ifname "$IF" --rescan yes 2>/dev/null | grep -c . || true)"
+fi
+
+if [ -z "$CARD" ]; then
+  STATE=no-card
+  if [ -n "$BIOS_CHANGED" ]; then MSG="The Wi-Fi card was switched off in the computer's BIOS. Screenroom has switched it on: restart the box to use Wi-Fi."
+  else MSG="Linux can't see the Wi-Fi card. It's most likely switched off in the computer's BIOS: start the computer, press F10, and under Advanced → Built-In Device Options turn the WLAN device on and \"LAN/WLAN Auto Switching\" off. If it's already on, the card may not be seated properly."; fi
+elif [ "$HARD" = yes ]; then
+  STATE=bios-off
+  if [ "$REBOOT" = 1 ]; then MSG="Wi-Fi is turned off by the computer's BIOS. Screenroom has changed that setting: restart the box."
+  else MSG="Wi-Fi is turned off by the computer itself (BIOS or a wireless switch). On HP computers press F10 at start-up and turn \"LAN/WLAN Auto Switching\" off, and make sure the WLAN device is on."; fi
+elif [ -z "$DRV" ] || [ -z "$IF" ]; then
+  STATE=firmware
+  MSG="The Wi-Fi card ($CARD) was found, but its software (firmware) couldn't be loaded. Keep the network cable plugged in and use Check for updates, or restart the box; Screenroom will install it."
+elif [ "$SOFT" = yes ]; then
+  STATE=blocked; MSG="Wi-Fi is switched off. Screenroom will switch it back on at the next start."
+elif [ "$NETS" = 0 ]; then
+  STATE=no-networks; MSG="The Wi-Fi card ($CARD) works, but it can't hear any networks. Check that the two thin antenna wires are clipped onto the card."
+else
+  STATE=ok; MSG="Wi-Fi works ($CARD)."
+fi
+[ "$REBOOT" = 1 ] && [ "$STATE" = ok ] && MSG="$MSG A BIOS setting was also changed; it applies after a restart."
+[ -n "$BIOS_LOCKED" ] && MSG="$MSG (Couldn't change the BIOS settings from here: ${BIOS_LOCKED%; }. A BIOS password may be set.)"
+
+DIDJ="$(printf '%s\n' "${DID[@]:-}" | jq -R . | jq -s 'map(select(length>0))')"
+jq -n --arg state "$STATE" --arg message "$MSG" --arg card "$CARD" --arg driver "$DRV" --arg iface "$IF" \
+  --arg fw "$FWERR" --argjson networks "${NETS:-0}" --argjson reboot "$REBOOT" --argjson did "$DIDJ" --arg at "$(date -Is)" \
+  '{state:$state, message:$message, card:$card, driver:$driver, iface:$iface, firmwareError:$fw, networks:$networks, restartNeeded:($reboot==1), did:$did, at:$at}' \
+  > "$REPORT.tmp" && mv "$REPORT.tmp" "$REPORT" && chmod 644 "$REPORT"
+log "$STATE: $MSG"
+exit 0

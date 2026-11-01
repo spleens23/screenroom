@@ -102,6 +102,26 @@ if ! in_chroot; then
   systemctl kill -s HUP systemd-logind >/dev/null 2>&1 || true
 fi
 
+# ---- Wi-Fi: firmware for the built-in card, switched on, BIOS settings that keep it off (screenroom-wifi) -------
+install -m 0755 "$HERE/screenroom-wifi" /usr/local/sbin/screenroom-wifi
+cat > /etc/systemd/system/screenroom-wifi.service <<'EOF2'
+[Unit]
+Description=Screenroom: switch Wi-Fi on and check the Wi-Fi card
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/screenroom-wifi --boot
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable screenroom-wifi.service >/dev/null 2>&1 || true
+in_chroot || /usr/local/sbin/screenroom-wifi || true
+
 # ---- sound outputs switched on ------------------------------------------------------------------------
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session

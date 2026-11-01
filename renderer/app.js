@@ -1526,7 +1526,12 @@
       setTimeout(() => { refocusIn(box, want); want = null; }, 0);
       if (!st.available) { box.append(h('p', { class: 'am-hint' }, st.message)); return; }
       box.append(h('p', {}, st.wired ? 'Connected by network cable.' : st.wifiConnected ? `Connected to Wi-Fi: ${st.wifiNetwork}` : 'Not connected.'));
-      if (!st.hasWifi) { box.append(h('p', { class: 'am-hint' }, 'This computer has no Wi-Fi adapter.')); return; }
+      if (!st.hasWifi) {
+        const rep = st.report && st.report.state !== 'ok' ? st.report : null;
+        box.append(h('p', { class: 'am-hint' }, rep ? rep.message : 'Wi-Fi isn\'t available on this computer.'));
+        return;
+      }
+      if (st.report && st.report.state === 'no-networks' && !st.wifiConnected) box.append(h('p', { class: 'am-hint' }, st.report.message));
       box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
         e.target.textContent = 'Searching…';
         want = { sel: '.wifi-join input, .drives button' };
