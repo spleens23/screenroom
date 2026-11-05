@@ -45,6 +45,10 @@ final class PlayerScreen: UIViewController {
     private var duration: Double = 0
 
     override var prefersStatusBarHidden: Bool { true }
+    // on an iPhone a film plays on its side, whichever way the phone is held; an iPad turns freely
+    private var phone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { phone ? .landscape : .all }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { phone ? .landscapeRight : super.preferredInterfaceOrientationForPresentation }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
     override func viewDidLoad() {

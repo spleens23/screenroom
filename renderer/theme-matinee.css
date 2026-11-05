@@ -291,3 +291,50 @@ body.mat .pcard-t { color: var(--m-cream); }
 /* the profile picker: the highlighted seat gets the amber ring on its picture, not a box around the whole tile */
 body.mat.navmode .who-tile:focus { outline: none; }
 body.mat .who-tile:focus .avatar.big { border-color: var(--m-amber); box-shadow: 0 0 0 4px rgba(240,167,58,.25); }
+
+/* ---- phones (an iPhone held upright, a very narrow window) ----
+   The top bar becomes two rows: the wordmark and the round buttons, then the sections and the search box.
+   The feature picture sits above its title, and the pages leave room for the taller bar and the iPhone's
+   notch and home bar. */
+@media (max-width: 600px) {
+  body.mat { --m-gut: 16px; --card-w: 128px; }
+  body.mat #nav, body.mat #nav.solid { height: auto; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 8px) max(var(--m-gut), env(safe-area-inset-right)) 10px max(var(--m-gut), env(safe-area-inset-left)); }
+  body.mat .brand { font-size: 23px; flex: 1 1 auto; order: 0; }
+  body.mat .nav-right { display: contents; }
+  body.mat #battery, body.mat #vote-btn, body.mat #parlor-btn, body.mat #profile-btn, body.mat #settings-btn { order: 1; flex: 0 0 auto; }
+  body.mat #profile-btn, body.mat #settings-btn, body.mat #parlor-btn, body.mat #vote-btn { width: 38px; height: 38px; }
+  body.mat #nav nav:not(#pnav) { order: 2; flex: 0 0 auto; }
+  body.mat.parlor #nav #pnav { order: 2; flex: 1 1 calc(100% - 100px); min-width: 0; overflow-x: auto; scrollbar-width: none; justify-content: flex-start; }
+  body.mat #nav nav a { padding: 7px 12px; font-size: 14px; }
+  body.mat.parlor #pnav a { padding: 7px 10px; font-size: 13px; }
+  body.mat #search { display: block; order: 3; flex: 1 1 0; width: auto; min-width: 70px; max-width: none; padding: 8px 12px; font-size: 14px; }
+  body.mat.parlor #search { flex: 0 0 92px; width: 92px; min-width: 0; }
+  body.mat #main { padding-top: calc(env(safe-area-inset-top) + 30px); padding-bottom: env(safe-area-inset-bottom); }
+  /* the feature: picture on top, then the words */
+  body.mat .hero { display: block; min-height: 0; margin: 86px var(--m-gut) 0; border-radius: 18px;
+    padding-top: calc((100vw - 2 * var(--m-gut)) * 9 / 16); background-size: 100% auto; background-position: top center; }
+  body.mat .hero::after { background: linear-gradient(to bottom, rgba(34,26,20,0) 0, rgba(34,26,20,0) calc((100vw - 2 * var(--m-gut)) * .36),
+    var(--m-panel) calc((100vw - 2 * var(--m-gut)) * 9 / 16)); }
+  body.mat .hero-info { position: relative; margin: -34px 18px 0; padding: 0 0 20px; max-width: none; }
+  body.mat .hero-info::before { font-size: 11px; margin-bottom: 6px; }
+  body.mat .hero h1 { font-size: 30px; -webkit-line-clamp: 2; }
+  body.mat .hero p { font-size: 15px; -webkit-line-clamp: 3; }
+  body.mat .hero .btn { white-space: nowrap; padding: 10px 20px; }
+  body.mat .page-title { font-size: 28px; }
+  body.mat .strip { gap: 12px; padding-bottom: 48px; }
+  body.mat section.row h2 { font-size: 22px; }
+  /* pop-ups and Settings: clear of the notch and the home bar */
+  .modal, #settings, .sheet { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .modal-card.narrow { padding: 22px 18px; }
+  .sheet-card { padding: 20px 18px; }
+}
+
+/* phones on their side (short screens): a shorter feature, so the rows show below it */
+@media (max-height: 500px) and (min-width: 601px) {
+  body.mat .hero { --hh: 250px; }
+  body.mat .hero h1 { font-size: 34px; -webkit-line-clamp: 2; }
+  body.mat .hero p { -webkit-line-clamp: 2; }
+  body.mat #main { padding-bottom: env(safe-area-inset-bottom); }
+  body.mat .hero, body.mat .strip, body.mat .page-title, body.mat section.row h2 { margin-left: max(var(--m-gut), env(safe-area-inset-left)); }
+}

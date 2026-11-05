@@ -37,8 +37,10 @@
   const fileUrl = (p) => p ? (window.S_IOS ? 'srfile://f' : 'file://') + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
   // The iPad app keeps films and music in its own Documents folder ("On My iPad › Screenroom" in the Files app).
   const isIOS = () => !!(window.S_IOS || (typeof S !== 'undefined' && S && S.platform === 'ios'));
-  const here = () => (isIOS() ? 'this iPad' : 'this box');
-  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My iPad › Screenroom${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
+  // the same app runs on iPad and iPhone: name the one in your hand
+  const device = () => (typeof S !== 'undefined' && S && S.device === 'iPhone' ? 'iPhone' : 'iPad');
+  const here = () => (isIOS() ? `this ${device()}` : 'this box');
+  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My ${device()} › Screenroom${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
   const bg = (p) => (p ? `background-image:url("${fileUrl(p)}")` : '');
   const fmtDur = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const fmtTime = (s) => { s = Math.floor(s); const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
@@ -560,11 +562,11 @@
     const music = kind === 'music';
     const what = music ? 'music' : 'films and shows';
     return h('div', { class: 'addmedia' }, h('div', { class: 'am-card' },
-      h('h3', {}, music ? 'Put music on this iPad' : 'Put films on this iPad'),
-      h('p', { class: 'am-hint' }, `Screenroom keeps ${what} in its own folder, so they play anywhere, even without internet. In the Files app it's On My iPad › Screenroom (${music ? 'Music' : 'Films'}).`),
+      h('h3', {}, music ? `Put music on this ${device()}` : `Put films on this ${device()}`),
+      h('p', { class: 'am-hint' }, `Screenroom keeps ${what} in its own folder, so they play anywhere, even without internet. In the Files app it's On My ${device()} › Screenroom (${music ? 'Music' : 'Films'}).`),
       h('div', { class: 'ios-ways' },
-        h('p', { class: 'am-hint' }, h('b', {}, 'From a Mac: '), 'connect the iPad, select it in Finder, open the Files tab and drag them onto Screenroom.'),
-        h('p', { class: 'am-hint' }, h('b', {}, 'AirDrop: '), 'send them to the iPad and choose Screenroom.'),
+        h('p', { class: 'am-hint' }, h('b', {}, 'From a Mac: '), `connect the ${device()}, select it in Finder, open the Files tab and drag them onto Screenroom.`),
+        h('p', { class: 'am-hint' }, h('b', {}, 'AirDrop: '), `send them to the ${device()} and choose Screenroom.`),
         h('p', { class: 'am-hint' }, h('b', {}, 'A USB-C drive or iCloud Drive: '), 'press Import and pick them.')),
       h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: async () => {
         setScanning(true, 'Importing…');
@@ -2003,7 +2005,7 @@
       mobile || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       mobile || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
       mobile || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
-      isIOS() ? h('p', { class: 'am-hint' }, 'Sound plays from the iPad, AirPlay (to a TV or speaker) or Bluetooth headphones. Dolby Atmos plays where the film, and your headphones or TV, support it.')
+      isIOS() ? h('p', { class: 'am-hint' }, `Sound plays from the ${device()}, AirPlay (to a TV or speaker) or Bluetooth headphones. Dolby Atmos plays where the film, and your headphones or TV, support it.`)
       : isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
@@ -2659,7 +2661,7 @@
   const FILM_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.6"/></svg>';
   if (window.createParlor && api.parlorState && EDITION !== 'films') {
     parlorUI = window.createParlor({
-      h, $, api, flash, focusEl, here, prettyPath, isIOS,
+      h, $, api, flash, focusEl, here, prettyPath, isIOS, device,
       query: () => query,
       clearQuery: () => { query = ''; $('#search').value = ''; },
       isOpen: () => mode === 'parlor',

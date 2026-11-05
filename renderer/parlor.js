@@ -90,7 +90,7 @@ window.createParlor = function createParlor(ctx) {
       h('h1', {}, 'Welcome to the Parlor'),
       P.canManage
         ? (ctx.isIOS && ctx.isIOS()
-          ? [h('p', {}, 'Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My iPad › Screenroom, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.'),
+          ? [h('p', {}, `Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My ${ctx.device ? ctx.device() : 'iPad'} › Screenroom, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.`),
               h('button', { class: 'btn primary', onclick: async () => { const r = await api.parlorAddDir(null); if (r.ok) { P = r.state; render(); } else ctx.flash(r.error); } }, 'Import music…')]
           : [h('p', {}, 'Your music library is empty. Add the folder your music is in: albums found there are yours, and you can share any album with other profiles.'),
               h('button', { class: 'btn primary', onclick: () => ctx.openSettings('parlor') }, 'Add music')])
