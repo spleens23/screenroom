@@ -97,9 +97,21 @@ final class Storage {
     }
 
     func isInside(_ path: String, _ dir: URL) -> Bool {
-        let p = URL(fileURLWithPath: path).standardizedFileURL.path
-        let d = dir.standardizedFileURL.path
+        let p = canonical(URL(fileURLWithPath: path))
+        let d = canonical(dir)
         return p.hasPrefix(d + "/")
+    }
+
+    /// One spelling for a path: the app's folder shows up both as /var/… and /private/var/… (a link), and a
+    /// file that doesn't exist yet (a new cover.jpg) can't have its links resolved, so its folder's are.
+    private func canonical(_ url: URL) -> String {
+        var u = url.standardizedFileURL
+        var tail: [String] = []
+        while !fm.fileExists(atPath: u.path), u.path != "/" { tail.insert(u.lastPathComponent, at: 0); u = u.deletingLastPathComponent() }
+        var p = u.resolvingSymlinksInPath().path
+        if p.hasPrefix("/private/") { p.removeFirst("/private".count) }
+        for t in tail { p = (p as NSString).appendingPathComponent(t) }
+        return p
     }
 
     /// Delete films or songs (and their subtitles / covers beside them), then folders left empty.
