@@ -68,6 +68,7 @@ final class MPVPlayback: NSObject {
             CATransaction.commit()
         }
         controller.onClose = { [weak self] in self?.close() }
+        controller.onFill = { [weak self] f in self?.setString("panscan", f ? "1.0" : "0.0") }
         controller.onToggle = { [weak self] in self?.togglePause() }
         controller.onSkip = { [weak self] s in self?.skip(s) }
         controller.onSeek = { [weak self] f in self?.seek(to: f) }

@@ -27,6 +27,9 @@ window.createParlor = function createParlor(ctx) {
     rew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path fill="none" d="M4.5 3.5v4.2h4.2"/><text x="12.4" y="15.2" text-anchor="middle" font-size="7.5" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">10</text></svg>',
     fwd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path fill="none" d="M19.5 3.5v4.2h-4.2"/><text x="11.6" y="15.2" text-anchor="middle" font-size="7.5" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">10</text></svg>',
     shuffle: '<svg viewBox="0 0 24 24"><path d="M3 7h4l10 10h4M17 13l4 4-4 4M3 17h4l3-3M14 10l3-3h4M17 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>',
+    repeat1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/><text x="12" y="15.3" text-anchor="middle" font-size="8" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">1</text></svg>',
+    queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7"/><path d="M17 15v6l4-3z" fill="currentColor" stroke="none"/></svg>',
   };
 
   // A colour of its own for an album without a picture (the same album always gets the same one).
@@ -102,7 +105,7 @@ window.createParlor = function createParlor(ctx) {
       h('h1', {}, 'Welcome to the Parlor'),
       P.canManage
         ? (ctx.isIOS && ctx.isIOS()
-          ? [h('p', {}, `Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My ${ctx.device ? ctx.device() : 'iPad'} › ${ctx.appName || 'Screenroom'}, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.`),
+          ? [h('p', {}, `Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My ${ctx.device ? ctx.device() : 'iPad'} › ${ctx.appName || 'Screenroom'}, Finder on a Mac, or AirDrop), or import them.`),
               h('button', { class: 'btn primary', onclick: async () => { const r = await api.parlorAddDir(null); if (r.ok) { P = r.state; render(); } else ctx.flash(r.error); } }, 'Import music…')]
           : [h('p', {}, 'Your music library is empty. Add the folder your music is in: albums found there are yours, and you can share any album with other profiles.'),
               h('button', { class: 'btn primary', onclick: () => ctx.openSettings('parlor') }, 'Add music')])
@@ -233,9 +236,68 @@ window.createParlor = function createParlor(ctx) {
   const history = [];
   function go(v) { if (v !== view) history.push(view); view = v; ctx.clearQuery(); render(); window.scrollTo(0, 0); const f = main.querySelector('.btn, .card, .srow'); f && ctx.focusEl(f); }
 
+  // Add songs to the queue (next, or at the end) and say so; they show under "Playing Next" in the Queue.
+  async function queueUp(ids, next, name) {
+    await api.musicCmd('enqueue', { trackIds: ids, next });
+    ctx.flash(next ? `${name} will play next` : `${name} added to the end of the queue`);
+  }
+
   // ---- album page (in the shared modal) --------------------------------------------------------------
   let openKey = null;
-  function openAlbum(key) { openKey = key; drawAlbum(); ctx.showModal(); const b = $('#modal .btn.primary'); b && b.focus(); }
+  function openAlbum(key) {
+    openKey = key; drawAlbum(); ctx.showModal();
+    const b = $('#modal .btn.primary'); b && b.focus({ preventScroll: true });
+    noteCard();
+  }
+
+  // On a touch screen the album page is a sheet: it slides up, scrolls, and closes when pulled down from the top
+  // (or with ✕ / Back), sliding away rather than vanishing.
+  const modalEl = $('#modal');
+  const sheetCard = () => (!modalEl.hidden && modalEl.querySelector('.modal-card.pmodal')) || null;
+  const touchy = () => matchMedia('(pointer: coarse)').matches;
+  let cardBox = null, albumPull = null;
+  const noteCard = () => { const c = sheetCard(); if (c) { const r = c.getBoundingClientRect(); cardBox = { top: r.top, left: r.left, width: r.width }; } };
+  modalEl.addEventListener('scroll', () => { if (sheetCard()) noteCard(); }, { passive: true });
+  modalEl.addEventListener('touchstart', (e) => {
+    const c = sheetCard();
+    albumPull = c && e.touches.length === 1 && modalEl.scrollTop <= 0 && !e.target.closest('input, textarea')
+      ? { c, y: e.touches[0].clientY, x: e.touches[0].clientX, t: Date.now(), dy: 0, on: false } : null;
+  }, { passive: true });
+  modalEl.addEventListener('touchmove', (e) => {
+    const p = albumPull; if (!p) return;
+    const dy = e.touches[0].clientY - p.y, dx = e.touches[0].clientX - p.x;
+    if (!p.on) {
+      if (Math.abs(dx) > Math.abs(dy) || dy < 8 || modalEl.scrollTop > 0) { if (dy < -8 || Math.abs(dx) > 12) albumPull = null; return; }
+      p.on = true; p.c.classList.add('pulling');
+    }
+    e.preventDefault();
+    p.dy = Math.max(0, dy);
+    p.c.style.transform = `translateY(${p.dy}px)`;
+    modalEl.style.setProperty('--dim', String(Math.max(0.15, 1 - p.dy / 700)));
+  }, { passive: false });
+  const endAlbumPull = () => {
+    const p = albumPull; albumPull = null;
+    if (!p || !p.on) return;
+    p.c.classList.remove('pulling');
+    const v = p.dy / Math.max(1, Date.now() - p.t);
+    if (p.dy > innerHeight * 0.22 || (v > 0.6 && p.dy > 60)) { noteCard(); ctx.closeModal(); }
+    else { p.c.style.transform = ''; modalEl.style.removeProperty('--dim'); }
+  };
+  modalEl.addEventListener('touchend', endAlbumPull);
+  modalEl.addEventListener('touchcancel', endAlbumPull);
+  // the page itself is hidden at once (the rest of the app counts on that); a copy of it slides away
+  function slideAway(card) {
+    if (!cardBox || !touchy() || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const g = card.cloneNode(true);
+    g.querySelectorAll('video').forEach((v) => v.remove());
+    g.classList.add('pmodal-ghost'); g.removeAttribute('id');
+    g.style.cssText = `top:${cardBox.top}px;left:${cardBox.left}px;width:${cardBox.width}px;`;
+    const dim = h('div', { class: 'pmodal-dim', style: `opacity:${modalEl.style.getPropertyValue('--dim') || 1}` });
+    document.body.append(dim, g);
+    void g.offsetHeight;
+    g.classList.add('go'); dim.style.opacity = '0';
+    setTimeout(() => { g.remove(); dim.remove(); }, 420);
+  }
   function drawAlbum(focusSel) {
     const a = album(openKey);
     if (!a) return ctx.closeModal();
@@ -254,20 +316,23 @@ window.createParlor = function createParlor(ctx) {
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
             h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '+ Playlist'),
-            P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: async () => { await api.musicCmd('enqueue', { trackIds: ids, next: true }); ctx.flash('Playing next'); } }, 'Play Next') : null,
+            P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, true, a.title) }, svg(ICON.queue), 'Play Next') : null,
+            P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, false, a.title) }, 'Play Last') : null,
             P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null,
-            ctx.recommend && ctx.canRecommend() ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '→ Recommend') : null),
+            ctx.recommend && ctx.canRecommend() && !window.S_IOS ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '→ Recommend') : null),
           albumRecBanner(a),
-          P.canManage ? sharePanel(a) : null)),
+          P.canManage && !window.S_IOS ? sharePanel(a) : null)),
       h('table', { class: 'songs tracks' }, h('tbody', {}, albumTracks(a).map((t, i) => {
         const cur = P.player && P.player.track && P.player.track.id === t.id;
         return [
           multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '5' }, `Disc ${t.disc}`)) : null,
-          h('tr', { class: 'srow' + (cur ? ' now' : ''), tabindex: '0', 'data-id': t.id, onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, ctxa); } },
+          h('tr', { class: 'srow' + (cur ? ' now' : ''), tabindex: '0', 'data-id': t.id, style: `--i:${Math.min(i, 16)}`, onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, ctxa); } },
             h('td', { class: 'n' }, cur ? svg(ICON.play, 'ico tiny') : (t.track || i + 1)),
             h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
             h('td', { class: 't' }, mmss(t.duration)),
-            h('td', { class: 'x' }, h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '+')))];
+            h('td', { class: 'x' },
+              P.player && P.player.playing ? h('button', { class: 'rowbtn qadd', title: 'Play next', 'aria-label': `Play ${t.title} next`, onclick: () => queueUp([t.id], true, t.title) }, svg(ICON.queue, 'ico tiny')) : null,
+              h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '+')))];
       }).flat())));
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
@@ -486,7 +551,7 @@ window.createParlor = function createParlor(ctx) {
     stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: 'Big cover', onclick: () => setBig(!full.classList.contains('big')) }),
     from: h('div', { class: 'npf-from' }), title: h('h1', {}), artist: h('h2', {}), album: h('h3', {}),
     pos: h('span', {}), left: h('span', {}), fill: h('div', {}),
-    vol: h('span', { class: 'npf-vol' }), upnext: h('div', { class: 'upnext' }),
+    vol: h('span', { class: 'npf-vol' }),
     caption: h('div', { class: 'npf-caption' }),
   };
   F.close = h('button', { class: 'np-close', 'data-b': 'close', 'aria-label': 'Close', title: 'Close (Back)', onclick: () => closeFull() }, '✕');
@@ -535,9 +600,15 @@ window.createParlor = function createParlor(ctx) {
     h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', P.player.volume - 10) }, '−'),
     F.vol,
     h('button', { class: 'npb vol', 'data-b': 'vup', title: 'Louder', onclick: () => api.musicCmd('volume', P.player.volume + 10) }, '+'));
-  F.body = h('div', { class: 'npf' }, F.stage,
+  // Shuffle, Repeat and the Queue, in a row under the main buttons (as in Apple Music)
+  F.shuf = h('button', { class: 'npt', 'data-b': 'shuffle', title: 'Shuffle', 'aria-pressed': 'false', onclick: () => api.musicCmd('shuffle') }, svg(ICON.shuffle));
+  F.rep = h('button', { class: 'npt', 'data-b': 'repeat', title: 'Repeat', 'aria-pressed': 'false', onclick: () => api.musicCmd('repeat') }, svg(ICON.repeat));
+  F.qbtn = h('button', { class: 'npt', 'data-b': 'queue', title: 'Queue', 'aria-pressed': 'false', onclick: () => toggleQueue() }, svg(ICON.queue));
+  F.tools = h('div', { class: 'npf-tools', 'data-navrow': '1' }, F.shuf, F.qbtn, F.rep);
+  F.queue = h('div', { class: 'npf-queue', hidden: true });
+  F.body = h('div', { class: 'npf' }, F.stage, F.queue,
       h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
-        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.upnext));
+        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.tools));
   full.append(F.bg, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, F.bigBtn, F.close), F.body, F.caption, F.qsheet);
   document.body.append(full);
 
@@ -563,6 +634,44 @@ window.createParlor = function createParlor(ctx) {
     if (e.key === 'ArrowDown' && a === F.barBtn) { e.preventDefault(); e.stopPropagation(); F.play.focus({ preventScroll: true }); }
   }, true);
   full.addEventListener('mousemove', () => { if (!full.classList.contains('big')) wakeFull(); });
+
+  // ---- the queue: what plays next ------------------------------------------------------------------------
+  // "Playing Next" is what you added (Play Next / Add to Queue); then the rest of the album or playlist.
+  let queueOpen = false, queueSig = '';
+  function toggleQueue(on = !queueOpen) {
+    queueOpen = !!on;
+    full.classList.toggle('queue-open', queueOpen);
+    F.queue.hidden = !queueOpen;
+    F.qbtn.setAttribute('aria-pressed', String(queueOpen));
+    F.qbtn.classList.toggle('on', queueOpen);
+    queueSig = ''; drawQueue();
+    if (queueOpen) F.queue.scrollTop = 0;
+    return true;
+  }
+  function drawQueue() {
+    const s = P && P.player; if (!s) return;
+    const sig = [s.index, s.shuffle, s.repeat, ...s.queue.map((q) => q.id + (q.queued ? '+' : ''))].join('|');
+    // the Queue button gets a dot while there's something you added waiting
+    const added = s.queue.slice(s.index + 1).filter((q) => q.queued && !q.missing);
+    F.qbtn.classList.toggle('dot', added.length > 0);
+    if (!queueOpen || sig === queueSig) return;
+    queueSig = sig;
+    const keep = document.activeElement && F.queue.contains(document.activeElement) ? document.activeElement.dataset.b : null;
+    const row = (q, i) => {
+      const a = album(q.albumKey) || { art: q.art, title: q.album, key: q.albumKey };
+      return h('button', { class: 'qi' + (q.queued ? ' queued' : ''), 'data-b': 'q' + i, title: `Play ${q.title}`, onclick: () => api.musicCmd('jump', i) },
+        cover(a, 'tiny'), h('span', { class: 'qi-t' }, h('b', {}, q.title), h('small', {}, q.artist)), h('span', { class: 'qi-d' }, mmss(q.duration)));
+    };
+    const after = s.queue.map((q, i) => ({ q, i })).slice(s.index + 1).filter((x) => !x.q.missing);
+    const mine = after.filter((x) => x.q.queued), rest = after.filter((x) => !x.q.queued);
+    const from = s.context && s.context.name ? `Continue playing from ${s.context.name}` : 'Up Next';
+    const mode = [s.shuffle ? 'Shuffled' : '', s.repeat === 'all' ? 'Repeating' : s.repeat === 'one' ? 'Repeating this song' : ''].filter(Boolean).join(' · ');
+    F.queue.replaceChildren(
+      mine.length ? h('div', { class: 'qsec' }, h('div', { class: 'qh' }, h('h4', {}, 'Playing Next'), h('small', {}, plural(mine.length, 'song') + ' you added')), ...mine.map((x) => row(x.q, x.i))) : null,
+      h('div', { class: 'qsec' }, h('div', { class: 'qh' }, h('h4', {}, from), mode ? h('small', {}, mode) : null),
+        ...(rest.length ? rest.slice(0, 200).map((x) => row(x.q, x.i)) : [h('p', { class: 'qempty' }, s.repeat === 'all' ? 'The queue starts again after this song.' : 'Nothing else is queued after this song.')])));
+    if (keep) { const k = F.queue.querySelector(`[data-b="${keep}"]`); (k || F.qbtn).focus({ preventScroll: true }); }
+  }
 
   // ---- audio quality -----------------------------------------------------------------------------------
   const khz = (r) => (r % 1000 ? (r / 1000).toFixed(1) : String(r / 1000)) + ' kHz';
@@ -612,6 +721,7 @@ window.createParlor = function createParlor(ctx) {
   let pull = null;
   full.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 1 || scrubbing || !F.qsheet.hidden || e.target.closest('.npf-scrub, .npf-qsheet')) { pull = null; return; }
+    if (queueOpen && F.queue.contains(e.target) && F.queue.scrollTop > 0) { pull = null; return; } // scrolling the queue
     const t = e.touches[0];
     pull = { y: t.clientY, x: t.clientX, t: Date.now(), dy: 0, on: false };
   }, { passive: true });
@@ -621,7 +731,7 @@ window.createParlor = function createParlor(ctx) {
     const dy = t.clientY - pull.y, dx = t.clientX - pull.x;
     if (!pull.on) {
       if (Math.abs(dx) > Math.abs(dy) || dy < 8) { if (dy < -8 || Math.abs(dx) > 12) pull = null; return; }
-      if (F.body.scrollTop > 0) { pull = null; return; }
+      if (F.body.scrollTop > 0 || (queueOpen && F.queue.contains(e.target) && F.queue.scrollTop > 0)) { pull = null; return; }
       pull.on = true; full.classList.add('pulling');
     }
     e.preventDefault();
@@ -683,14 +793,13 @@ window.createParlor = function createParlor(ctx) {
       drawQuality(t);
       F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
       F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
-      const nxt = s.queue.slice(s.index + 1, s.index + 6);
-      const keep = document.activeElement && F.upnext.contains(document.activeElement) ? document.activeElement.dataset.b : null;
-      F.upnext.hidden = !nxt.length;
-      F.upnext.replaceChildren(h('div', { class: 'upnext-t' }, 'Up Next'),
-        ...nxt.map((q, i) => h('button', { class: 'upnext-i', 'data-b': 'q' + i, onclick: () => api.musicCmd('jump', s.index + 1 + i) },
-          h('span', {}, q.title), h('small', {}, q.artist))));
-      if (keep) { const k = F.upnext.querySelector(`[data-b="${keep}"]`); (k || F.play).focus({ preventScroll: true }); }
     }
+    drawQueue();
+    F.shuf.classList.toggle('on', !!s.shuffle); F.shuf.setAttribute('aria-pressed', String(!!s.shuffle));
+    const r = s.repeat || 'off';
+    F.rep.classList.toggle('on', r !== 'off'); F.rep.setAttribute('aria-pressed', String(r !== 'off'));
+    F.rep.title = r === 'one' ? 'Repeating this song' : r === 'all' ? 'Repeating the queue' : 'Repeat';
+    if (F.rep.dataset.mode !== r) { F.rep.dataset.mode = r; F.rep.replaceChildren(svg(r === 'one' ? ICON.repeat1 : ICON.repeat)); }
     full.classList.toggle('paused', !!s.paused);
     if (scrubbing) return; // the finger is in charge of the times while scrubbing
     F.pos.textContent = mmss(s.pos); F.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
@@ -720,6 +829,7 @@ window.createParlor = function createParlor(ctx) {
     back() {
       if (closeOverlay()) return true;
       if (fullOpen && hideQuality()) return true;
+      if (fullOpen && queueOpen) return toggleQueue(false);
       if (fullOpen) { if (full.classList.contains('big')) { setBig(false); F.play.focus({ preventScroll: true }); return true; } return closeFull(); }
       if (view !== 'home') { view = history.pop() || 'home'; if (view.startsWith('playlist:') && !P.playlists.some((p) => 'playlist:' + p.id === view)) view = 'home'; render(); return true; }
       return false;
@@ -733,7 +843,10 @@ window.createParlor = function createParlor(ctx) {
     },
     onModalClosed() {
       const k = openKey; openKey = null;
-      const c = $('#modal .modal-card'); c && c.classList.remove('pmodal');
+      const c = $('#modal .modal-card');
+      if (c && c.classList.contains('pmodal') && k) slideAway(c);
+      if (c) { c.classList.remove('pmodal', 'pulling'); c.style.transform = ''; }
+      modalEl.style.removeProperty('--dim'); cardBox = null;
       const el = k && main.querySelector(`.card[data-key="${CSS.escape(k)}"]`); if (el) el.focus({ preventScroll: true });
     },
     cdIcon,
@@ -749,7 +862,7 @@ window.createParlor = function createParlor(ctx) {
       P = await api.parlorState();
       box.replaceChildren();
       if (!P.canManage) { box.append(h('p', { class: 'am-hint' }, 'Your music is shared with you by a grown-up.')); return; }
-      box.append(h('p', { class: 'am-hint' }, 'Your music folders. Albums found here are yours; share any album with other profiles from its page. Each profile has its own folders.'));
+      box.append(h('p', { class: 'am-hint' }, window.S_IOS ? 'Your music folders.' : 'Your music folders. Albums found here are yours; share any album with other profiles from its page. Each profile has its own folders.'));
       const pretty = (d) => (ctx.prettyPath ? ctx.prettyPath(d) : d);
       if (P.dirs.length) box.append(h('div', { class: 'dirs' }, P.dirs.map((d) => h('div', { class: 'dir' }, pretty(d),
         h('button', { onclick: async () => { const r = await api.parlorRemoveDir(d); P = r.state; draw(); } }, 'Remove')))));

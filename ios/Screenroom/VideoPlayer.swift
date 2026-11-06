@@ -57,6 +57,7 @@ final class VideoPlayback: NSObject {
         layerView.playerLayer.videoGravity = .resizeAspect
         controller.videoView.addSubview(layerView)
         controller.onClose = { [weak self] in self?.close() }
+        controller.onFill = { [weak self] f in self?.layerView.playerLayer.videoGravity = f ? .resizeAspectFill : .resizeAspect }
         controller.onToggle = { [weak self] in self?.togglePause() }
         controller.onSkip = { [weak self] s in self?.skip(s) }
         controller.onSeek = { [weak self] f in self?.seek(to: f) }

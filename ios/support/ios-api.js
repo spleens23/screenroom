@@ -351,10 +351,12 @@
     return { id, path: t.path, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: a && a.art, duration: t.duration };
   };
   function publicPlayer(s) {
-    const strip = (id) => { const t = trackFor(id); return t && { id: t.id, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: t.art, duration: t.duration }; };
-    const queue = (s.queue || []).map(strip).filter(Boolean);
+    const strip = (id, i) => { const t = trackFor(id); return t && { id: t.id, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: t.art, duration: t.duration, queued: !!(s.queued && s.queued[i]) }; };
+    // (a song that's gone from the library keeps its place, so the numbers still match the player's)
+    const queue = (s.queue || []).map((id, i) => strip(id, i) || { id, title: '', artist: '', album: '', duration: 0, missing: true });
     return { playing: !!s.playing, paused: !!s.paused, index: s.index, pos: s.pos || 0, dur: s.dur || 0, volume: s.volume == null ? 100 : s.volume,
-      muted: !!s.muted, track: queue[s.index] || null, queue, context: s.context || null };
+      muted: !!s.muted, track: queue[s.index] && !queue[s.index].missing ? queue[s.index] : null, queue, context: s.context || null,
+      shuffle: !!s.shuffle, repeat: s.repeat || 'off' };
   }
   function musicStop() { if (player && player.playing) native('musicCmd', 'stop').catch(() => {}); }
 

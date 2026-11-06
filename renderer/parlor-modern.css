@@ -117,6 +117,85 @@ body.navmode #npfull .npf-qcard .btn:focus { outline: 3px solid #fff; outline-of
   html body:not(#_) #npfull.leaving { transform: translateY(100%) !important; pointer-events: none; }
 }
 
+
+/* -- Shuffle / Queue / Repeat -- */
+html body:not(#_) #npfull .npf-tools { display: flex; justify-content: space-between; align-items: center; margin: 0 0 3vh; }
+html body:not(#_) #npfull .npt { position: relative; width: 48px; height: 48px; border: 0; border-radius: 12px; background: transparent; color: rgba(255,255,255,.7); box-shadow: none;
+  display: inline-flex; align-items: center; justify-content: center; transition: background .18s, color .18s, transform .12s; }
+html body:not(#_) #npfull .npt svg, html body:not(#_) #npfull .npt .ico { width: 24px; height: 24px; }
+html body:not(#_) #npfull .npt:active { transform: scale(.88); }
+html body:not(#_) #npfull .npt.on { color: #fff; background: rgba(255,255,255,.2); }
+html body:not(#_) #npfull .npt.dot::after { content: ''; position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: #f6d58e; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+body.navmode #npfull .npt:focus, body.navmode #npfull .qi:focus { outline: 3px solid #fff; outline-offset: 2px; }
+html body:not(.navmode) #npfull .npt:focus, html body:not(.navmode) #npfull .qi:focus { outline: none; }
+
+/* -- the queue: in the cover's place -- */
+html body:not(#_) #npfull.queue-open .npf-stage { display: none; }
+html body:not(#_) #npfull .npf-queue { grid-column: 1; grid-row: 1; align-self: stretch; max-height: 76vh; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  padding: 4px 4px 12px; animation: npq-in .3s cubic-bezier(.2,.8,.2,1); }
+html body:not(#_) #npfull .npf-queue[hidden] { display: none; }
+@keyframes npq-in { from { opacity: 0; transform: translateY(14px); } }
+html body:not(#_) #npfull .qsec + .qsec { margin-top: 22px; }
+html body:not(#_) #npfull .qh { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 6px; }
+html body:not(#_) #npfull .qh h4 { margin: 0; font-size: 17px; font-weight: 700; color: #fff; }
+html body:not(#_) #npfull .qh small { color: rgba(255,255,255,.55); font-size: 12.5px; white-space: nowrap; }
+html body:not(#_) #npfull .qi { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 8px; margin: 0 -8px; width: calc(100% + 16px); border: 0; border-radius: 10px;
+  background: none; color: #fff; text-align: left; box-shadow: none; text-shadow: none; animation: qi-in .35s both; }
+html body:not(#_) #npfull .qi:hover, html body:not(#_) #npfull .qi:focus { background: rgba(255,255,255,.1); }
+html body:not(#_) #npfull .qi:active { background: rgba(255,255,255,.16); }
+html body:not(#_) #npfull .qi .cover.tiny { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 6px; overflow: hidden; }
+html body:not(#_) #npfull .qi .cover.tiny img { width: 100%; height: 100%; object-fit: cover; }
+html body:not(#_) #npfull .qi-t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+html body:not(#_) #npfull .qi-t b, html body:not(#_) #npfull .qi-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body:not(#_) #npfull .qi-t b { font-weight: 600; font-size: 15px; }
+html body:not(#_) #npfull .qi-t small { color: rgba(255,255,255,.6); font-size: 13px; }
+html body:not(#_) #npfull .qi-d { color: rgba(255,255,255,.45); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+html body:not(#_) #npfull .qi.queued .qi-t b::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 7px 2px 0; border-radius: 50%; background: #f6d58e; vertical-align: middle; }
+html body:not(#_) #npfull .qempty { color: rgba(255,255,255,.55); margin: 6px 0; font-size: 14px; }
+@keyframes qi-in { from { opacity: 0; transform: translateY(8px); } }
+html body:not(#_) #npfull .qi:nth-child(2) { animation-delay: .02s; } html body:not(#_) #npfull .qi:nth-child(3) { animation-delay: .04s; }
+html body:not(#_) #npfull .qi:nth-child(4) { animation-delay: .06s; } html body:not(#_) #npfull .qi:nth-child(5) { animation-delay: .08s; }
+html body:not(#_) #npfull .qi:nth-child(6) { animation-delay: .10s; } html body:not(#_) #npfull .qi:nth-child(n+7) { animation-delay: .12s; }
+
+/* ==== motion: things open and close the way they do on an iPhone =========================================== */
+/* an album: rises (a sheet on a phone or iPad, a card that settles on a computer); its songs follow one by one */
+@keyframes pm-up { from { transform: translateY(100%); } }
+@keyframes pm-settle { from { opacity: 0; transform: translateY(22px) scale(.97); } }
+@keyframes pm-dim { from { background-color: rgba(0,0,0,0); } }
+@keyframes pm-cover { from { opacity: 0; transform: scale(.9); } }
+@keyframes row-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(10px); } }
+body.parlor #modal:not([hidden]) { animation: pm-dim .3s ease-out; }
+body.parlor #modal:not([hidden]) .modal-card.pmodal { animation: pm-settle .34s cubic-bezier(.2,.8,.2,1); }
+body.parlor #modal:not([hidden]) .modal-card.pmodal .palbum-head .cover { animation: pm-cover .5s cubic-bezier(.2,.8,.2,1) both; }
+body.parlor #modal:not([hidden]) .modal-card.pmodal tr.srow { animation: row-in .4s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(.12s + var(--i, 0) * 22ms); }
+@media (pointer: coarse) {
+  body.parlor #modal:not([hidden]) .modal-card.pmodal { animation: pm-up .42s cubic-bezier(.16,1,.3,1); }
+  body.parlor .modal-card.pmodal { transition: transform .32s cubic-bezier(.2,.8,.2,1); }
+  body.parlor .modal-card.pmodal.pulling { transition: none; }
+}
+.pmodal-ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; transition: transform .36s cubic-bezier(.4,0,.8,.4); }
+.pmodal-ghost.go { transform: translateY(105vh); }
+.pmodal-dim { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.62); transition: opacity .34s ease-out; pointer-events: none; }
+/* pages fade up as you switch tabs; covers arrive in a quick ripple; the mini player rises into place */
+body.parlor .ppage { animation: fade-up .32s cubic-bezier(.2,.8,.2,1); }
+body.parlor .pgrid .pcard, body.parlor .strip .pcard { animation: fade-up .45s cubic-bezier(.2,.8,.2,1) both; }
+body.parlor .pgrid .pcard:nth-child(2), body.parlor .strip .pcard:nth-child(2) { animation-delay: .03s; }
+body.parlor .pgrid .pcard:nth-child(3), body.parlor .strip .pcard:nth-child(3) { animation-delay: .06s; }
+body.parlor .pgrid .pcard:nth-child(4), body.parlor .strip .pcard:nth-child(4) { animation-delay: .09s; }
+body.parlor .pgrid .pcard:nth-child(5), body.parlor .strip .pcard:nth-child(5) { animation-delay: .12s; }
+body.parlor .pgrid .pcard:nth-child(6), body.parlor .strip .pcard:nth-child(6) { animation-delay: .15s; }
+body.parlor .pgrid .pcard:nth-child(n+7) { animation-delay: .18s; }
+body.parlor .pcard { transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+body.parlor #npbar:not([hidden]) { animation: rise .4s cubic-bezier(.2,.8,.2,1); }
+html body:not(#_) #npfull .npb .ico, html body:not(#_) #npfull .npt svg { transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) {
+  body.parlor #modal:not([hidden]), body.parlor #modal:not([hidden]) .modal-card.pmodal, body.parlor .modal-card.pmodal *, body.parlor .ppage, body.parlor .pcard,
+  body.parlor #npbar, #npfull * { animation: none !important; }
+}
+
 /* ==== phones (an iPhone held upright) ===================================================================== */
 @media (max-width: 600px) {
   /* -- the top: wordmark and round buttons, then the search box -- */
@@ -190,31 +269,43 @@ body.navmode #npfull .npf-qcard .btn:focus { outline: 3px solid #fff; outline-of
   html body.parlor.parlor.parlor #npbar .npb .ico { width: 26px; height: 26px; }
   html body.parlor.parlor.parlor #npbar .npb svg { fill: currentColor; }
 
-  /* -- an album: one column, the cover centred, Play and Shuffle side by side -- */
-  html body.parlor.parlor.parlor #modal { padding: 0; align-items: stretch; }
-  html body.parlor.parlor.parlor #modal .modal-card { width: 100%; min-height: 100%; border-radius: 0; padding: calc(var(--sat) + 56px) 0 calc(var(--sab) + 30px); }
+  /* -- an album: a sheet up from the bottom that scrolls; pull it down from the top to close -- */
+  html body.parlor.parlor.parlor #modal { padding: calc(var(--sat) + 10px) 0 0; align-items: flex-start; overscroll-behavior: contain;
+    background: rgba(0,0,0, calc(.62 * var(--dim, 1))); }
+  html body.parlor.parlor.parlor .modal-card.pmodal { width: 100%; min-height: calc(100% - var(--sat) - 10px); border-radius: 18px 18px 0 0; border: 0; overflow: visible;
+    padding: 40px 0 calc(var(--sab) + 40px); flex: 0 0 auto; }
+  html body.parlor.parlor.parlor .modal-card.pmodal::before { content: ''; position: absolute; top: 8px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px;
+    background: currentColor; opacity: .25; }
+  html body.parlor.parlor.parlor .modal-card.pmodal .close { top: 14px; right: 14px; }
   html body.parlor.parlor.parlor .palbum-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: 0 20px; }
-  html body.parlor.parlor.parlor .palbum-head .cover.big { width: min(72vw, 330px); border-radius: 10px; -webkit-box-reflect: unset; }
+  html body.parlor.parlor.parlor .palbum-head .cover.big { width: min(72vw, 330px); border-radius: 10px; -webkit-box-reflect: unset; overflow: hidden; }
   html body.parlor.parlor.parlor .palbum-info { width: 100%; }
   html body.parlor.parlor.parlor .palbum-info h1 { font-size: 24px; margin: 0 0 4px; }
   html body.parlor.parlor.parlor .palbum-info .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
   html body.parlor.parlor.parlor .palbum-info .btns .btn { justify-content: center; padding: 13px 10px; min-height: 48px; white-space: nowrap; }
-  html body.parlor.parlor.parlor .palbum table, html body.parlor.parlor.parlor .palbum .songs { margin: 22px 0 0; width: 100%; }
+  html body.parlor.parlor.parlor .palbum table, html body.parlor.parlor.parlor .palbum .songs { margin: 22px 0 0; width: 100%; border-left: 0; border-right: 0; border-radius: 0; }
+  html body.parlor.parlor.parlor .palbum { padding: 0; margin: 0; }
+  html body.parlor.parlor.parlor .palbum tr.srow td { padding-top: 13px; padding-bottom: 13px; }
+  html body.parlor.parlor.parlor .palbum tr.srow td:first-child { padding-left: 20px; }
+  html body.parlor.parlor.parlor .palbum tr.srow td:last-child { padding-right: 12px; white-space: nowrap; }
+  html body.parlor.parlor.parlor .palbum .rowbtn { width: 40px; height: 40px; }
 
-  /* -- Now Playing: one column, the cover big at the top, like Apple Music -- */
-  html body:not(#_) #npfull .npf { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
-    padding: calc(var(--sat) + 44px) 28px calc(var(--sab) + 24px); }
+  /* -- Now Playing: the cover big at the top, everything else at the bottom, like Apple Music -- */
+  html body:not(#_) #npfull .npf { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 0; height: 100%; overflow: hidden;
+    padding: calc(var(--sat) + 40px) 26px calc(var(--sab) + 14px); }
   html body:not(#_) #npfull .npf-grab { display: block; position: absolute; z-index: 8; top: calc(var(--sat) + 6px); left: 50%; transform: translateX(-50%);
     width: 96px; height: 30px; padding: 0; border: 0; background: none; box-shadow: none; }
   html body:not(#_) #npfull .npf-grab::before { content: ''; display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: rgba(255,255,255,.5); }
   html body:not(#_) #npfull .npf-top { display: none; }
-  html body:not(#_) #npfull .npf-stage { margin: 2vh auto 4vh; width: min(84vw, 44vh); padding: 0; border: 0; background: none; }
+  html body:not(#_) #npfull .npf-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; margin: 0 0 3vh; padding: 0; border: 0; background: none; }
+  html body:not(#_) #npfull .npf-stage .cover.huge { width: min(100%, 46vh); }
+  html body:not(#_) #npfull .npf-side { flex: 0 0 auto; }
   html body:not(#_) #npfull .npf-from { display: none; }
   html body:not(#_) #npfull .npf-side h1 { font-size: 22px; margin: 0 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   html body:not(#_) #npfull .npf-side h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   html body:not(#_) #npfull .npf-side h3 { display: none; }
-  html body:not(#_) #npfull .npf-prog { margin: 26px 0 14px; }
-  html body:not(#_) #npfull .npf-ctrl { justify-content: space-evenly; margin: 0 -8px 28px; flex-wrap: nowrap; }
+  html body:not(#_) #npfull .npf-prog { margin: 22px 0 8px; }
+  html body:not(#_) #npfull .npf-ctrl { justify-content: space-evenly; margin: 0 -8px 6px; flex-wrap: nowrap; }
   /* (no 10-second skips or volume buttons on a phone: its own volume buttons do that) */
   html body:not(#_) #npfull .npf-ctrl .npb[data-b="rew"], html body:not(#_) #npfull .npf-ctrl .npb[data-b="fwd"],
   html body:not(#_) #npfull .npf-ctrl .npb.vol, html body:not(#_) #npfull .npf-vol { display: none; }
@@ -222,10 +313,19 @@ body.navmode #npfull .npf-qcard .btn:focus { outline: 3px solid #fff; outline-of
   html body:not(#_) #npfull .npf-ctrl .npb .ico { width: 38px; height: 38px; }
   html body:not(#_) #npfull .npf-ctrl .npb.big { width: 88px; height: 88px; }
   html body:not(#_) #npfull .npf-ctrl .npb.big .ico { width: 54px; height: 54px; }
+  html body:not(#_) #npfull .npf-tools { margin: 4px -6px 0; }
   html body:not(#_) #npfull .npf-qsheet { align-items: flex-end; }
   html body:not(#_) #npfull .npf-qcard { width: 100%; border-radius: 22px 22px 0 0; padding: 26px 22px calc(var(--sab) + 20px); }
-  /* a moving cover fills the top of the screen edge to edge and melts into the controls below */
-  html body:not(#_) #npfull .npf-motion { inset: 0 0 auto 0; height: min(118vw, 62vh); filter: none; transform: none;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); }
-  html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; height: calc(min(118vw, 62vh) - var(--sat) - 70px); margin: 0 auto; width: auto; }
+  /* the queue takes the cover's place */
+  html body:not(#_) #npfull.queue-open .npf-stage { display: none; }
+  html body:not(#_) #npfull .npf-queue { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 -26px 10px; padding: 0 26px 8px; border-radius: 0; background: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); }
+  /* a moving cover: big, edge to edge across the top of the screen, melting into the controls below it */
+  html body:not(#_) #npfull .npf-motion { inset: 0 0 auto 0; height: 68vh; filter: none; transform: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,.55) 74%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,.55) 74%, transparent 100%); }
+  html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; }
+  html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
+  html body:not(#_) #npfull.has-motion.queue-open .npf-motion { opacity: .0; }
+  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(70px) saturate(1.5) brightness(.55); }
 }

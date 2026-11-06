@@ -12,10 +12,28 @@ final class PlayerScreen: UIViewController {
     var menuProvider: (() -> UIMenu?)?
     /// Called when the screen changes size (the mpv picture layer follows it).
     var onLayout: (() -> Void)?
+    /// Pinch out to fill the screen edge to edge (cropping the picture), pinch in to fit it again.
+    var onFill: ((Bool) -> Void)?
+    private(set) var fill = false
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        // The picture stays clear of the notch, the Dynamic Island and the rounded corners unless you pinch to fill.
+        videoView.frame = fill ? view.bounds : view.bounds.inset(by: view.safeAreaInsets)
         onLayout?()
+    }
+
+    @objc private func pinched(_ g: UIPinchGestureRecognizer) {
+        guard g.state == .ended else { return }
+        let want = g.scale > 1
+        guard want != fill else { return }
+        fill = want
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        UIView.animate(withDuration: 0.25) {
+            self.view.setNeedsLayout()
+            self.view.layoutIfNeeded()
+        }
+        onFill?(fill)
     }
 
     private let ink = UIColor(red: 0.086, green: 0.067, blue: 0.051, alpha: 1)
@@ -66,6 +84,7 @@ final class PlayerScreen: UIViewController {
         catcher.isAccessibilityElement = true
         catcher.accessibilityLabel = "Show or hide the controls"
         catcher.addTarget(self, action: #selector(tapped), for: .touchUpInside)
+        view.addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:))))
         view.addSubview(catcher)
         overlay.frame = view.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]

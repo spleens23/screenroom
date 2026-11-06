@@ -18,6 +18,9 @@ final class MusicPlayer {
     private var timeObserver: Any?
     private var rateObserver: NSKeyValueObservation?
     private var lastEmit = Date.distantPast
+    private var shuffle = false
+    private var unshuffled: [[String: Any]]?   // the queue's own order while shuffled
+    private var repeatMode = "off"             // off, all (the whole queue), one (this song)
 
     private init() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 2), queue: .main) { [weak self] _ in
@@ -42,6 +45,8 @@ final class MusicPlayer {
             "index": index, "pos": pos.isFinite ? pos : 0, "dur": dur,
             "volume": Int((volume * 100).rounded()), "muted": muted,
             "queue": queue.compactMap { $0["id"] as? String },
+            "queued": queue.map { ($0["queued"] as? Bool) == true },
+            "shuffle": shuffle, "repeat": repeatMode,
             "context": context ?? NSNull(),
         ]
     }
@@ -59,6 +64,7 @@ final class MusicPlayer {
         VideoPlayback.current?.stop()
         MPVPlayback.current?.stop()
         queue = tracks
+        shuffle = false; unshuffled = nil
         self.context = context
         go(to: max(0, min(start, tracks.count - 1)))
     }
@@ -96,8 +102,11 @@ final class MusicPlayer {
         case "mute": muted.toggle(); player.volume = muted ? 0 : volume
         case "jump": if let i = (arg as? NSNumber)?.intValue { go(to: i) }
         case "stop": stop()
+        case "shuffle": toggleShuffle()
+        case "repeat": repeatMode = ["off": "all", "all": "one"][repeatMode] ?? "off"
         case "enqueue":
-            if let o = arg as? [String: Any], let tracks = o["tracks"] as? [[String: Any]] {
+            if let o = arg as? [String: Any], var tracks = o["tracks"] as? [[String: Any]] {
+                for i in tracks.indices { tracks[i]["queued"] = true } // shown under "Playing Next"
                 if (o["next"] as? Bool) == true, index >= 0 { queue.insert(contentsOf: tracks, at: index + 1) } else { queue.append(contentsOf: tracks) }
                 if index < 0, !queue.isEmpty { go(to: 0) }
             }
@@ -108,7 +117,30 @@ final class MusicPlayer {
     }
 
     private func next(auto: Bool) {
-        if index + 1 < queue.count { go(to: index + 1) } else if auto { stop() } else { player.seek(to: .zero); player.pause(); emit() }
+        if auto && repeatMode == "one" { player.seek(to: .zero); player.play(); return }
+        if index + 1 < queue.count { go(to: index + 1) }
+        else if repeatMode == "all" && !queue.isEmpty { go(to: 0) }
+        else if auto { stop() } else { player.seek(to: .zero); player.pause(); emit() }
+    }
+
+    /// Shuffle on: this song first, then everything else in a random order. Off: back to the queue's own order
+    /// (songs added while shuffled stay, at the end). The song that's playing carries on either way.
+    private func toggleShuffle() {
+        shuffle.toggle()
+        guard index >= 0, index < queue.count else { return }
+        let cur = queue[index]
+        let id = { (t: [String: Any]) in (t["id"] as? String) ?? "" }
+        if shuffle {
+            unshuffled = queue
+            var rest = queue; rest.remove(at: index)
+            queue = [cur] + rest.shuffled(); index = 0
+        } else {
+            let base = unshuffled ?? queue
+            let known = Set(base.map(id))
+            queue = base + queue.filter { !known.contains(id($0)) }
+            index = queue.firstIndex { id($0) == id(cur) } ?? 0
+            unshuffled = nil
+        }
     }
 
     private func prev() {
@@ -120,6 +152,7 @@ final class MusicPlayer {
         player.replaceCurrentItem(with: nil)
         queue = []
         index = -1
+        shuffle = false; unshuffled = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         emit()
     }
