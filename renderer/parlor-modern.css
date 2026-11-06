@@ -37,13 +37,13 @@ html body .npf-side h2 { color: rgba(255,255,255,.72); font-weight: 500; font-si
 html body .npf-side h3 { color: rgba(255,255,255,.5); font-size: clamp(15px, 1.3vw, 20px); margin: 0 0 4vh; }
 
 /* the progress bar: a slim line with the times underneath */
-html body .npf-prog { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 0; color: rgba(255,255,255,.6); font-size: 13px; max-width: none; margin-bottom: 3vh; }
-html body .npf-prog .npf-bar { grid-column: 1 / -1; grid-row: 1; }
-html body .npf-prog > span:first-child { grid-row: 2; }
-html body .npf-prog > span:last-child { grid-row: 2; text-align: right; }
-html body .npf-bar { height: 6px; border: 0; border-radius: 3px; background: rgba(255,255,255,.22); box-shadow: none; transition: height .15s; }
-html body .npf-bar:hover, html body .npf-bar:focus { height: 10px; }
-html body .npf-bar div { background: rgba(255,255,255,.92); border-radius: 3px; }
+html body #npfull .npf-prog { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 0; color: rgba(255,255,255,.6); font-size: 13px; max-width: none; margin-bottom: 3vh; }
+html body #npfull .npf-prog .npf-bar { grid-column: 1 / -1; grid-row: 1; }
+html body #npfull .npf-prog > span:first-child { grid-row: 2; }
+html body #npfull .npf-prog > span:last-child { grid-row: 2; text-align: right; }
+html body #npfull .npf-bar { height: 6px; min-height: 0; padding: 0; border: 0; border-radius: 3px; background: rgba(255,255,255,.22); box-shadow: none; transition: height .15s; }
+html body #npfull .npf-bar:hover, html body #npfull .npf-bar:focus { height: 10px; }
+html body #npfull .npf-bar div { background: rgba(255,255,255,.92); border-radius: 3px; }
 
 /* the buttons: plain white symbols, no discs */
 html body .npf-ctrl { justify-content: space-between; gap: 6px; margin-bottom: 4vh; flex-wrap: wrap; }
