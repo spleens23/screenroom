@@ -86,6 +86,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return await Scanner.shared.scanAudio(cacheOnly: cacheOnly) { done, total in
                 self.emit("scan-progress", ["done": done, "total": total, "music": true])
             }
+        case "musicChanged":
+            return await Task.detached(priority: .utility) { Scanner.shared.musicChanged() }.value
         case "sha256":
             return sha256Hex(arg(a, 0) ?? "")
         case "statusBar":

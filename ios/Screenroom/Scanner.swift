@@ -25,6 +25,27 @@ final class Scanner {
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
+    /// A quick fingerprint of everything in the music folder (names, sizes and dates; nothing is opened), so
+    /// Parlor can tell whether anything was added, removed or changed since its last scan without rescanning.
+    func musicSignature() -> String {
+        var parts: [String] = []
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
+        if let e = st.fm.enumerator(at: st.music, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+            for case let u as URL in e {
+                let v = try? u.resourceValues(forKeys: Set(keys))
+                if v?.isDirectory == true { continue }
+                parts.append("\(u.path)|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
+            }
+        }
+        parts.sort()
+        return sha1Hex(parts.joined(separator: "\n"))
+    }
+
+    /// True when the music folder isn't how the last scan left it.
+    func musicChanged() -> Bool {
+        (st.readJson("scan-music-sig") as? [String: String])?["sig"] != musicSignature()
+    }
+
     private func stat(_ url: URL) -> (mtime: Double, size: Int64) {
         let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         return ((v?.contentModificationDate?.timeIntervalSince1970 ?? 0) * 1000, Int64(v?.fileSize ?? 0))
@@ -338,6 +359,7 @@ final class Scanner {
             }
         }
         try? st.writeJson("motion-report", motionNotes)
+        try? st.writeJson("scan-music-sig", ["sig": musicSignature()])
         return list.compactMap { next[$0.path] }
     }
 

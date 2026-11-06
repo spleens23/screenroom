@@ -322,20 +322,21 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body:not(#_) #npfull .npf-queue { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 -26px 10px; padding: 0 26px 8px; border-radius: 0; background: none;
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); }
   /* a moving cover: big, edge to edge across the top of the screen, melting into the controls below it */
-  html body:not(#_) #npfull .npf-motion { inset: 0 0 auto 0; height: 68vh; filter: none; transform: none;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,.55) 74%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,.55) 74%, transparent 100%); }
+  html body:not(#_) #npfull .npf-motion { inset: 0 0 auto 0; height: 86vh; filter: none; transform: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 58%, rgba(0,0,0,.6) 76%, rgba(0,0,0,.2) 90%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 58%, rgba(0,0,0,.6) 76%, rgba(0,0,0,.2) 90%, transparent 100%); }
   html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; }
   html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
   html body:not(#_) #npfull.has-motion.queue-open .npf-motion { opacity: .0; }
-  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(70px) saturate(1.5) brightness(.55); }
+  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(60px) saturate(1.7) brightness(.74); }
+  html body:not(#_) #npfull.has-motion::after { background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.28)); }
   /* -- Now Playing never shows a scroll bar (only the queue scrolls) -- */
   html body:not(#_) #npfull, html body:not(#_) #npfull .npf { overflow: hidden; scrollbar-width: none; }
   html body:not(#_) #npfull ::-webkit-scrollbar { display: none; }
   /* Apple Music's soft edge: the bottom of a moving cover blurs as it melts into the controls */
-  html body:not(#_) #npfull .npf-melt { position: absolute; z-index: 1; left: 0; right: 0; top: 34vh; height: 40vh; pointer-events: none; display: none;
-    backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%); }
+  html body:not(#_) #npfull .npf-melt { position: absolute; z-index: 1; left: 0; right: 0; top: 50vh; bottom: 0; pointer-events: none; display: none;
+    backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2); background: linear-gradient(transparent 20%, rgba(0,0,0,.14) 70%, rgba(0,0,0,.14));
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 45%, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 45%, #000 100%); }
   html body:not(#_) #npfull.has-motion:not(.queue-open) .npf-melt { display: block; }
 }
 /* a tablet held upright: the same layout with room to breathe */
@@ -346,7 +347,7 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body:not(#_) #npfull .npf-side h2 { font-size: 24px; }
   html body:not(#_) #npfull .npf-prog { font-size: 14px; margin: 30px 0 14px; }
   html body:not(#_) #npfull .npf-queue { margin: 0 calc(-1 * max(60px, calc((100vw - 640px) / 2))) 14px; padding: 0 max(60px, calc((100vw - 640px) / 2)) 8px; }
-  html body:not(#_) #npfull .npf-motion { height: 70vh; }
+  html body:not(#_) #npfull .npf-motion { height: 84vh; }
   html body:not(#_) #npfull .npf-qsheet { align-items: center; }
   html body:not(#_) #npfull .npf-qcard { width: min(440px, 100%); border-radius: 22px; padding: 24px 24px 22px; }
 }
@@ -362,7 +363,8 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; }
   html body:not(#_) #npfull.has-motion.queue-open .npf-motion { opacity: .35; }
   html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
-  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(70px) saturate(1.5) brightness(.55); }
+  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(60px) saturate(1.7) brightness(.74); }
+  html body:not(#_) #npfull.has-motion::after { background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.28)); }
 }
 
 /* ==== Encore: Parlor's own look, light and calm, after the old iTunes ===========================================
@@ -371,9 +373,9 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
 body.mat.parlor {
   --m-ink: #F3F2EF; --m-panel: #FFFFFF; --m-panel2: #ECEAE6; --m-line: #D9D6D0; --m-edge: #BDB8B0;
   --m-cream: #1E1A16; --m-text: #2B2621; --m-muted: #5E5750; --m-dim: #8C857D;
-  --m-amber: #E0841C; --m-amber2: #C46A0B; --m-on-amber: #FFFFFF;
-  --p-bg: #F3F2EF; --p-panel: #FFFFFF; --p-line: #D9D6D0; --p-text: #1E1A16; --p-muted: #8C857D; --p-blue: #E0841C; --p-blue2: #C46A0B; --p-stripe: #F6F5F2;
-  --bg: #F3F2EF; --bg2: #FFFFFF; --fg: #1E1A16; --muted: #8C857D; --accent: #E0841C;
+  --m-amber: var(--acc, #E0841C); --m-amber2: var(--acc2, #C46A0B); --m-on-amber: #FFFFFF;
+  --p-bg: #F3F2EF; --p-panel: #FFFFFF; --p-line: #D9D6D0; --p-text: #1E1A16; --p-muted: #8C857D; --p-blue: var(--m-amber); --p-blue2: var(--m-amber2); --p-stripe: #F6F5F2;
+  --bg: #F3F2EF; --bg2: #FFFFFF; --fg: #1E1A16; --muted: #8C857D; --accent: var(--m-amber);
   background: #F3F2EF; color: #1E1A16;
 }
 html:has(> body.mat.parlor) { background: #F3F2EF; }
@@ -386,7 +388,7 @@ body.mat.parlor #search { background: #fff; color: #1e1a16; border: 1px solid #b
 body.mat.parlor #search::placeholder { color: #9a938b; }
 body.mat.parlor #settings-btn, body.mat.parlor #parlor-btn { background: linear-gradient(#ffffff, #e9e7e3); color: #4a443e; border: 1px solid #bdb8b0; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
 body.mat.parlor .btn.secondary { color: #2b2621; background: linear-gradient(#ffffff, #eeece8); box-shadow: inset 0 0 0 1px #c3beb6, 0 1px 1px rgba(0,0,0,.06); }
-body.mat.parlor .btn.primary { background: linear-gradient(#eb9431, #d97b12); color: #fff; box-shadow: 0 1px 2px rgba(120,60,0,.25); }
+body.mat.parlor .btn.primary { background: linear-gradient(color-mix(in srgb, var(--m-amber) 82%, #fff), var(--m-amber)); color: #fff; box-shadow: 0 1px 2px rgba(120,60,0,.25); }
 body.mat.parlor .row h2, body.mat.parlor .page-title, body.mat.parlor .phead h1 { color: #1e1a16; }
 body.mat.parlor .pcard-t { color: #1e1a16; } body.mat.parlor .pcard-s, body.mat.parlor .pmeta { color: #8c857d; }
 body.mat.parlor .pcard .cover { box-shadow: 0 6px 16px rgba(40,30,20,.16), 0 1px 3px rgba(40,30,20,.12); }
@@ -394,17 +396,17 @@ body.mat.parlor table.songs, body.mat .modal-card.pmodal table.songs { backgroun
 body.mat.parlor table.songs th { background: linear-gradient(#fdfdfc, #e8e6e2); color: #5e5750; border-color: #cdc9c2; text-shadow: 0 1px #fff; }
 body.mat.parlor table.songs tbody tr:nth-child(even), body.mat .modal-card.pmodal table.songs tbody tr:nth-child(even) { background: #f6f5f2; }
 body.mat.parlor table.songs .t, body.mat.parlor table.songs .n, body.mat.parlor table.songs .g { color: #8c857d; }
-body.mat.parlor .srow:hover td { background: rgba(224,132,28,.08); }
-body.mat.parlor .srow.now td:first-child, body.mat.parlor .srow.now td:nth-child(2), body.mat.parlor .srow.now .nm-t { color: #c46a0b; }
-body.mat.parlor .rowbtn { color: #c46a0b; }
+body.mat.parlor .srow:hover td { background: color-mix(in srgb, var(--m-amber) 9%, transparent); }
+body.mat.parlor .srow.now td:first-child, body.mat.parlor .srow.now td:nth-child(2), body.mat.parlor .srow.now .nm-t { color: var(--m-amber2); }
+body.mat.parlor .rowbtn { color: var(--m-amber2); }
 body.mat .modal-card.pmodal { background: #fff; color: #1e1a16; border-color: #d9d6d0; }
 body.mat .modal-card.pmodal .close { background: #ecebe8; color: #4a443e; border: 0; }
 body.mat .modal-card.pmodal .palbum-info h1 { color: #1e1a16; }
-body.mat .modal-card.pmodal .partist { color: #c46a0b; }
+body.mat .modal-card.pmodal .partist { color: var(--m-amber2); }
 body.mat.parlor #npbar { background: linear-gradient(#fbfaf7, #eceae5); border-top: 1px solid #c9c5bd; box-shadow: 0 -2px 10px rgba(0,0,0,.08); color: #1e1a16; }
 body.mat.parlor .lcd { background: linear-gradient(#fefdf4, #ebe9d9); border: 1px solid #c9c5b2; color: #2b2621; box-shadow: inset 0 1px 3px rgba(0,0,0,.12); }
 body.mat.parlor .npb { background: linear-gradient(#ffffff, #e8e6e2); border: 1px solid #c3beb6; color: #3a342e; }
-body.mat.parlor .npb.big { background: linear-gradient(#eb9431, #d97b12); border-color: #c46a0b; color: #fff; }
+body.mat.parlor .npb.big { background: linear-gradient(color-mix(in srgb, var(--m-amber) 82%, #fff), var(--m-amber)); border-color: var(--m-amber2); color: #fff; }
 body.mat.parlor .poverlay-card, body.mat.parlor #settings .settings-card { background: #fff; color: #1e1a16; }
 
 @media (max-width: 600px) {
@@ -471,3 +473,51 @@ body.mat.parlor #pnav a { color: #3f3a34; }
 body.mat.parlor .am-hint, body.mat.parlor .hint, body.mat.parlor .muted { color: #5a534c; }
 body.mat .modal-card.pmodal .palbum-info, body.mat .modal-card.pmodal .pmeta { color: #4a443e; }
 @media (max-width: 600px) { html body.mat.parlor.parlor.parlor > #pnav a { color: #5e574f; } }
+
+/* ---- the accent colour chosen in Settings (Encore) ---- */
+body.parlor[data-accent="amber"]     { --acc: #E0841C; --acc2: #C46A0B; }
+body.parlor[data-accent="turquoise"] { --acc: #169C9C; --acc2: #0D7A7B; }
+body.parlor[data-accent="blue"]      { --acc: #2F7FD8; --acc2: #1F60AF; }
+body.parlor[data-accent="violet"]    { --acc: #8A5CD6; --acc2: #6A3FB5; }
+body.parlor[data-accent="rose"]      { --acc: #DB4F78; --acc2: #B5355B; }
+body.parlor[data-accent="red"]       { --acc: #D2443A; --acc2: #AA2E25; }
+body.parlor[data-accent="green"]     { --acc: #3B9A4C; --acc2: #2A7738; }
+body.parlor[data-accent="graphite"]  { --acc: #55524E; --acc2: #3B3835; }
+.accent-set { align-items: center; }
+.accent-swatches { justify-content: flex-end; max-width: 330px; }
+.accent-swatches .swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 0 0 1px rgba(0,0,0,.18); padding: 0; }
+.accent-swatches .swatch.on { box-shadow: 0 0 0 3px var(--fg, #1e1a16); }
+
+/* ---- iPad (a touch screen wider than a phone) ---- */
+@media (min-width: 601px) {
+  /* the top bar always fits: the mini player along the bottom already shows what's playing, and the search box
+     gives way before anything is pushed off the edge */
+  html body.ios-app.parlor.parlor.parlor #np-chip { display: none !important; }
+  html body.ios-app.parlor.parlor.parlor #nav { overflow: hidden; padding-right: max(24px, env(safe-area-inset-right)); }
+  html body.ios-app.parlor.parlor.parlor #nav #search { min-width: 120px; flex: 0 1 220px; }
+  html body.ios-app.parlor.parlor.parlor #nav .brand, html body.ios-app.parlor.parlor.parlor #settings-btn { flex-shrink: 0; }
+}
+@media (min-width: 601px) and (pointer: coarse) {
+  /* bigger album covers, filling the width evenly */
+  html body.parlor.parlor.parlor { --pcard-w: clamp(190px, calc((100vw - 8% - 3 * 22px) / 4.3), 270px); }
+  html body.parlor.parlor.parlor .grid.pgrid { grid-template-columns: repeat(auto-fill, minmax(var(--pcard-w), 1fr)); padding-right: 4%; gap: 28px 22px; }
+  html body.parlor.parlor.parlor .grid.pgrid .card.pcard { width: auto; }
+  html body.parlor.parlor.parlor .pcard .cover { width: 100% !important; height: auto !important; aspect-ratio: 1; }
+  html body.parlor.parlor.parlor .pcard-t { font-size: 16px; margin-top: 8px; }
+  html body.parlor.parlor.parlor .pcard-s { font-size: 14px; }
+  /* song lists: always the width of the screen, roomy rows, a big + */
+  html body.parlor.parlor.parlor table.songs { table-layout: fixed; font-size: 15px; }
+  html body.parlor.parlor.parlor table.songs td { max-width: none; padding-top: 11px; padding-bottom: 11px; }
+  html body.parlor.parlor.parlor table.songs th.n, html body.parlor.parlor.parlor table.songs td.n { width: 48px; }
+  html body.parlor.parlor.parlor table.songs th.t, html body.parlor.parlor.parlor table.songs td.t { width: 64px; }
+  html body.parlor.parlor.parlor table.songs th.x, html body.parlor.parlor.parlor table.songs td.x { width: 60px; text-align: center; padding: 0 6px; }
+  html body.parlor.parlor.parlor table.songs th.g, html body.parlor.parlor.parlor table.songs td.g { width: 16%; }
+}
+@media (min-width: 601px) and (max-width: 1100px) and (pointer: coarse) {
+  html body.parlor.parlor.parlor table.songs th.g, html body.parlor.parlor.parlor table.songs td.g { display: none; }
+}
+/* the + (add to a playlist) and ✕ in song lists: big enough for a finger */
+@media (pointer: coarse) {
+  html body.parlor.parlor.parlor .rowbtn { width: 44px; height: 40px; font-size: 28px; line-height: 1; font-weight: 400; border-radius: 12px; }
+  html body.parlor.parlor.parlor .palbum .rowbtn { width: 44px; height: 44px; }
+}

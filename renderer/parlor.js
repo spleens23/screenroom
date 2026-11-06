@@ -355,7 +355,7 @@ window.createParlor = function createParlor(ctx) {
       h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
   }
   function nameDialog(title, value, okLabel, onOk) {
-    const input = h('input', { type: 'text', class: 'pin-input', maxlength: '60', value: value || '', placeholder: 'Playlist name (or type it on your phone)' });
+    const input = h('input', { type: 'text', class: 'pin-input', maxlength: '60', value: value || '', placeholder: window.S_IOS ? 'Type a name here' : 'Playlist name (or type it on your phone)' });
     const ok = async () => { const v = input.value.trim(); if (!v) { input.focus(); return; } await onOk(v); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim() && !ctx.wantsKeyboard()) { e.preventDefault(); e.stopPropagation(); ok(); } });
     overlay('name', h('h2', {}, title), input,

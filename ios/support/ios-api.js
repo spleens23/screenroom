@@ -458,9 +458,10 @@
         rawTracks = await native('scanAudio', { cacheOnly: true }).catch(() => []);
         groupAlbums();
         // then a real look, in the background
-        // (Parlor uses what it found last time; it looks at the files again only from Settings › Rescan music,
+        // (Parlor uses what it found last time; it reads the files again only when the folder has changed, from Settings › Rescan music,
         // after an import, or the very first time)
-        Promise.all([scanFilms(), EDITION === 'music' && rawTracks.length ? null : scanMusic()]).then(async () => emit('library-updated', await snapshot())).catch(() => {});
+        (EDITION === 'music' && rawTracks.length ? native('musicChanged').catch(() => true) : Promise.resolve(true))
+          .then((changed) => Promise.all([scanFilms(), changed ? scanMusic() : null])).then(async () => emit('library-updated', await snapshot())).catch(() => {});
       })();
     }
     return ready;

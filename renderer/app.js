@@ -17,6 +17,12 @@
   // Parlor on a phone or iPad is a solo app: no profiles to switch between or manage.
   const SOLO = EDITION === 'music' && !!window.S_IOS;
   const THEME_NAME = EDITION === 'music' ? 'Encore' : 'Matinee';
+  // Parlor's accent colour (buttons, the playing song, the + buttons): kept on this device
+  const ACCENTS = [['amber', 'Amber', '#E0841C'], ['turquoise', 'Turquoise', '#169C9C'], ['blue', 'Blue', '#2F7FD8'], ['violet', 'Violet', '#8A5CD6'],
+    ['rose', 'Rose', '#DB4F78'], ['red', 'Red', '#D2443A'], ['green', 'Green', '#3B9A4C'], ['graphite', 'Graphite', '#55524E']];
+  const getAccent = () => { try { return localStorage.getItem('parlor-accent') || 'amber'; } catch { return 'amber'; } };
+  const applyAccent = (v) => { if (document.body) document.body.dataset.accent = v || getAccent(); };
+  if (EDITION === 'music') { if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent()); }
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
 
@@ -1963,9 +1969,12 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks${SOLO ? '' : ` for ${who}`}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own warm, dark concert-hall look" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks${SOLO ? '' : ` for ${who}`}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own light look, after the old iTunes" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
           [['2020s', THEME_NAME], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
+      EDITION === 'music' ? h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `The colour of the buttons, the playing song and the + buttons${S.theme === 'heirloom' ? ' (in the Encore theme; Heirloom keeps its blue)' : ''}.`)),
+        h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
+          style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))) : null,
       kids || SOLO ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
         h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })));
   }
