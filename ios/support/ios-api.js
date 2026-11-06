@@ -329,7 +329,7 @@
       suggestions: canManage() && !dirsOf(me.id).some((d) => d === '' || d === musicRel) ? [env.music] : [],
       scanning: !!musicScanning,
       albums: albums.map((a) => ({
-        key: a.key, title: a.title, artist: a.artist, year: a.year, genre: a.genre, art: a.art, added: a.added,
+        key: a.key, title: a.title, artist: a.artist, year: a.year, genre: a.genre, art: a.art, motion: a.motion || null, added: a.added,
         tracks: a.tracks, duration: a.duration, lossless: a.lossless, various: a.various, mine: owned.has(a.key),
         audience: canManage() ? audience(a) : [],
       })),
