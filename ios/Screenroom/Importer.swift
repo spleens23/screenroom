@@ -50,6 +50,16 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     func bringIn(_ url: URL, copy: Bool = false) -> Int {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        // Reading through a file coordinator downloads a file that's only in iCloud Drive (or another cloud
+        // provider) first; without it those songs and films were silently skipped.
+        var n = 0
+        var err: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [.withoutChanges], error: &err) { u in n = self.bringInNow(u, copy: copy) }
+        if let err { NSLog("Screenroom: couldn't read \(url.lastPathComponent): \(err)"); n = bringInNow(url, copy: copy) }
+        return n
+    }
+
+    private func bringInNow(_ url: URL, copy: Bool) -> Int {
         var isDir: ObjCBool = false
         guard st.fm.fileExists(atPath: url.path, isDirectory: &isDir) else { return 0 }
         if isDir.boolValue { return bringInFolder(url) }

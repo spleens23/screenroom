@@ -181,7 +181,11 @@
   const albumKeyOf = (artist, album) => `${norm(artist)}|${norm(album)}`;
   const dirOf = (p) => p.replace(/\/[^/]*$/, '');
   const baseOf = (p) => p.replace(/^.*\//, '');
-  const under = (file, dir) => file !== dir && file.startsWith(dir.replace(/\/$/, '') + '/');
+  // On a real iPhone / iPad the app's folder shows up both as /var/mobile/… and /private/var/mobile/… (one is a
+  // link to the other), so songs found under one never matched folders recorded under the other and Parlor stayed
+  // empty. (The simulator has no such link.) Paths are compared in one form.
+  const np = (p) => String(p || '').replace(/^\/private\/var\//, '/var/');
+  const under = (file, dir) => { const f = np(file), d = np(dir).replace(/\/$/, ''); return f !== d && f.startsWith(d + '/'); };
   function tagOf(tags, ...keys) {
     for (const k of keys) for (const tk of Object.keys(tags || {})) if (tk.toLowerCase() === k) { const v = String(tags[tk]).trim(); if (v) return v; }
     return '';
@@ -281,7 +285,7 @@
   const savePar = () => save('parlor', pstore);
   // Folders are stored relative to Documents ("Music", "Music/Jazz"), since the app's folder moves between installs.
   const absDir = (rel) => (rel === '' ? env.docs : `${env.docs}/${rel}`);
-  const relDir = (abs) => (abs === env.docs ? '' : abs.startsWith(env.docs + '/') ? abs.slice(env.docs.length + 1) : abs);
+  const relDir = (abs) => { const a = np(abs), d = np(env.docs); return a === d ? '' : a.startsWith(d + '/') ? a.slice(d.length + 1) : abs; };
   // Every grown-up profile has Screenroom's whole folder on the iPad unless it took it away, so songs added from
   // Files, AirDrop or the import button show up for whoever is using the iPad, wherever in the folder they landed.
   const dirsOf = (pid) => {
@@ -292,7 +296,7 @@
     return own.includes('') ? own : ['', ...own];
   };
   const owners = (album) => pall().map((p) => p.id)
-    .filter((id) => dirsOf(id).some((d) => album.dirs.some((ad) => ad === absDir(d) || under(ad, absDir(d)))));
+    .filter((id) => dirsOf(id).some((d) => album.dirs.some((ad) => np(ad) === np(absDir(d)) || under(ad, absDir(d)))));
   const canSee = (pid, album) => owners(album).includes(pid) || pOf(pid).shared.includes(album.key);
   const audience = (album) => { const s = new Set(owners(album)); for (const [id, p] of Object.entries(pstore.profiles || {})) if ((p.shared || []).includes(album.key)) s.add(id); return [...s]; };
   const prof = () => pget(currentId) || { id: 'main', kids: false };
