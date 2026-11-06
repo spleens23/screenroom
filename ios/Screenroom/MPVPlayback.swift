@@ -99,6 +99,10 @@ final class MPVPlayback: NSObject {
             // tracking) on AirPods and folds it down to stereo for other headphones and speakers; "exclusive"
             // makes Screenroom the app that's playing (Control Center, Spatial Audio) instead of mixing with others
             ("audio-channels", "auto"), ("audio-exclusive", "yes"), ("demuxer-max-bytes", "150MiB"),
+            // the sound goes out through AVFoundation (like Apple's own player), which is what turns 5.1 / 7.1 into
+            // Spatial Audio with head tracking on AirPods and shows "Multichannel" in Control Center; the older
+            // audio-unit route only ever offered stereo there
+            ("ao", "avfoundation,audiounit"),
         ]
         for (k, v) in opts { mpv_set_option_string(h, k, v) }
         #if DEBUG

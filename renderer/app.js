@@ -277,6 +277,13 @@
     recommendSheet({ kind: e.kind, key: rkey(e), name: e.name, entry: e });
   } }, '→ Recommend') : null);
 
+  // the "i" in a ring on More Info (drawn, so the letter sits exactly in the middle of its circle)
+  function infoIcon() {
+    const s = h('span', { class: 'i-info', 'aria-hidden': 'true' });
+    s.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="10.8" y="10.2" width="2.4" height="7.4" rx="1.2" fill="currentColor"/><circle cx="12" cy="6.9" r="1.45" fill="currentColor"/></svg>';
+    return s;
+  }
+
   // ---- movie night vote ------------------------------------------------------------------------------
   // Pick a few films, everyone votes (on the TV or on their phone through the phone remote), the winner plays.
   let vote = null; // { voters: [pid], cands: [entry key], votes: { pid: key }, tvVoter, phase: 'vote'|'reveal', winner, tie }
@@ -634,7 +641,7 @@
           h('p', {}, hero.description),
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playEntry(fullEntry(hero.key)) }, playLabel(fullEntry(hero.key))),
-            h('button', { class: 'btn secondary', onclick: () => openEntry(hero.key) }, h('span', { class: 'i-info' }, 'i'), 'More Info')))));
+            h('button', { class: 'btn secondary', onclick: () => openEntry(hero.key) }, infoIcon(), 'More Info')))));
     }
     frag.push(h('div', { class: 'rows' }, rows.map(([name, list]) =>
       h('section', { class: 'row' }, h('h2', {}, name),
@@ -669,7 +676,7 @@
     drawProfileButton();
     drawBattery(S.battery);
     const vb = $('#vote-btn');
-    if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; }
+    if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = isIOS() || mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; } // (no movie-night vote on iPhone / iPad: it's for the TV)
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
     if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }

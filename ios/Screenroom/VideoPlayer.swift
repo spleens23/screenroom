@@ -209,7 +209,12 @@ final class VideoPlayback: NSObject {
                 audioGroup = group
                 var pick: AVMediaSelectionOption?
                 if let n = audioTrack, n >= 1, n <= group.options.count { pick = group.options[n - 1] }
-                if pick == nil { pick = group.options.first { matches($0, audioLang) } }
+                // in your language, the richest soundtrack first: Dolby Digital Plus (which carries Atmos), then
+                // Dolby Digital 5.1, then stereo AAC — surround is what lets AirPods play Spatial Audio
+                if pick == nil {
+                    let mine = group.options.filter { matches($0, audioLang) }
+                    pick = (mine.isEmpty ? group.options : mine).max { surroundRank($0) < surroundRank($1) }
+                }
                 if let p = pick { pi.select(p, in: group) }
             }
             if let group = try? await asset.loadMediaSelectionGroup(for: .legible) {
@@ -221,6 +226,15 @@ final class VideoPlayback: NSObject {
                 }
             }
         }
+    }
+
+    private func surroundRank(_ o: AVMediaSelectionOption) -> Int {
+        let fourCCs = o.mediaSubTypes.map { $0.uint32Value }
+        func cc(_ s: String) -> UInt32 { s.utf8.reduce(0) { $0 << 8 | UInt32($1) } }
+        if fourCCs.contains(cc("ec-3")) { return 3 }
+        if fourCCs.contains(cc("ac-3")) { return 2 }
+        if fourCCs.contains(cc("alac")) || fourCCs.contains(cc("lpcm")) { return 1 }
+        return 0
     }
 
     private func matches(_ o: AVMediaSelectionOption, _ lang: String) -> Bool {

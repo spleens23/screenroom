@@ -180,8 +180,8 @@ body.idle, body.idle * { cursor: none !important; }
 .linkish { background: none; border: 0; color: #6fa8ff; cursor: pointer; font: inherit; padding: 0; }
 .linkish:focus { outline: 2px solid #fff; }
 /* A drawn info icon (a font symbol can be missing on a bare Linux box) */
-.i-info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-right: .45em;
-  border: 2px solid currentColor; border-radius: 50%; font-size: .8em; font-weight: 800; font-style: normal; line-height: 1; vertical-align: -0.1em; }
+.i-info { display: inline-flex; width: 1.15em; height: 1.15em; margin-right: .45em; vertical-align: -0.18em; flex: 0 0 auto; }
+.i-info svg { width: 100%; height: 100%; display: block; }
 /* No scrollbars on the TV */
 body.tv ::-webkit-scrollbar { display: none; }
 body.tv { scrollbar-width: none; }

@@ -180,3 +180,23 @@ body.heir .hero .meta { color: #e8f0f7; }
 body.heir.navmode #nav button:focus, body.heir.navmode #nav a:focus, body.heir.navmode #nav input:focus { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(29,90,140,.45); border-radius: 8px; }
 body.heir .srow:focus td *, body.heir.navmode .srow:focus td * { color: #fff !important; }
 body.heir.navmode .close:focus, body.heir.navmode .np-close:focus { outline: 3px solid var(--h-edge); outline-offset: 3px; }
+
+/* ---- phones (an iPhone held upright): the bar becomes two rows, the feature's words fit the width ---- */
+@media (max-width: 600px) {
+  body.heir #nav, body.heir #nav.solid { height: auto; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 8px) 14px 10px; }
+  body.heir .brand { font-size: 17px; letter-spacing: 2px; flex: 1 1 auto; order: 0; }
+  body.heir .nav-right { display: contents; }
+  body.heir #battery, body.heir #vote-btn, body.heir #parlor-btn, body.heir #profile-btn, body.heir #settings-btn { order: 1; flex: 0 0 auto; }
+  body.heir #nav nav:not(#pnav) { order: 2; flex: 0 0 auto; gap: 2px; }
+  body.heir #nav nav:not(#pnav) a { padding: 6px 10px; font-size: 14px; }
+  body.heir #nav nav a[data-view="4k"], body.heir #nav nav a[data-view="hd"], body.heir #nav nav a[data-view="sd"] { display: none; }
+  body.heir #search { display: block; order: 3; flex: 1 1 0; min-width: 70px; width: auto; max-width: none; padding: 6px 10px; font-size: 14px; }
+  body.heir #main { padding-top: calc(env(safe-area-inset-top) + 50px); padding-bottom: env(safe-area-inset-bottom); }
+  body.heir .hero-info { left: 16px !important; right: 16px; max-width: none !important; }
+  body.heir .hero h1 { font-size: 30px; }
+  body.heir .hero p { font-size: 15px; -webkit-line-clamp: 3; }
+  body.heir .hero .btn { white-space: nowrap; }
+  body.heir { --card-w: 128px; }
+  .modal, #settings, .sheet { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+}

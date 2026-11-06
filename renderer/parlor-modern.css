@@ -1,0 +1,150 @@
+/* ==== Parlor, made calmer: covers only, an Apple Music–style Now Playing, and a roomy phone layout ====
+   Loaded after both themes (Matinee and Heirloom), so it applies to either. Selectors start with "html body"
+   to sit above the themes' own Parlor rules. */
+
+.tab-ico { display: none; }
+
+/* ---- album cards: just the cover, softly rounded ---- */
+html body.parlor .pcard .cover { border-radius: 8px; }
+html body.parlor .pcard .cover .gloss { display: none; }
+
+/* ---- Now Playing ------------------------------------------------------------------------------------------ */
+html body #npfull { color: #fff; background: #111; }
+html body #npfull::after { background: linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.42)); }
+html body .npf-bg { inset: -15%; filter: blur(70px) saturate(1.6) brightness(.72); opacity: 1; transform: scale(1.15); }
+html body .npf-bg.gen { filter: blur(40px) brightness(.8); }
+
+/* the album's moving cover, behind everything: fills the screen on a TV or computer (dimmed), the top of the
+   screen on a phone, fading into the colours below */
+html body .npf-motion { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
+  opacity: 0; transition: opacity .8s ease; filter: brightness(.38) saturate(.9) blur(2px); transform: scale(1.03); }
+html body .npf-motion.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { html body .npf-motion { display: none; } }
+
+html body .npf { grid-template-columns: minmax(0, min(62vh, 560px)) minmax(0, 540px); justify-content: center; gap: 6vw; padding: 7vh 6vw; }
+html body .npf-stage { justify-content: center; perspective: none; }
+html body #npfull .cover.huge { width: 100%; border-radius: 14px; box-shadow: 0 28px 60px rgba(0,0,0,.45); background: rgba(255,255,255,.08);
+  transition: transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .55s; }
+html body #npfull .cover.huge .gloss { display: none; }
+html body #npfull.paused .cover.huge { transform: scale(.86); box-shadow: 0 14px 30px rgba(0,0,0,.35); }
+/* with a moving cover the still square steps back: the motion behind is the picture */
+html body #npfull.has-motion .cover.huge { box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+
+html body .npf-side { padding-left: 0; }
+html body .npf-from { color: rgba(255,255,255,.62); font-size: 13px; letter-spacing: .8px; margin-bottom: 18px; }
+html body .npf-side h1 { color: #fff; font-family: inherit; font-weight: 700; text-shadow: none; font-size: clamp(26px, 2.6vw, 44px); margin: 0 0 6px; }
+html body .npf-side h2 { color: rgba(255,255,255,.72); font-weight: 500; font-size: clamp(18px, 1.7vw, 28px); margin: 0 0 2px; }
+html body .npf-side h3 { color: rgba(255,255,255,.5); font-size: clamp(15px, 1.3vw, 20px); margin: 0 0 4vh; }
+
+/* the progress bar: a slim line with the times underneath */
+html body .npf-prog { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 0; color: rgba(255,255,255,.6); font-size: 13px; max-width: none; margin-bottom: 3vh; }
+html body .npf-prog .npf-bar { grid-column: 1 / -1; grid-row: 1; }
+html body .npf-prog > span:first-child { grid-row: 2; }
+html body .npf-prog > span:last-child { grid-row: 2; text-align: right; }
+html body .npf-bar { height: 6px; border: 0; border-radius: 3px; background: rgba(255,255,255,.22); box-shadow: none; transition: height .15s; }
+html body .npf-bar:hover, html body .npf-bar:focus { height: 10px; }
+html body .npf-bar div { background: rgba(255,255,255,.92); border-radius: 3px; }
+
+/* the buttons: plain white symbols, no discs */
+html body .npf-ctrl { justify-content: space-between; gap: 6px; margin-bottom: 4vh; flex-wrap: wrap; }
+html body .npf-ctrl .npb { width: 56px; height: 56px; border: 0; border-radius: 50%; background: transparent; color: #fff; box-shadow: none; }
+html body .npf-ctrl .npb:hover { background: rgba(255,255,255,.1); filter: none; }
+html body .npf-ctrl .npb .ico { width: 30px; height: 30px; }
+html body .npf-ctrl .npb .ico.skip { width: 30px; height: 30px; opacity: .85; }
+html body .npf-ctrl .npb.big { width: 76px; height: 76px; background: transparent; }
+html body #npfull .npf-ctrl .npb, html body #npfull .npf-ctrl .npb.big { color: #fff; background: transparent; border: 0; box-shadow: none; }
+html body #npfull .npf-ctrl .npb svg { fill: currentColor; }
+html body .npf-ctrl .npb.big .ico { width: 46px; height: 46px; }
+html body .npf-ctrl .npb.vol { width: 40px; height: 40px; font-size: 22px; opacity: .8; }
+html body .npf-vol { color: rgba(255,255,255,.65); }
+html body .np-close { background: rgba(255,255,255,.14); border: 0; color: #fff; box-shadow: none; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+html body .upnext { border: 0; border-radius: 14px; background: rgba(255,255,255,.08); box-shadow: none; overflow: hidden; }
+html body .upnext-t { background: none; border: 0; color: rgba(255,255,255,.6); text-transform: uppercase; letter-spacing: .8px; font-size: 12px; padding: 12px 14px 6px; }
+html body .upnext-i, html body .upnext-i:nth-child(odd) { background: none; color: #fff; padding: 10px 14px; }
+html body .upnext-i small { color: rgba(255,255,255,.55); }
+html body .upnext-i:hover { background: rgba(255,255,255,.08); }
+html body .upnext-i:focus { background: rgba(255,255,255,.18); color: #fff; }
+html body .npf-caption b { color: #fff; } html body .npf-caption span { color: rgba(255,255,255,.7); }
+html body #npfull.big .npf-stage { transform: none; }
+html body #npfull.big .cover.huge { width: min(74vh, 60vw); }
+html body:not(.navmode) #npfull .npb:focus, html body:not(.navmode) #npfull .npf-bar:focus, html body:not(.navmode) #npfull .np-close:focus { outline: none; }
+body.navmode #npfull .npb:focus, body.navmode #npfull .npf-bar:focus, body.navmode #npfull .np-close:focus { outline: 3px solid #fff; outline-offset: 3px; }
+
+/* ==== phones (an iPhone held upright) ===================================================================== */
+@media (max-width: 600px) {
+  /* -- the top: wordmark and round buttons, then the search box; the sections become a tab bar at the bottom -- */
+  html body.parlor #nav, html body.parlor #nav.solid { height: auto; flex-wrap: wrap; row-gap: 10px; column-gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 10px) 18px 12px; }
+  html body.parlor .brand { flex: 1 1 auto; order: 0; font-size: 26px; }
+  html body.parlor .nav-right { display: contents; }
+  html body.parlor #battery, html body.parlor #parlor-btn, html body.parlor #profile-btn, html body.parlor #settings-btn { order: 1; flex: 0 0 auto; }
+  html body.parlor #nav #search { display: block; order: 3; flex: 1 1 100%; width: 100%; max-width: none; padding: 10px 14px; font-size: 15px; border-radius: 12px; }
+  html body.parlor #nav #pnav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; order: 9; display: flex; justify-content: space-around; gap: 0;
+    padding: 6px 4px calc(env(safe-area-inset-bottom) + 4px); background: rgba(22,17,13,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,.08); border-radius: 0; box-shadow: none; overflow: visible; margin: 0; }
+  html body.heir.parlor #nav #pnav { background: rgba(232,240,248,.95); border-top: 1px solid #b8c8d8; }
+  html body.parlor #nav #pnav a { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; font-size: 10.5px; font-weight: 600;
+    background: none; box-shadow: none; border-radius: 0; color: rgba(243,233,220,.55); text-shadow: none; }
+  html body.heir.parlor #nav #pnav a { color: #6a7d90; }
+  html body.parlor #nav #pnav a.active { background: none; box-shadow: none; color: var(--m-amber, #f0a73a); }
+  html body.heir.parlor #nav #pnav a.active { color: #2f74b5; }
+  html body.parlor #nav #pnav .tab-ico { display: block; width: 25px; height: 25px; }
+  html body.parlor #main { padding-top: calc(env(safe-area-inset-top) + 64px); padding-bottom: calc(env(safe-area-inset-bottom) + 150px); }
+
+  /* -- pages: big titles, two covers to a row, nothing squeezed -- */
+  html body.parlor .page-title, html body.parlor .phead h1 { font-size: 32px; }
+  html body.parlor .pgrid, html body.parlor .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 22px 16px; padding: 0 18px; }
+  html body.parlor .strip { gap: 14px; padding-left: 18px; padding-right: 18px; }
+  html body.parlor .strip .pcard { width: 44vw; flex: 0 0 44vw; }
+  html body.parlor .pcard-t { font-size: 14px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body.parlor .pcard-s { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* -- the mini player: a card floating above the tab bar -- */
+  html body.parlor #npbar { left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); border-radius: 14px; padding: 8px 10px; height: auto; gap: 10px;
+    background: rgba(48,40,34,.96); box-shadow: 0 10px 30px rgba(0,0,0,.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  html body.heir.parlor #npbar { background: rgba(250,252,255,.97); }
+  html body.parlor #npbar .npb-ctrl .npb[data-b="rew"], html body.parlor #npbar .npb-ctrl .npb[data-b="fwd"], html body.parlor #npbar .npb-ctrl .npb[data-b="prev"] { display: none; }
+  html body.parlor #npbar .npb-art { order: 0; flex: 0 0 auto; }
+  html body.parlor #npbar .npb-art .cover { width: 44px; height: 44px; border-radius: 6px; }
+  html body.parlor #npbar .lcd { order: 1; flex: 1 1 auto; min-width: 0; height: auto; margin: 0; padding: 0; text-align: left; border: 0; background: none; box-shadow: none; }
+  html body.parlor #npbar .lcd-t { font-size: 15px; font-weight: 600; color: inherit; }
+  html body.parlor #npbar .lcd-s { font-size: 13px; opacity: .7; color: inherit; }
+  html body.parlor #npbar .lcd-p { display: none; }
+  html body.parlor #npbar .npb-ctrl { order: 2; gap: 2px; }
+  html body.parlor #npbar .npb { width: 42px; height: 42px; border: 0; background: transparent; box-shadow: none; color: inherit; }
+  html body.parlor #npbar .npb .ico { width: 24px; height: 24px; }
+
+  /* -- an album: one column, the cover centred, Play and Shuffle side by side -- */
+  html body.parlor #modal { padding: 0; align-items: stretch; }
+  html body.parlor #modal .modal-card { width: 100%; min-height: 100%; border-radius: 0; padding: calc(env(safe-area-inset-top) + 56px) 0 calc(env(safe-area-inset-bottom) + 30px); }
+  html body.parlor .palbum-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: 0 22px; }
+  html body.parlor .palbum-head .cover.big { width: min(72vw, 330px); border-radius: 10px; -webkit-box-reflect: unset; }
+  html body.parlor .palbum-info { width: 100%; }
+  html body.parlor .palbum-info h1 { font-size: 24px; margin: 0 0 4px; }
+  html body.parlor .palbum-info .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+  html body.parlor .palbum-info .btns .btn { justify-content: center; padding: 12px 10px; }
+  html body.parlor .palbum table, html body.parlor .palbum .songs { margin: 22px 0 0; width: 100%; }
+
+  /* -- Now Playing: one column, the cover big at the top, like Apple Music -- */
+  html body .npf { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
+    padding: calc(env(safe-area-inset-top) + 64px) 26px calc(env(safe-area-inset-bottom) + 24px); }
+  html body .npf-stage { margin: 2vh auto 4vh; width: min(84vw, 46vh); }
+  html body .npf-from { text-align: center; margin: 0 0 6px; }
+  html body .npf-side h1 { font-size: 22px; }
+  html body .npf-side h2 { font-size: 18px; }
+  html body .npf-side h3 { display: none; }
+  html body .npf-prog { margin: 22px 0 18px; }
+  html body .npf-ctrl { justify-content: space-evenly; margin-bottom: 26px; }
+  /* (no 10-second skips or volume buttons on a phone: its own volume buttons do that) */
+  html body .npf-ctrl .npb[data-b="rew"], html body .npf-ctrl .npb[data-b="fwd"], html body .npf-ctrl .npb.vol, html body .npf-vol { display: none; }
+  html body .npf-ctrl .npb .ico { width: 34px; height: 34px; }
+  html body .npf-ctrl .npb.big .ico { width: 52px; height: 52px; }
+  html body .npf-top { top: calc(env(safe-area-inset-top) + 10px); right: 16px; left: 16px; justify-content: space-between; }
+  html body .npf-top .np-big { display: none; }
+  html body .np-close { width: 40px; height: 40px; font-size: 16px; margin-left: auto; }
+  /* a moving cover fills the top of the screen edge to edge and melts into the controls below */
+  html body .npf-motion { inset: 0 0 auto 0; height: min(118vw, 62vh); filter: none; transform: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); }
+  html body #npfull.has-motion .npf-stage { visibility: hidden; height: min(118vw, 62vh); margin: calc(-1 * (env(safe-area-inset-top) + 64px)) -26px 0; width: auto; }
+}

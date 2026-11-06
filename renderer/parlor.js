@@ -68,9 +68,9 @@ window.createParlor = function createParlor(ctx) {
     requestAnimationFrame(() => { const p = v.play && v.play(); if (p && p.catch) p.catch(() => {}); });
     return v;
   }
-  /** Album card artwork: the sleeve, with the record tucked behind it (it slides out when the card is chosen). */
+  /** Album card artwork: just the cover (Parlor dropped the record-sleeve look). */
   function sleeve(a) {
-    return h('div', { class: 'sleeve' }, vinyl(a, 'peek'), cover(a));
+    return cover(a);
   }
 
   async function load() {
@@ -463,10 +463,11 @@ window.createParlor = function createParlor(ctx) {
     lastTrack = t.id; lastPaused = s.paused;
   }
 
-  // ---- the full Now Playing screen: the record on the turntable ----------------------------------------
-  // Left: the sleeve (tilted, glossy) with the record slid out and spinning while it plays.
-  // Right: song, artist, album, progress, big controls and Up Next. After a while without a key press the
-  // controls fade away and the cover fills the screen (any key brings them back) — "big cover" mode.
+  // ---- the full Now Playing screen ---------------------------------------------------------------------
+  // The cover (or the album's moving cover) over a soft wash of its own colours, the song, a slim progress
+  // bar and the controls, like Apple Music. On a phone it's one column; on a TV or computer the cover sits
+  // beside the controls. After a while without a key press the controls fade away and the cover fills the
+  // screen (any key brings them back) — "big cover" mode.
   const full = h('div', { id: 'npfull', hidden: true });
   const F = {
     bg: h('div', { class: 'npf-bg' }),
@@ -543,7 +544,11 @@ window.createParlor = function createParlor(ctx) {
       F.bg.style.backgroundImage = a.art ? `url("${fileUrl(a.art)}")` : '';
       F.bg.style.setProperty('--h', hue(a.key || a.title));
       F.bg.classList.toggle('gen', !a.art);
-      F.stage.replaceChildren(h('div', { class: 'turntable' }, vinyl(a, 'out'), cover(a, 'huge')));
+      F.stage.replaceChildren(cover(a, 'huge'));
+      // a moving cover also fills the top of the screen behind everything, fading into the controls
+      if (F.mbg) { F.mbg.remove(); F.mbg = null; }
+      full.classList.toggle('has-motion', !!a.motion);
+      if (a.motion) { F.mbg = motion(a); F.mbg.classList.add('npf-motion'); F.bg.after(F.mbg); }
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
