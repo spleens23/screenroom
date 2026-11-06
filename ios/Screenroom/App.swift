@@ -46,9 +46,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
-        // Finder, the Files app or AirDrop may have added something while Screenroom was away.
-        _ = screen.importer.tidyInbox()
-        screen.filesChanged()
+        // Finder, the Files app or AirDrop may have added something while Screenroom was away. Parlor looks again
+        // only when something actually arrived (otherwise it waits for Settings › Rescan music).
+        let n = screen.importer.tidyInbox()
+        if !isParlorApp || n > 0 { screen.filesChanged() }
     }
 }
 

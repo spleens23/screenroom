@@ -1963,10 +1963,10 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own warm, dark concert-hall look" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks${SOLO ? '' : ` for ${who}`}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own warm, dark concert-hall look" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
           [['2020s', THEME_NAME], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
-      kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
+      kids || SOLO ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
         h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })));
   }
 

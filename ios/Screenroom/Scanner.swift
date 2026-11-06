@@ -9,7 +9,7 @@ final class Scanner {
     static let shared = Scanner()
     private let st = Storage.shared
     private let videoCacheName = "scan-films-5"
-    private let audioCacheName = "scan-music-2"
+    private let audioCacheName = "scan-music-3"
     private var videoBusy = false
     private var audioBusy = false
 
@@ -300,7 +300,14 @@ final class Scanner {
             let dir = url.deletingLastPathComponent().path
             if dirCover[dir] == nil { dirCover[dir] = folderCover(url.deletingLastPathComponent()) }
             entry["folderArt"] = dirCover[dir] ?? nil
-            if dirMotion[dir] == nil { dirMotion[dir] = folderMotion(url.deletingLastPathComponent()) }
+            if dirMotion[dir] == nil {
+                // in the album's folder, or the one above it (an album with Disc 1 / Disc 2 folders)
+                let here = url.deletingLastPathComponent(), up = here.deletingLastPathComponent()
+                var m = folderMotion(here)
+                if m == nil, up.standardizedFileURL.path != st.music.standardizedFileURL.path, st.isInside(up.path, st.music) { m = folderMotion(up) }
+                if let p = m { m = await playableMotion(p) }
+                dirMotion[dir] = m
+            }
             entry["folderMotion"] = dirMotion[dir] ?? nil
             if let cover = entry.removeValue(forKey: "_cover") as? Data, dirArt[dir] == nil, let img = UIImage(data: cover) {
                 let dest = st.art.appendingPathComponent("\(sha1Hex(st.relativeToDocs(url.deletingLastPathComponent())).prefix(16))-album.jpg")
@@ -395,6 +402,29 @@ final class Scanner {
     func folderMotion(_ dir: URL) -> String? {
         guard let names = try? st.fm.contentsOfDirectory(atPath: dir.path) else { return nil }
         return names.first { !$0.hasPrefix(".") && isMotionCover($0) }.map { dir.appendingPathComponent($0).path }
+    }
+
+    /// A moving cover the phone can actually play. If Apple's player refuses the file as it is (most often HEVC
+    /// labelled "hev1"), a rewrapped copy is made once in the art folder and used instead; the original is left
+    /// alone. If even that can't be played, the album just shows its still cover.
+    func playableMotion(_ path: String) async -> String? {
+        let src = URL(fileURLWithPath: path)
+        let s = stat(src)
+        let fixed = st.art.appendingPathComponent("\(sha1Hex(st.relativeToDocs(src)).prefix(16))-\(Int(s.mtime))-motion.mp4")
+        if st.fm.fileExists(atPath: fixed.path) { return fixed.path }
+        if await canPlay(src) { return path }
+        let made = await Task.detached(priority: .utility) { FFProbe.rewrapForApple(src, to: fixed) }.value
+        if made, await canPlay(fixed) { return fixed.path }
+        try? st.fm.removeItem(at: fixed)
+        NSLog("Parlor: the moving cover %@ can't be played on this device", src.lastPathComponent)
+        return nil
+    }
+
+    private func canPlay(_ url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard (try? await asset.load(.isPlayable)) == true,
+              let track = try? await asset.loadTracks(withMediaType: .video).first else { return false }
+        return (try? await track.load(.isPlayable)) == true
     }
 
     /// The album's cover picture in its folder: cover.jpg, folder.jpg, front.jpg … (like lib/music.js).

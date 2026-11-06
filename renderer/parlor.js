@@ -67,7 +67,10 @@ window.createParlor = function createParlor(ctx) {
     v.muted = true; v.defaultMuted = true; v.autoplay = true;
     v.addEventListener('playing', () => v.classList.add('on'));
     v.addEventListener('error', () => v.remove());
-    // (some browsers want play() asked for once the video is in the page)
+    // Ask to play straight away too: this runs inside the tap that opened the album, and a tap lets a video
+    // start even when the phone holds back autoplay (Low Power Mode). Then again once it's in the page.
+    try { const p0 = v.play(); if (p0 && p0.catch) p0.catch(() => {}); } catch {}
+    v.addEventListener('canplay', () => { if (v.paused) { const p1 = v.play(); if (p1 && p1.catch) p1.catch(() => {}); } }, { once: true });
     requestAnimationFrame(() => { const p = v.play && v.play(); if (p && p.catch) p.catch(() => {}); });
     return v;
   }
@@ -507,6 +510,8 @@ window.createParlor = function createParlor(ctx) {
   // beside the controls. After a while without a key press the controls fade away and the cover fills the
   // screen (any key brings them back) — "big cover" mode.
   const full = h('div', { id: 'npfull', hidden: true });
+  // (no volume buttons on a phone or iPad: it has its own)
+  if (window.S_IOS) document.body.classList.add('ios-app');
   const F = {
     bg: h('div', { class: 'npf-bg' }),
     stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: window.S_IOS ? '' : 'Big cover', onclick: () => { if (!window.S_IOS) setBig(!full.classList.contains('big')); } }),

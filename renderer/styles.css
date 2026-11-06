@@ -979,3 +979,5 @@ body.big .lic-text { font-size: 16px; }
 .sheet-ghost.go { transform: translateY(105vh); }
 .sheet-dim { position: fixed; inset: 0; z-index: 69; background: rgba(0,0,0,.66); transition: opacity .34s ease-out; pointer-events: none; }
 html.np-open, html.np-open body { overflow: hidden; }
+/* a hidden button stays hidden whatever a theme says about how it's shown */
+#profile-btn[hidden], #battery[hidden], #vote-btn[hidden] { display: none !important; }

@@ -88,6 +88,51 @@ enum FFProbe {
         return r
     }
 
+    /// Rewrap a moving cover so Apple's player will take it: the picture is copied as it is (no re-encoding) into
+    /// a new MP4 whose label says "hvc1" for HEVC (or "avc1" for H.264). Many tools label HEVC "hev1", which
+    /// iPhones and iPads refuse to play even though they can decode it. Sound, if any, is left out.
+    static func rewrapForApple(_ src: URL, to dest: URL) -> Bool {
+        guard let ic = open(src) else { return false }
+        var inCtx: UnsafeMutablePointer<AVFormatContext>? = ic
+        defer { avformat_close_input(&inCtx) }
+        let vi = av_find_best_stream(ic, AVMEDIA_TYPE_VIDEO, -1, -1, nil, 0)
+        guard vi >= 0, let ist = ic.pointee.streams[Int(vi)], let ipar = ist.pointee.codecpar else { return false }
+        let cid = ipar.pointee.codec_id
+        guard cid == AV_CODEC_ID_HEVC || cid == AV_CODEC_ID_H264 else { return false }
+        let tmp = dest.deletingLastPathComponent().appendingPathComponent(".\(dest.lastPathComponent).part")
+        try? FileManager.default.removeItem(at: tmp)
+        var ocOpt: UnsafeMutablePointer<AVFormatContext>?
+        guard avformat_alloc_output_context2(&ocOpt, nil, "mp4", tmp.path) >= 0, let oc = ocOpt else { return false }
+        var opened = false
+        defer {
+            if opened { avio_closep(&oc.pointee.pb) }
+            avformat_free_context(oc)
+        }
+        guard let ost = avformat_new_stream(oc, nil), avcodec_parameters_copy(ost.pointee.codecpar, ipar) >= 0 else { return false }
+        let tag = cid == AV_CODEC_ID_HEVC ? "hvc1" : "avc1"
+        let b = Array(tag.utf8).map { UInt32($0) }
+        ost.pointee.codecpar.pointee.codec_tag = b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)
+        ost.pointee.time_base = ist.pointee.time_base
+        guard avio_open(&oc.pointee.pb, tmp.path, 2) >= 0 else { return false } // AVIO_FLAG_WRITE
+        opened = true
+        guard avformat_write_header(oc, nil) >= 0 else { return false }
+        var pktOpt: UnsafeMutablePointer<AVPacket>? = av_packet_alloc()
+        defer { av_packet_free(&pktOpt) }
+        guard let pkt = pktOpt else { return false }
+        while av_read_frame(ic, pkt) >= 0 {
+            if pkt.pointee.stream_index == vi {
+                av_packet_rescale_ts(pkt, ist.pointee.time_base, ost.pointee.time_base)
+                pkt.pointee.stream_index = 0
+                pkt.pointee.pos = -1
+                if av_interleaved_write_frame(oc, pkt) < 0 { av_packet_unref(pkt); return false }
+            }
+            av_packet_unref(pkt)
+        }
+        guard av_write_trailer(oc) >= 0 else { return false }
+        try? FileManager.default.removeItem(at: dest)
+        return (try? FileManager.default.moveItem(at: tmp, to: dest)) != nil
+    }
+
     /// A picture from the film, `fraction` of the way in, at most `maxWidth` wide.
     static func frame(_ url: URL, at fraction: Double, maxWidth: Int32 = 1280) -> CGImage? {
         guard let fc = open(url) else { return nil }
