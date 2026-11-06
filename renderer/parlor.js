@@ -439,6 +439,18 @@ window.createParlor = function createParlor(ctx) {
     h('span', { class: 'npc-disc' }), chipTitle);
   const navRight = $('#nav .nav-right');
   if (navRight) navRight.prepend(chip);
+  // On a phone the sections become a tab bar along the bottom. It has to live outside the top bar (the bar's
+  // blur would trap it inside), and the page starts just below the top bar however tall that has grown.
+  const navEl = $('#nav'), pnavEl = $('#pnav'), pnavNext = pnavEl && pnavEl.nextElementSibling;
+  const phoneMQ = matchMedia('(max-width: 600px)');
+  const placeTabs = () => {
+    if (!pnavEl || !navEl) return;
+    if (phoneMQ.matches) { if (pnavEl.parentElement !== document.body) document.body.append(pnavEl); }
+    else if (pnavEl.parentElement !== navEl) navEl.insertBefore(pnavEl, pnavNext);
+  };
+  placeTabs();
+  if (phoneMQ.addEventListener) phoneMQ.addEventListener('change', placeTabs);
+  if (window.ResizeObserver && navEl) new ResizeObserver(() => document.documentElement.style.setProperty('--navh', navEl.offsetHeight + 'px')).observe(navEl);
   let fullOpen = false;
   let lastTrack = null, lastPaused = null;
 
@@ -481,8 +493,38 @@ window.createParlor = function createParlor(ctx) {
   F.bigBtn = h('button', { class: 'np-close np-big', 'data-b': 'big', title: 'Big cover', onclick: () => setBig(true) });
   F.bigBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
   F.barBtn = h('button', { class: 'npf-bar', 'data-b': 'bar', title: 'Left / right: skip 10 seconds',
-    onclick: (e) => { const s = P.player; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX && s) api.musicCmd('seek', ((e.clientX - r.left) / r.width) * (s.dur || 0)); },
     onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); wakeFull(); skip(e.key === 'ArrowLeft' ? -10 : 10); } } }, F.fill);
+  // Drag along the bar (or anywhere in the tall strip around it) to scrub: the times follow your finger and the
+  // song jumps there when you let go.
+  F.scrub = h('div', { class: 'npf-scrub' }, F.barBtn);
+  let scrubbing = null;
+  const scrubAt = (e) => {
+    const s = P && P.player; if (!s || !s.dur) return null;
+    const r = F.barBtn.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    F.fill.style.width = f * 100 + '%';
+    F.pos.textContent = mmss(f * s.dur); F.left.textContent = '-' + mmss(s.dur - f * s.dur);
+    return f * s.dur;
+  };
+  F.scrub.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    e.preventDefault(); e.stopPropagation();
+    F.scrub.setPointerCapture(e.pointerId);
+    scrubbing = { id: e.pointerId, to: scrubAt(e) };
+    full.classList.add('scrubbing'); wakeFull();
+  });
+  F.scrub.addEventListener('pointermove', (e) => { if (scrubbing && e.pointerId === scrubbing.id) scrubbing.to = scrubAt(e); });
+  const endScrub = (e, cancel) => {
+    if (!scrubbing || e.pointerId !== scrubbing.id) return;
+    const to = scrubbing.to; scrubbing = null; full.classList.remove('scrubbing');
+    if (!cancel && to != null) api.musicCmd('seek', to); else drawFull(false);
+  };
+  F.scrub.addEventListener('pointerup', (e) => endScrub(e, false));
+  F.scrub.addEventListener('pointercancel', (e) => endScrub(e, true));
+  // How good the file is (Lossless, Hi-Res Lossless, or a compressed format's bit rate); tap for the details.
+  F.quality = h('button', { class: 'npf-q', 'data-b': 'quality', title: 'Audio quality', onclick: () => showQuality() });
+  F.qsheet = h('div', { class: 'npf-qsheet', hidden: true, onclick: (e) => { if (e.target === F.qsheet) hideQuality(); } });
+  F.grab = h('button', { class: 'npf-grab', 'aria-label': 'Close', title: 'Close', onclick: () => closeFull() });
   F.play = h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') });
   F.ctrl = h('div', { class: 'npf-ctrl', 'data-navrow': '1' },
     h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
@@ -493,11 +535,10 @@ window.createParlor = function createParlor(ctx) {
     h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', P.player.volume - 10) }, '−'),
     F.vol,
     h('button', { class: 'npb vol', 'data-b': 'vup', title: 'Louder', onclick: () => api.musicCmd('volume', P.player.volume + 10) }, '+'));
-  full.append(F.bg, h('div', { class: 'npf-top', 'data-navrow': '1' }, F.bigBtn, F.close),
-    h('div', { class: 'npf' }, F.stage,
+  F.body = h('div', { class: 'npf' }, F.stage,
       h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
-        h('div', { class: 'npf-prog' }, F.pos, F.barBtn, F.left), F.ctrl, F.upnext)),
-    F.caption);
+        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.upnext));
+  full.append(F.bg, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, F.bigBtn, F.close), F.body, F.caption, F.qsheet);
   document.body.append(full);
 
   let idle = null;
@@ -523,14 +564,101 @@ window.createParlor = function createParlor(ctx) {
   }, true);
   full.addEventListener('mousemove', () => { if (!full.classList.contains('big')) wakeFull(); });
 
+  // ---- audio quality -----------------------------------------------------------------------------------
+  const khz = (r) => (r % 1000 ? (r / 1000).toFixed(1) : String(r / 1000)) + ' kHz';
+  function quality(t) {
+    t = { ...t, ...((P && P.tracks && P.tracks[t.id]) || {}) }; // the library has the file's details
+    const hi = t.lossless && (t.sampleRate > 48000 || t.bitDepth > 24);
+    const spec = t.lossless
+      ? [t.bitDepth ? `${t.bitDepth}-bit` : '', t.sampleRate ? khz(t.sampleRate) : ''].filter(Boolean).join(' / ')
+      : (t.bitrate ? `${t.bitrate} kbps` : '');
+    return {
+      t,
+      kind: hi ? 'hires' : t.lossless ? 'lossless' : 'lossy',
+      name: hi ? 'Hi-Res Lossless' : t.lossless ? 'Lossless' : (t.codec || 'Compressed'),
+      spec,
+      about: hi ? 'More detail than a CD: the full studio recording, nothing thrown away. Wired headphones or a good DAC let you hear all of it.'
+        : t.lossless ? 'Every bit of the original recording, exactly as it left the studio (CD quality or better). Nothing is thrown away.'
+          : 'A compressed file: smaller, with some detail removed to save space. Fine for most listening.',
+    };
+  }
+  const waveIcon = () => { const i = h('span', { class: 'npf-q-ico', 'aria-hidden': 'true' }); i.innerHTML = '<svg viewBox="0 0 20 14" width="16" height="12"><path d="M1 7h2M5 3v8M9 1v12M13 4v6M17 6v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>'; return i; };
+  function drawQuality(t) {
+    const q = quality(t);
+    F.quality.className = 'npf-q ' + q.kind;
+    F.quality.replaceChildren(waveIcon(), h('b', {}, q.name), q.spec ? h('small', {}, q.spec) : '');
+    F.quality.hidden = !q.name;
+  }
+  function showQuality() {
+    const t = P && P.player && P.player.track; if (!t) return;
+    const q = quality(t);
+    const row = (k, v) => (v ? h('div', { class: 'qrow' }, h('span', {}, k), h('b', {}, v)) : null);
+    F.qsheet.replaceChildren(h('div', { class: 'npf-qcard ' + q.kind },
+      h('div', { class: 'qhead' }, waveIcon(), h('h2', {}, q.name)),
+      h('p', {}, q.about),
+      row('Format', q.t.codec),
+      row('Bit depth', q.t.bitDepth ? `${q.t.bitDepth}-bit` : ''),
+      row('Sample rate', q.t.sampleRate ? khz(q.t.sampleRate) : ''),
+      row('Bit rate', q.t.bitrate ? `${q.t.bitrate.toLocaleString()} kbps` : ''),
+      h('button', { class: 'btn secondary', 'data-b': 'qdone', onclick: () => hideQuality() }, 'Done')));
+    F.qsheet.hidden = false;
+    const d = F.qsheet.querySelector('button'); d && d.focus({ preventScroll: true });
+  }
+  function hideQuality() { if (F.qsheet.hidden) return false; F.qsheet.hidden = true; F.quality.focus({ preventScroll: true }); return true; }
+
+  // ---- swipe down to close (phones and tablets) ------------------------------------------------------------
+  // Pull the screen down from anywhere (once Up Next is scrolled to the top): it follows your finger and closes
+  // past a third of the way, or on a quick flick.
+  let pull = null;
+  full.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || scrubbing || !F.qsheet.hidden || e.target.closest('.npf-scrub, .npf-qsheet')) { pull = null; return; }
+    const t = e.touches[0];
+    pull = { y: t.clientY, x: t.clientX, t: Date.now(), dy: 0, on: false };
+  }, { passive: true });
+  full.addEventListener('touchmove', (e) => {
+    if (!pull) return;
+    const t = e.touches[0];
+    const dy = t.clientY - pull.y, dx = t.clientX - pull.x;
+    if (!pull.on) {
+      if (Math.abs(dx) > Math.abs(dy) || dy < 8) { if (dy < -8 || Math.abs(dx) > 12) pull = null; return; }
+      if (F.body.scrollTop > 0) { pull = null; return; }
+      pull.on = true; full.classList.add('pulling');
+    }
+    e.preventDefault();
+    pull.dy = Math.max(0, dy);
+    full.style.transform = `translateY(${pull.dy}px)`;
+  }, { passive: false });
+  full.addEventListener('touchend', () => {
+    if (!pull || !pull.on) { pull = null; return; }
+    const v = pull.dy / Math.max(1, Date.now() - pull.t);
+    const close = pull.dy > window.innerHeight * 0.3 || (v > 0.6 && pull.dy > 60);
+    full.classList.remove('pulling'); pull = null;
+    if (close) closeFull();
+    else full.style.transform = '';
+  });
+  full.addEventListener('touchcancel', () => { if (pull && pull.on) { full.classList.remove('pulling'); full.style.transform = ''; } pull = null; });
+
   let fullFrom = null;
+  let leaving = null;
   function openFull() {
+    clearTimeout(leaving); full.classList.remove('leaving'); full.style.transform = '';
     fullFrom = document.activeElement;
     fullOpen = true; full.hidden = false; full.classList.remove('big');
+    if (matchMedia('(pointer: coarse)').matches) { // slide up from the bottom
+      full.style.transition = 'none'; full.style.transform = 'translateY(100%)'; void full.offsetHeight;
+      full.style.transition = ''; full.style.transform = '';
+    }
     drawFull(true); F.play.focus({ preventScroll: true }); wakeFull();
   }
   function closeFull() {
-    fullOpen = false; full.hidden = true; full.classList.remove('big'); clearTimeout(idle);
+    fullOpen = false; clearTimeout(idle); F.qsheet.hidden = true;
+    // on a touch screen it slides away downwards, like Apple Music
+    if (matchMedia('(pointer: coarse)').matches) {
+      full.classList.add('leaving');
+      full.style.transform = '';
+      clearTimeout(leaving);
+      leaving = setTimeout(() => { full.hidden = true; full.classList.remove('leaving', 'big'); }, 300);
+    } else { full.hidden = true; full.classList.remove('big'); }
     const back = fullFrom && document.body.contains(fullFrom) ? fullFrom : (!chip.hidden ? chip : null);
     if (back) back.focus({ preventScroll: true });
     return true;
@@ -552,6 +680,7 @@ window.createParlor = function createParlor(ctx) {
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
+      drawQuality(t);
       F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
       F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
       const nxt = s.queue.slice(s.index + 1, s.index + 6);
@@ -563,6 +692,7 @@ window.createParlor = function createParlor(ctx) {
       if (keep) { const k = F.upnext.querySelector(`[data-b="${keep}"]`); (k || F.play).focus({ preventScroll: true }); }
     }
     full.classList.toggle('paused', !!s.paused);
+    if (scrubbing) return; // the finger is in charge of the times while scrubbing
     F.pos.textContent = mmss(s.pos); F.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
     F.fill.style.width = pct(s) + '%';
     F.vol.textContent = `${s.volume}%`;
@@ -589,6 +719,7 @@ window.createParlor = function createParlor(ctx) {
     /** Back button: close the top thing; false when there's nothing left (then app.js leaves the Parlor). */
     back() {
       if (closeOverlay()) return true;
+      if (fullOpen && hideQuality()) return true;
       if (fullOpen) { if (full.classList.contains('big')) { setBig(false); F.play.focus({ preventScroll: true }); return true; } return closeFull(); }
       if (view !== 'home') { view = history.pop() || 'home'; if (view.startsWith('playlist:') && !P.playlists.some((p) => 'playlist:' + p.id === view)) view = 'home'; render(); return true; }
       return false;
@@ -596,6 +727,7 @@ window.createParlor = function createParlor(ctx) {
     /** Which part of the screen the remote moves in (overlays first). */
     scope() {
       if ($('#poverlay')) return $('#poverlay');
+      if (fullOpen && !F.qsheet.hidden) return F.qsheet;
       if (fullOpen) return full;
       return null;
     },

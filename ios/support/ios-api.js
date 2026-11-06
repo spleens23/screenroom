@@ -222,6 +222,7 @@
       lossless: !!r.lossless,
       bitrate: r.bitrate || 0,
       sampleRate: r.sampleRate || 0,
+      bitDepth: r.bitDepth || 0,
       art: r.art || null,
       folderArt: r.folderArt || null,
       folderMotion: r.folderMotion || null,
@@ -317,7 +318,7 @@
       for (const id of a.tracks) {
         const t = music.tracks[id];
         if (t) tracks[id] = { id, title: t.title, artist: t.artist, album: t.album, albumKey: a.key, track: t.track, disc: t.disc,
-          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, explicit: t.explicit };
+          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, explicit: t.explicit };
       }
     }
     const mine = pOf(me.id);

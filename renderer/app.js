@@ -13,6 +13,8 @@
   // 'music' (Parlor on its own; it opens straight into the music and never shows the films).
   const EDITION = (window.api && api.edition) || 'all';
   const APP = EDITION === 'music' ? 'Parlor' : 'Screenroom';
+  // The standard theme ('2020s'): Matinee in Screenroom, Encore in Parlor.
+  const THEME_NAME = EDITION === 'music' ? 'Encore' : 'Matinee';
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
 
@@ -1907,9 +1909,9 @@
     };
     const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. Matinee: Screenroom's own warm picture-house look. Heirloom: glossy light blue, like the Heirloom tablet.`)),
+      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks for ${who}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own warm, dark concert-hall look" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
-          [['2020s', 'Matinee'], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
+          [['2020s', THEME_NAME], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
       kids ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
         h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })));
   }
@@ -2656,7 +2658,7 @@
     mode = mode === 'parlor' ? 'movies' : 'parlor';
     document.body.classList.toggle('parlor', mode === 'parlor');
     $('#nav .brand').textContent = mode === 'parlor' ? 'Parlor' : 'Screenroom';
-    $('#search').placeholder = mode === 'parlor' ? 'Search music…' : 'Search titles, genres…';
+    $('#search').placeholder = mode === 'parlor' ? 'Search music…' : (matchMedia('(max-width: 600px)').matches ? 'Search' : 'Search titles, genres…');
     const b = $('#parlor-btn');
     b.title = mode === 'parlor' ? 'Back to films' : 'Parlor (music)';
     b.innerHTML = mode === 'parlor' ? FILM_ICON : parlorUI.noteIcon();

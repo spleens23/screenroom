@@ -9,7 +9,7 @@ final class Scanner {
     static let shared = Scanner()
     private let st = Storage.shared
     private let videoCacheName = "scan-films-5"
-    private let audioCacheName = "scan-music"
+    private let audioCacheName = "scan-music-2"
     private var videoBusy = false
     private var audioBusy = false
 
@@ -333,7 +333,12 @@ final class Scanner {
                 let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "AC3", "ec-3": "E-AC3", "opus": "Opus"][sub] ?? sub.uppercased()
                 entry["codec"] = codec
                 entry["lossless"] = ["alac", "fLaC", "lpcm"].contains(sub)
-                if let fd = fds.first, let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee { entry["sampleRate"] = Int(asbd.mSampleRate) }
+                if let fd = fds.first, let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee {
+                    entry["sampleRate"] = Int(asbd.mSampleRate)
+                    // PCM says its bit depth outright; Apple Lossless and FLAC keep it in the format flags (1 = 16-bit … 4 = 32-bit)
+                    if asbd.mBitsPerChannel > 0 { entry["bitDepth"] = Int(asbd.mBitsPerChannel) }
+                    else if sub == "alac" || sub == "fLaC", let d = [1: 16, 2: 20, 3: 24, 4: 32][Int(asbd.mFormatFlags)] { entry["bitDepth"] = d }
+                }
                 let rate = (try? await t.load(.estimatedDataRate)) ?? 0
                 entry["bitrate"] = Int(rate / 1000)
             }

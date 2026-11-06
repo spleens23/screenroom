@@ -1,150 +1,231 @@
 /* ==== Parlor, made calmer: covers only, an Apple Music–style Now Playing, and a roomy phone layout ====
-   Loaded after both themes (Matinee and Heirloom), so it applies to either. Selectors start with "html body"
-   to sit above the themes' own Parlor rules. */
+   Loaded after both themes (Encore/Matinee and Heirloom), so it applies to either. The selectors are written to
+   outrank the themes' own rules on purpose:
+     page rules        html body.parlor.parlor.parlor …   (beats "body.heir.parlor #nav" and friends)
+     Now Playing       html body:not(#_) #npfull …         (beats "body.heir #npfull …")
+   so the two themes keep their colours but share one calm layout. */
 
+:root { --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
 .tab-ico { display: none; }
 
 /* ---- album cards: just the cover, softly rounded ---- */
 html body.parlor .pcard .cover { border-radius: 8px; }
 html body.parlor .pcard .cover .gloss { display: none; }
 
-/* ---- Now Playing ------------------------------------------------------------------------------------------ */
-html body #npfull { color: #fff; background: #111; }
-html body #npfull::after { background: linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.42)); }
-html body .npf-bg { inset: -15%; filter: blur(70px) saturate(1.6) brightness(.72); opacity: 1; transform: scale(1.15); }
-html body .npf-bg.gen { filter: blur(40px) brightness(.8); }
+/* ==== Now Playing ============================================================================================ */
+html body:not(#_) #npfull { color: #fff; background: #111; }
+html body:not(#_) #npfull::after { background: linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.45)); }
+html body:not(#_) #npfull .npf-bg { inset: -15%; filter: blur(70px) saturate(1.6) brightness(.72); opacity: 1; transform: scale(1.15); }
+html body:not(#_) #npfull .npf-bg.gen { filter: blur(40px) brightness(.8); }
 
 /* the album's moving cover, behind everything: fills the screen on a TV or computer (dimmed), the top of the
    screen on a phone, fading into the colours below */
-html body .npf-motion { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
+html body:not(#_) #npfull .npf-motion { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
   opacity: 0; transition: opacity .8s ease; filter: brightness(.38) saturate(.9) blur(2px); transform: scale(1.03); }
-html body .npf-motion.on { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { html body .npf-motion { display: none; } }
+html body:not(#_) #npfull .npf-motion.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { html body:not(#_) #npfull .npf-motion { display: none; } }
 
-html body .npf { grid-template-columns: minmax(0, min(62vh, 560px)) minmax(0, 540px); justify-content: center; gap: 6vw; padding: 7vh 6vw; }
-html body .npf-stage { justify-content: center; perspective: none; }
-html body #npfull .cover.huge { width: 100%; border-radius: 14px; box-shadow: 0 28px 60px rgba(0,0,0,.45); background: rgba(255,255,255,.08);
+html body:not(#_) #npfull .npf { grid-template-columns: minmax(0, min(62vh, 560px)) minmax(0, 540px); justify-content: center; gap: 6vw; padding: 7vh 6vw; }
+html body:not(#_) #npfull .npf-stage { justify-content: center; perspective: none; }
+html body:not(#_) #npfull .cover.huge { width: 100%; border-radius: 14px; box-shadow: 0 28px 60px rgba(0,0,0,.45); background: rgba(255,255,255,.08);
   transition: transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .55s; }
-html body #npfull .cover.huge .gloss { display: none; }
-html body #npfull.paused .cover.huge { transform: scale(.86); box-shadow: 0 14px 30px rgba(0,0,0,.35); }
-/* with a moving cover the still square steps back: the motion behind is the picture */
-html body #npfull.has-motion .cover.huge { box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+html body:not(#_) #npfull .cover.huge .gloss { display: none; }
+html body:not(#_) #npfull.paused .cover.huge { transform: scale(.86); box-shadow: 0 14px 30px rgba(0,0,0,.35); }
+html body:not(#_) #npfull.has-motion .cover.huge { box-shadow: 0 20px 50px rgba(0,0,0,.35); }
 
-html body .npf-side { padding-left: 0; }
-html body .npf-from { color: rgba(255,255,255,.62); font-size: 13px; letter-spacing: .8px; margin-bottom: 18px; }
-html body .npf-side h1 { color: #fff; font-family: inherit; font-weight: 700; text-shadow: none; font-size: clamp(26px, 2.6vw, 44px); margin: 0 0 6px; }
-html body .npf-side h2 { color: rgba(255,255,255,.72); font-weight: 500; font-size: clamp(18px, 1.7vw, 28px); margin: 0 0 2px; }
-html body .npf-side h3 { color: rgba(255,255,255,.5); font-size: clamp(15px, 1.3vw, 20px); margin: 0 0 4vh; }
+html body:not(#_) #npfull .npf-side { padding-left: 0; }
+html body:not(#_) #npfull .npf-from { color: rgba(255,255,255,.6); font-size: 12px; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 16px; }
+html body:not(#_) #npfull .npf-side h1 { color: #fff; font-family: inherit; font-weight: 700; text-shadow: none; font-size: clamp(26px, 2.6vw, 44px); line-height: 1.15; margin: 0 0 6px; }
+html body:not(#_) #npfull .npf-side h2 { color: rgba(255,255,255,.72); font-weight: 500; text-shadow: none; font-size: clamp(18px, 1.7vw, 28px); margin: 0 0 2px; }
+html body:not(#_) #npfull .npf-side h3 { color: rgba(255,255,255,.5); text-shadow: none; font-size: clamp(15px, 1.3vw, 20px); margin: 0 0 4vh; }
 
-/* the progress bar: a slim line with the times underneath */
-html body #npfull .npf-prog { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 0; color: rgba(255,255,255,.6); font-size: 13px; max-width: none; margin-bottom: 3vh; }
-html body #npfull .npf-prog .npf-bar { grid-column: 1 / -1; grid-row: 1; }
-html body #npfull .npf-prog > span:first-child { grid-row: 2; }
-html body #npfull .npf-prog > span:last-child { grid-row: 2; text-align: right; }
-html body #npfull .npf-bar { height: 6px; min-height: 0; padding: 0; border: 0; border-radius: 3px; background: rgba(255,255,255,.22); box-shadow: none; transition: height .15s; }
-html body #npfull .npf-bar:hover, html body #npfull .npf-bar:focus { height: 10px; }
-html body #npfull .npf-bar div { background: rgba(255,255,255,.92); border-radius: 3px; }
+/* the progress bar: a slim line in a tall touch strip; the times and the quality button underneath */
+html body:not(#_) #npfull .npf-prog { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px 8px; color: rgba(255,255,255,.6);
+  font-size: 12.5px; font-variant-numeric: tabular-nums; max-width: none; margin-bottom: 3vh; }
+html body:not(#_) #npfull .npf-scrub { grid-column: 1 / -1; grid-row: 1; padding: 16px 0; margin: -16px 0 -6px; cursor: pointer; touch-action: none; }
+html body:not(#_) #npfull .npf-prog > span:nth-of-type(1) { grid-row: 2; grid-column: 1; }
+html body:not(#_) #npfull .npf-prog > .npf-q { grid-row: 2; grid-column: 2; }
+html body:not(#_) #npfull .npf-prog > span:nth-of-type(2) { grid-row: 2; grid-column: 3; text-align: right; }
+html body:not(#_) #npfull .npf-bar { display: block; width: 100%; height: 6px; min-height: 0; padding: 0; border: 0; border-radius: 3px;
+  background: rgba(255,255,255,.22); box-shadow: none; transition: height .18s, transform .18s; pointer-events: none; }
+html body:not(#_) #npfull .npf-bar div { height: 100%; background: rgba(255,255,255,.92); border-radius: 3px; }
+html body:not(#_) #npfull .npf-scrub:hover .npf-bar, html body:not(#_) #npfull .npf-bar:focus { height: 9px; }
+html body:not(#_) #npfull.scrubbing .npf-bar { height: 12px; border-radius: 6px; }
+html body:not(#_) #npfull.scrubbing .npf-prog > span { color: #fff; }
+
+/* the quality button: Lossless / Hi-Res Lossless / a compressed format, with its numbers */
+html body:not(#_) #npfull .npf-q { display: inline-flex; align-items: center; gap: 6px; justify-self: center; padding: 5px 11px; border: 0; border-radius: 999px;
+  background: rgba(255,255,255,.13); color: rgba(255,255,255,.88); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; white-space: nowrap;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+html body:not(#_) #npfull .npf-q b { font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+html body:not(#_) #npfull .npf-q small { font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
+html body:not(#_) #npfull .npf-q-ico { display: inline-flex; }
+html body:not(#_) #npfull .npf-q.hires { color: #f6d58e; background: rgba(246,213,142,.16); }
+html body:not(#_) #npfull .npf-q.lossy { color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); }
+html body:not(#_) #npfull .npf-q:active { transform: scale(.96); }
+
+/* its details: a sheet up from the bottom (a card in the middle on a big screen) */
+html body:not(#_) #npfull .npf-qsheet { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
+html body:not(#_) #npfull .npf-qsheet[hidden] { display: none; }
+html body:not(#_) #npfull .npf-qcard { width: min(440px, 100%); background: rgba(34,32,30,.97); color: #fff; border-radius: 22px; padding: 24px 24px 22px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: npf-sheet .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes npf-sheet { from { transform: translateY(40px); opacity: 0; } }
+html body:not(#_) #npfull .npf-qcard .qhead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+html body:not(#_) #npfull .npf-qcard .qhead svg { width: 22px; height: 16px; }
+html body:not(#_) #npfull .npf-qcard h2 { margin: 0; font-size: 22px; color: #fff; text-shadow: none; }
+html body:not(#_) #npfull .npf-qcard.hires .qhead { color: #f6d58e; }
+html body:not(#_) #npfull .npf-qcard p { margin: 0 0 16px; color: rgba(255,255,255,.7); font-size: 15px; line-height: 1.45; }
+html body:not(#_) #npfull .npf-qcard .qrow { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(255,255,255,.1); font-size: 15px; }
+html body:not(#_) #npfull .npf-qcard .qrow span { color: rgba(255,255,255,.6); }
+html body:not(#_) #npfull .npf-qcard .qrow b { font-weight: 600; font-variant-numeric: tabular-nums; }
+html body:not(#_) #npfull .npf-qcard .btn { width: 100%; margin-top: 16px; justify-content: center; padding: 13px; border-radius: 14px; border: 0;
+  background: rgba(255,255,255,.14); color: #fff; box-shadow: none; text-shadow: none; font-weight: 600; }
 
 /* the buttons: plain white symbols, no discs */
-html body .npf-ctrl { justify-content: space-between; gap: 6px; margin-bottom: 4vh; flex-wrap: wrap; }
-html body .npf-ctrl .npb { width: 56px; height: 56px; border: 0; border-radius: 50%; background: transparent; color: #fff; box-shadow: none; }
-html body .npf-ctrl .npb:hover { background: rgba(255,255,255,.1); filter: none; }
-html body .npf-ctrl .npb .ico { width: 30px; height: 30px; }
-html body .npf-ctrl .npb .ico.skip { width: 30px; height: 30px; opacity: .85; }
-html body .npf-ctrl .npb.big { width: 76px; height: 76px; background: transparent; }
-html body #npfull .npf-ctrl .npb, html body #npfull .npf-ctrl .npb.big { color: #fff; background: transparent; border: 0; box-shadow: none; }
-html body #npfull .npf-ctrl .npb svg { fill: currentColor; }
-html body .npf-ctrl .npb.big .ico { width: 46px; height: 46px; }
-html body .npf-ctrl .npb.vol { width: 40px; height: 40px; font-size: 22px; opacity: .8; }
-html body .npf-vol { color: rgba(255,255,255,.65); }
-html body .np-close { background: rgba(255,255,255,.14); border: 0; color: #fff; box-shadow: none; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+html body:not(#_) #npfull .npf-ctrl { justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4vh; flex-wrap: wrap; }
+html body:not(#_) #npfull .npf-ctrl .npb { width: 56px; height: 56px; border: 0; border-radius: 50%; background: transparent; color: #fff; box-shadow: none;
+  display: inline-flex; align-items: center; justify-content: center; transition: transform .12s, background .15s; }
+html body:not(#_) #npfull .npf-ctrl .npb:hover { background: rgba(255,255,255,.1); filter: none; }
+html body:not(#_) #npfull .npf-ctrl .npb:active { transform: scale(.88); background: rgba(255,255,255,.14); }
+html body:not(#_) #npfull .npf-ctrl .npb svg { fill: currentColor; }
+html body:not(#_) #npfull .npf-ctrl .npb .ico, html body:not(#_) #npfull .npf-ctrl .npb .ico.skip { width: 30px; height: 30px; }
+html body:not(#_) #npfull .npf-ctrl .npb .ico.skip { opacity: .85; }
+html body:not(#_) #npfull .npf-ctrl .npb.big { width: 76px; height: 76px; }
+html body:not(#_) #npfull .npf-ctrl .npb.big .ico { width: 46px; height: 46px; }
+html body:not(#_) #npfull .npf-ctrl .npb.vol { width: 40px; height: 40px; font-size: 22px; opacity: .8; }
+html body:not(#_) #npfull .npf-vol { color: rgba(255,255,255,.65); }
+html body:not(#_) #npfull .np-close { background: rgba(255,255,255,.14); border: 0; color: #fff; box-shadow: none; text-shadow: none; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+html body:not(#_) #npfull .npf-grab { display: none; }
 
-html body .upnext { border: 0; border-radius: 14px; background: rgba(255,255,255,.08); box-shadow: none; overflow: hidden; }
-html body .upnext-t { background: none; border: 0; color: rgba(255,255,255,.6); text-transform: uppercase; letter-spacing: .8px; font-size: 12px; padding: 12px 14px 6px; }
-html body .upnext-i, html body .upnext-i:nth-child(odd) { background: none; color: #fff; padding: 10px 14px; }
-html body .upnext-i small { color: rgba(255,255,255,.55); }
-html body .upnext-i:hover { background: rgba(255,255,255,.08); }
-html body .upnext-i:focus { background: rgba(255,255,255,.18); color: #fff; }
-html body .npf-caption b { color: #fff; } html body .npf-caption span { color: rgba(255,255,255,.7); }
-html body #npfull.big .npf-stage { transform: none; }
-html body #npfull.big .cover.huge { width: min(74vh, 60vw); }
-html body:not(.navmode) #npfull .npb:focus, html body:not(.navmode) #npfull .npf-bar:focus, html body:not(.navmode) #npfull .np-close:focus { outline: none; }
-body.navmode #npfull .npb:focus, body.navmode #npfull .npf-bar:focus, body.navmode #npfull .np-close:focus { outline: 3px solid #fff; outline-offset: 3px; }
+html body:not(#_) #npfull .upnext { border: 0; border-radius: 14px; background: rgba(255,255,255,.08); box-shadow: none; overflow: hidden; }
+html body:not(#_) #npfull .upnext-t { background: none; border: 0; color: rgba(255,255,255,.6); text-shadow: none; text-transform: uppercase; letter-spacing: .8px; font-size: 12px; padding: 12px 14px 6px; }
+html body:not(#_) #npfull .upnext-i, html body:not(#_) #npfull .upnext-i:nth-child(odd) { background: none; color: #fff; text-shadow: none; padding: 12px 14px; min-height: 48px; }
+html body:not(#_) #npfull .upnext-i small { color: rgba(255,255,255,.55); }
+html body:not(#_) #npfull .upnext-i:hover { background: rgba(255,255,255,.08); }
+html body:not(#_) #npfull .upnext-i:focus { background: rgba(255,255,255,.18); color: #fff; }
+html body:not(#_) #npfull .npf-caption b { color: #fff; } html body:not(#_) #npfull .npf-caption span { color: rgba(255,255,255,.7); }
+html body:not(#_) #npfull.big .npf-stage { transform: none; }
+html body:not(#_) #npfull.big .cover.huge { width: min(74vh, 60vw); }
+html body:not(.navmode) #npfull .npb:focus, html body:not(.navmode) #npfull .npf-bar:focus, html body:not(.navmode) #npfull .np-close:focus, html body:not(.navmode) #npfull .npf-q:focus { outline: none; }
+body.navmode #npfull .npb:focus, body.navmode #npfull .npf-bar:focus, body.navmode #npfull .np-close:focus, body.navmode #npfull .npf-q:focus,
+body.navmode #npfull .npf-qcard .btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
+
+/* on a touch screen it slides up when opened and down when closed or pulled */
+@media (pointer: coarse) {
+  html body:not(#_) #npfull { transition: transform .3s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+  html body:not(#_) #npfull.pulling { transition: none; }
+  html body:not(#_) #npfull.leaving { transform: translateY(100%) !important; pointer-events: none; }
+}
 
 /* ==== phones (an iPhone held upright) ===================================================================== */
 @media (max-width: 600px) {
-  /* -- the top: wordmark and round buttons, then the search box; the sections become a tab bar at the bottom -- */
-  html body.parlor #nav, html body.parlor #nav.solid { height: auto; flex-wrap: wrap; row-gap: 10px; column-gap: 8px;
-    padding: calc(env(safe-area-inset-top) + 10px) 18px 12px; }
-  html body.parlor .brand { flex: 1 1 auto; order: 0; font-size: 26px; }
-  html body.parlor .nav-right { display: contents; }
-  html body.parlor #battery, html body.parlor #parlor-btn, html body.parlor #profile-btn, html body.parlor #settings-btn { order: 1; flex: 0 0 auto; }
-  html body.parlor #nav #search { display: block; order: 3; flex: 1 1 100%; width: 100%; max-width: none; padding: 10px 14px; font-size: 15px; border-radius: 12px; }
-  html body.parlor #nav #pnav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; order: 9; display: flex; justify-content: space-around; gap: 0;
-    padding: 6px 4px calc(env(safe-area-inset-bottom) + 4px); background: rgba(22,17,13,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255,255,255,.08); border-radius: 0; box-shadow: none; overflow: visible; margin: 0; }
-  html body.heir.parlor #nav #pnav { background: rgba(232,240,248,.95); border-top: 1px solid #b8c8d8; }
-  html body.parlor #nav #pnav a { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; font-size: 10.5px; font-weight: 600;
-    background: none; box-shadow: none; border-radius: 0; color: rgba(243,233,220,.55); text-shadow: none; }
-  html body.heir.parlor #nav #pnav a { color: #6a7d90; }
-  html body.parlor #nav #pnav a.active { background: none; box-shadow: none; color: var(--m-amber, #f0a73a); }
-  html body.heir.parlor #nav #pnav a.active { color: #2f74b5; }
-  html body.parlor #nav #pnav .tab-ico { display: block; width: 25px; height: 25px; }
-  html body.parlor #main { padding-top: calc(env(safe-area-inset-top) + 64px); padding-bottom: calc(env(safe-area-inset-bottom) + 150px); }
+  /* -- the top: wordmark and round buttons, then the search box -- */
+  html body.parlor.parlor.parlor #nav, html body.parlor.parlor.parlor #nav.solid {
+    position: fixed; top: 0; left: 0; right: 0; height: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 10px;
+    padding: calc(var(--sat) + 8px) 20px 12px; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; filter: none; }
+  html body.mat.parlor.parlor.parlor #nav { background: var(--m-ink); }
+  html body.heir.parlor.parlor.parlor #nav { background: linear-gradient(to bottom, #e3f0fb, #a9cdee); box-shadow: 0 1px 0 #87abd0, 0 2px 8px rgba(20,60,100,.15); border: 0; }
+  html body.parlor.parlor.parlor #nav .brand { flex: 1 1 auto; order: 0; margin: 0; font-size: 26px; line-height: 40px; }
+  html body.heir.parlor.parlor.parlor #nav .brand { font-size: 22px; letter-spacing: 2px; color: #24527f; text-shadow: 0 1px rgba(255,255,255,.7); }
+  html body.parlor.parlor.parlor .nav-right { display: contents; }
+  html body.parlor.parlor.parlor #np-chip, html body.parlor.parlor.parlor #battery, html body.parlor.parlor.parlor #parlor-btn,
+  html body.parlor.parlor.parlor #vote-btn { display: none !important; }
+  html body.parlor.parlor.parlor #profile-btn, html body.parlor.parlor.parlor #settings-btn { order: 1; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; }
+  html body.heir.parlor.parlor.parlor #settings-btn { color: #24527f; text-shadow: none; background: rgba(255,255,255,.55); }
+  html body.parlor.parlor.parlor #nav #search { display: block; order: 3; flex: 1 1 100%; width: 100%; max-width: none; height: 42px; margin: 0;
+    padding: 0 14px; font-size: 16px; border-radius: 12px; }
 
-  /* -- pages: big titles, two covers to a row, nothing squeezed -- */
-  html body.parlor .page-title, html body.parlor .phead h1 { font-size: 32px; }
-  html body.parlor .pgrid, html body.parlor .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 22px 16px; padding: 0 18px; }
-  html body.parlor .strip { gap: 14px; padding-left: 18px; padding-right: 18px; }
-  html body.parlor .strip .pcard { width: 44vw; flex: 0 0 44vw; }
-  html body.parlor .pcard-t { font-size: 14px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  html body.parlor .pcard-s { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* -- the sections: a tab bar along the bottom (moved out of the top bar by parlor.js) -- */
+  html body:not(.parlor) > #pnav { display: none; }
+  html body.parlor.parlor.parlor > #pnav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; gap: 0;
+    padding: 6px 4px calc(var(--sab) + 4px); margin: 0; border-radius: 0; overflow: visible; box-shadow: none;
+    background: rgba(22,17,13,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,.08); }
+  html body.heir.parlor.parlor.parlor > #pnav { background: rgba(240,245,250,.95); border-top: 1px solid #b8c8d8; }
+  html body.parlor.parlor.parlor > #pnav a { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; min-height: 46px;
+    font-size: 10.5px; font-weight: 600; background: none; box-shadow: none; border-radius: 0; text-shadow: none; color: rgba(243,233,220,.55); }
+  html body.heir.parlor.parlor.parlor > #pnav a { color: #6a7d90; }
+  html body.parlor.parlor.parlor > #pnav a.active { background: none; box-shadow: none; color: var(--m-amber, #f0a73a); }
+  html body.heir.parlor.parlor.parlor > #pnav a.active { color: #2f74b5; }
+  html body.parlor.parlor.parlor > #pnav .tab-ico { display: block; width: 25px; height: 25px; }
+
+  /* -- pages: one 20px margin everywhere, two covers to a row, nothing squeezed -- */
+  html body.parlor.parlor.parlor #main { padding: calc(var(--navh, calc(var(--sat) + 112px)) + 6px) 0 calc(var(--sab) + 150px); }
+  html body.parlor.parlor.parlor .ppage { padding: 0; margin: 0; }
+  html body.parlor.parlor.parlor .page-title, html body.parlor.parlor.parlor .phead, html body.parlor.parlor.parlor section.row h2 {
+    margin-left: 0; margin-right: 0; padding-left: 20px; padding-right: 20px; }
+  html body.parlor.parlor.parlor .page-title, html body.parlor.parlor.parlor .phead h1 { font-size: 32px; line-height: 1.1; }
+  html body.parlor.parlor.parlor .phead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; margin-bottom: 4px; }
+  html body.parlor.parlor.parlor section.row { margin: 18px 0 8px; padding: 0; }
+  html body.parlor.parlor.parlor section.row h2 { font-size: 21px; margin-bottom: 12px; }
+  html body.parlor.parlor.parlor .strip { display: flex; gap: 16px !important; margin: 0 !important; padding: 0 20px 8px !important; overflow-x: auto;
+    scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none; }
+  html body.parlor.parlor.parlor .strip::-webkit-scrollbar { display: none; }
+  html body.parlor.parlor.parlor .strip .pcard { flex: 0 0 calc((100% - 16px) / 2) !important; width: calc((100% - 16px) / 2) !important;
+    margin: 0 !important; padding: 0 !important; scroll-snap-align: start; }
+  html body.parlor.parlor.parlor .pgrid, html body.parlor.parlor.parlor .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 24px 16px !important; margin: 0 !important; padding: 0 20px 24px !important; }
+  html body.parlor.parlor.parlor .pgrid .pcard, html body.parlor.parlor.parlor .grid .pcard { width: auto !important; margin: 0 !important; padding: 0 !important; }
+  html body.parlor.parlor.parlor .pcard .cover { width: 100% !important; height: auto !important; aspect-ratio: 1; }
+  html body.parlor.parlor.parlor .pcard:hover, html body.parlor.parlor.parlor .pcard:focus-visible { transform: none; }
+  html body.parlor.parlor.parlor .pcard:active { transform: scale(.97); }
+  html body.parlor.parlor.parlor .pcard-t { font-size: 15px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body.parlor.parlor.parlor .pcard-s { font-size: 13.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* -- the mini player: a card floating above the tab bar -- */
-  html body.parlor #npbar { left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); border-radius: 14px; padding: 8px 10px; height: auto; gap: 10px;
-    background: rgba(48,40,34,.96); box-shadow: 0 10px 30px rgba(0,0,0,.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
-  html body.heir.parlor #npbar { background: rgba(250,252,255,.97); }
-  html body.parlor #npbar .npb-ctrl .npb[data-b="rew"], html body.parlor #npbar .npb-ctrl .npb[data-b="fwd"], html body.parlor #npbar .npb-ctrl .npb[data-b="prev"] { display: none; }
-  html body.parlor #npbar .npb-art { order: 0; flex: 0 0 auto; }
-  html body.parlor #npbar .npb-art .cover { width: 44px; height: 44px; border-radius: 6px; }
-  html body.parlor #npbar .lcd { order: 1; flex: 1 1 auto; min-width: 0; height: auto; margin: 0; padding: 0; text-align: left; border: 0; background: none; box-shadow: none; }
-  html body.parlor #npbar .lcd-t { font-size: 15px; font-weight: 600; color: inherit; }
-  html body.parlor #npbar .lcd-s { font-size: 13px; opacity: .7; color: inherit; }
-  html body.parlor #npbar .lcd-p { display: none; }
-  html body.parlor #npbar .npb-ctrl { order: 2; gap: 2px; }
-  html body.parlor #npbar .npb { width: 42px; height: 42px; border: 0; background: transparent; box-shadow: none; color: inherit; }
-  html body.parlor #npbar .npb .ico { width: 24px; height: 24px; }
+  html body.parlor.parlor.parlor #npbar { position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 64px); border: 0; border-radius: 14px; padding: 8px 10px; height: auto; gap: 10px;
+    display: flex; align-items: center; background: rgba(48,40,34,.96); box-shadow: 0 10px 30px rgba(0,0,0,.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  html body.parlor.parlor.parlor #npbar[hidden] { display: none; }
+  html body.heir.parlor.parlor.parlor #npbar { background: rgba(252,253,255,.97); color: #24323f; box-shadow: 0 8px 26px rgba(20,60,100,.22); }
+  html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="rew"], html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="fwd"],
+  html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="prev"] { display: none; }
+  html body.parlor.parlor.parlor #npbar .npb-art { order: 0; flex: 0 0 auto; padding: 0; border: 0; background: none; box-shadow: none; }
+  html body.parlor.parlor.parlor #npbar .npb-art .cover { width: 46px; height: 46px; border-radius: 7px; }
+  html body.parlor.parlor.parlor #npbar .lcd { order: 1; flex: 1 1 auto; min-width: 0; height: auto; margin: 0; padding: 0; text-align: left; border: 0; background: none; box-shadow: none; color: inherit; }
+  html body.parlor.parlor.parlor #npbar .lcd-t { font-size: 15px; font-weight: 600; color: inherit; text-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body.parlor.parlor.parlor #npbar .lcd-s { font-size: 13px; opacity: .7; color: inherit; text-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body.parlor.parlor.parlor #npbar .lcd-p { display: none; }
+  html body.parlor.parlor.parlor #npbar .npb-ctrl { order: 2; gap: 2px; display: flex; }
+  html body.parlor.parlor.parlor #npbar .npb { width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; color: inherit;
+    display: inline-flex; align-items: center; justify-content: center; }
+  html body.parlor.parlor.parlor #npbar .npb .ico { width: 26px; height: 26px; }
+  html body.parlor.parlor.parlor #npbar .npb svg { fill: currentColor; }
 
   /* -- an album: one column, the cover centred, Play and Shuffle side by side -- */
-  html body.parlor #modal { padding: 0; align-items: stretch; }
-  html body.parlor #modal .modal-card { width: 100%; min-height: 100%; border-radius: 0; padding: calc(env(safe-area-inset-top) + 56px) 0 calc(env(safe-area-inset-bottom) + 30px); }
-  html body.parlor .palbum-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: 0 22px; }
-  html body.parlor .palbum-head .cover.big { width: min(72vw, 330px); border-radius: 10px; -webkit-box-reflect: unset; }
-  html body.parlor .palbum-info { width: 100%; }
-  html body.parlor .palbum-info h1 { font-size: 24px; margin: 0 0 4px; }
-  html body.parlor .palbum-info .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-  html body.parlor .palbum-info .btns .btn { justify-content: center; padding: 12px 10px; }
-  html body.parlor .palbum table, html body.parlor .palbum .songs { margin: 22px 0 0; width: 100%; }
+  html body.parlor.parlor.parlor #modal { padding: 0; align-items: stretch; }
+  html body.parlor.parlor.parlor #modal .modal-card { width: 100%; min-height: 100%; border-radius: 0; padding: calc(var(--sat) + 56px) 0 calc(var(--sab) + 30px); }
+  html body.parlor.parlor.parlor .palbum-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: 0 20px; }
+  html body.parlor.parlor.parlor .palbum-head .cover.big { width: min(72vw, 330px); border-radius: 10px; -webkit-box-reflect: unset; }
+  html body.parlor.parlor.parlor .palbum-info { width: 100%; }
+  html body.parlor.parlor.parlor .palbum-info h1 { font-size: 24px; margin: 0 0 4px; }
+  html body.parlor.parlor.parlor .palbum-info .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+  html body.parlor.parlor.parlor .palbum-info .btns .btn { justify-content: center; padding: 13px 10px; min-height: 48px; white-space: nowrap; }
+  html body.parlor.parlor.parlor .palbum table, html body.parlor.parlor.parlor .palbum .songs { margin: 22px 0 0; width: 100%; }
 
   /* -- Now Playing: one column, the cover big at the top, like Apple Music -- */
-  html body .npf { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
-    padding: calc(env(safe-area-inset-top) + 64px) 26px calc(env(safe-area-inset-bottom) + 24px); }
-  html body .npf-stage { margin: 2vh auto 4vh; width: min(84vw, 46vh); }
-  html body .npf-from { text-align: center; margin: 0 0 6px; }
-  html body .npf-side h1 { font-size: 22px; }
-  html body .npf-side h2 { font-size: 18px; }
-  html body .npf-side h3 { display: none; }
-  html body .npf-prog { margin: 22px 0 18px; }
-  html body .npf-ctrl { justify-content: space-evenly; margin-bottom: 26px; }
+  html body:not(#_) #npfull .npf { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
+    padding: calc(var(--sat) + 44px) 28px calc(var(--sab) + 24px); }
+  html body:not(#_) #npfull .npf-grab { display: block; position: absolute; z-index: 8; top: calc(var(--sat) + 6px); left: 50%; transform: translateX(-50%);
+    width: 96px; height: 30px; padding: 0; border: 0; background: none; box-shadow: none; }
+  html body:not(#_) #npfull .npf-grab::before { content: ''; display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: rgba(255,255,255,.5); }
+  html body:not(#_) #npfull .npf-top { display: none; }
+  html body:not(#_) #npfull .npf-stage { margin: 2vh auto 4vh; width: min(84vw, 44vh); padding: 0; border: 0; background: none; }
+  html body:not(#_) #npfull .npf-from { display: none; }
+  html body:not(#_) #npfull .npf-side h1 { font-size: 22px; margin: 0 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body:not(#_) #npfull .npf-side h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body:not(#_) #npfull .npf-side h3 { display: none; }
+  html body:not(#_) #npfull .npf-prog { margin: 26px 0 14px; }
+  html body:not(#_) #npfull .npf-ctrl { justify-content: space-evenly; margin: 0 -8px 28px; flex-wrap: nowrap; }
   /* (no 10-second skips or volume buttons on a phone: its own volume buttons do that) */
-  html body .npf-ctrl .npb[data-b="rew"], html body .npf-ctrl .npb[data-b="fwd"], html body .npf-ctrl .npb.vol, html body .npf-vol { display: none; }
-  html body .npf-ctrl .npb .ico { width: 34px; height: 34px; }
-  html body .npf-ctrl .npb.big .ico { width: 52px; height: 52px; }
-  html body .npf-top { top: calc(env(safe-area-inset-top) + 10px); right: 16px; left: 16px; justify-content: space-between; }
-  html body .npf-top .np-big { display: none; }
-  html body .np-close { width: 40px; height: 40px; font-size: 16px; margin-left: auto; }
+  html body:not(#_) #npfull .npf-ctrl .npb[data-b="rew"], html body:not(#_) #npfull .npf-ctrl .npb[data-b="fwd"],
+  html body:not(#_) #npfull .npf-ctrl .npb.vol, html body:not(#_) #npfull .npf-vol { display: none; }
+  html body:not(#_) #npfull .npf-ctrl .npb { width: 76px; height: 76px; }
+  html body:not(#_) #npfull .npf-ctrl .npb .ico { width: 38px; height: 38px; }
+  html body:not(#_) #npfull .npf-ctrl .npb.big { width: 88px; height: 88px; }
+  html body:not(#_) #npfull .npf-ctrl .npb.big .ico { width: 54px; height: 54px; }
+  html body:not(#_) #npfull .npf-qsheet { align-items: flex-end; }
+  html body:not(#_) #npfull .npf-qcard { width: 100%; border-radius: 22px 22px 0 0; padding: 26px 22px calc(var(--sab) + 20px); }
   /* a moving cover fills the top of the screen edge to edge and melts into the controls below */
-  html body .npf-motion { inset: 0 0 auto 0; height: min(118vw, 62vh); filter: none; transform: none;
+  html body:not(#_) #npfull .npf-motion { inset: 0 0 auto 0; height: min(118vw, 62vh); filter: none; transform: none;
     -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%); }
-  html body #npfull.has-motion .npf-stage { visibility: hidden; height: min(118vw, 62vh); margin: calc(-1 * (env(safe-area-inset-top) + 64px)) -26px 0; width: auto; }
+  html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; height: calc(min(118vw, 62vh) - var(--sat) - 70px); margin: 0 auto; width: auto; }
 }
