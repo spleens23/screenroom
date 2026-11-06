@@ -157,15 +157,15 @@ window.createParlor = function createParlor(ctx) {
     const cur = P.player && P.player.track && P.player.track.id;
     return h('table', { class: 'songs' },
       h('thead', {}, h('tr', {}, numbered ? h('th', { class: 'n' }, '#') : null, h('th', {}, 'Name'), h('th', { class: 't' }, 'Time'),
-        h('th', {}, 'Artist'), h('th', {}, 'Album'), h('th', { class: 'g' }, 'Genre'), h('th', { class: 'x' }, ''))),
+        h('th', { class: 'ar' }, 'Artist'), h('th', { class: 'al' }, 'Album'), h('th', { class: 'g' }, 'Genre'), h('th', { class: 'x' }, ''))),
       h('tbody', {}, ids.map((id, i) => {
         const t = track(id);
         if (!t) return null;
         return h('tr', { class: 'srow' + (id === cur ? ' now' : ''), tabindex: '0', 'data-id': id,
           onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, context); } },
           numbered ? h('td', { class: 'n' }, i + 1) : null,
-          h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null), h('td', { class: 't' }, mmss(t.duration)),
-          h('td', {}, t.artist), h('td', {}, t.album), h('td', { class: 'g' }, t.genre || ''),
+          h('td', { class: 'nm' }, h('span', { class: 'nm-t' }, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null), h('small', { class: 'nm-s' }, `${t.artist} — ${t.album}`)), h('td', { class: 't' }, mmss(t.duration)),
+          h('td', { class: 'ar' }, t.artist), h('td', { class: 'al' }, t.album), h('td', { class: 'g' }, t.genre || ''),
           h('td', { class: 'x' }, removable
             ? h('button', { class: 'rowbtn', title: 'Remove from playlist', onclick: () => removable(i) }, '✕')
             : h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([id]) }, '+')));
@@ -247,57 +247,8 @@ window.createParlor = function createParlor(ctx) {
   function openAlbum(key) {
     openKey = key; drawAlbum(); ctx.showModal();
     const b = $('#modal .btn.primary'); b && b.focus({ preventScroll: true });
-    noteCard();
   }
 
-  // On a touch screen the album page is a sheet: it slides up, scrolls, and closes when pulled down from the top
-  // (or with ✕ / Back), sliding away rather than vanishing.
-  const modalEl = $('#modal');
-  const sheetCard = () => (!modalEl.hidden && modalEl.querySelector('.modal-card.pmodal')) || null;
-  const touchy = () => matchMedia('(pointer: coarse)').matches;
-  let cardBox = null, albumPull = null;
-  const noteCard = () => { const c = sheetCard(); if (c) { const r = c.getBoundingClientRect(); cardBox = { top: r.top, left: r.left, width: r.width }; } };
-  modalEl.addEventListener('scroll', () => { if (sheetCard()) noteCard(); }, { passive: true });
-  modalEl.addEventListener('touchstart', (e) => {
-    const c = sheetCard();
-    albumPull = c && e.touches.length === 1 && modalEl.scrollTop <= 0 && !e.target.closest('input, textarea')
-      ? { c, y: e.touches[0].clientY, x: e.touches[0].clientX, t: Date.now(), dy: 0, on: false } : null;
-  }, { passive: true });
-  modalEl.addEventListener('touchmove', (e) => {
-    const p = albumPull; if (!p) return;
-    const dy = e.touches[0].clientY - p.y, dx = e.touches[0].clientX - p.x;
-    if (!p.on) {
-      if (Math.abs(dx) > Math.abs(dy) || dy < 8 || modalEl.scrollTop > 0) { if (dy < -8 || Math.abs(dx) > 12) albumPull = null; return; }
-      p.on = true; p.c.classList.add('pulling');
-    }
-    e.preventDefault();
-    p.dy = Math.max(0, dy);
-    p.c.style.transform = `translateY(${p.dy}px)`;
-    modalEl.style.setProperty('--dim', String(Math.max(0.15, 1 - p.dy / 700)));
-  }, { passive: false });
-  const endAlbumPull = () => {
-    const p = albumPull; albumPull = null;
-    if (!p || !p.on) return;
-    p.c.classList.remove('pulling');
-    const v = p.dy / Math.max(1, Date.now() - p.t);
-    if (p.dy > innerHeight * 0.22 || (v > 0.6 && p.dy > 60)) { noteCard(); ctx.closeModal(); }
-    else { p.c.style.transform = ''; modalEl.style.removeProperty('--dim'); }
-  };
-  modalEl.addEventListener('touchend', endAlbumPull);
-  modalEl.addEventListener('touchcancel', endAlbumPull);
-  // the page itself is hidden at once (the rest of the app counts on that); a copy of it slides away
-  function slideAway(card) {
-    if (!cardBox || !touchy() || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const g = card.cloneNode(true);
-    g.querySelectorAll('video').forEach((v) => v.remove());
-    g.classList.add('pmodal-ghost'); g.removeAttribute('id');
-    g.style.cssText = `top:${cardBox.top}px;left:${cardBox.left}px;width:${cardBox.width}px;`;
-    const dim = h('div', { class: 'pmodal-dim', style: `opacity:${modalEl.style.getPropertyValue('--dim') || 1}` });
-    document.body.append(dim, g);
-    void g.offsetHeight;
-    g.classList.add('go'); dim.style.opacity = '0';
-    setTimeout(() => { g.remove(); dim.remove(); }, 420);
-  }
   function drawAlbum(focusSel) {
     const a = album(openKey);
     if (!a) return ctx.closeModal();
@@ -455,13 +406,17 @@ window.createParlor = function createParlor(ctx) {
 
   // ---- playing -----------------------------------------------------------------------------------------
   let lastPlay = { key: '', at: 0 };
+  // the phone's clock and battery: white over Now Playing (dark), dark over the light pages
+  const statusBar = () => { if (api.setStatusBar) api.setStatusBar(fullOpen ? 'light' : 'dark'); };
+  let openOnPlay = null; // the song whose Now Playing opens as soon as it starts (touch screens)
   async function playIds(ids, start, context) {
     // a double-click on a song is one request, not two
     const key = `${ids[start]}|${ids.length}`;
     if (key === lastPlay.key && Date.now() - lastPlay.at < 700) return;
     lastPlay = { key, at: Date.now() };
+    if (matchMedia('(pointer: coarse)').matches) openOnPlay = ids[start];
     const r = await api.musicPlay({ trackIds: ids, start, context });
-    if (!r.ok) ctx.flash(r.error || 'Could not play that');
+    if (!r.ok) { openOnPlay = null; ctx.flash(r.error || 'Could not play that'); }
   }
 
   // Now Playing bar (bottom of the screen, both sides of the app) and the full Now Playing view.
@@ -480,6 +435,8 @@ window.createParlor = function createParlor(ctx) {
     const from = skipTo && Date.now() - skipTo.at < 1500 && skipTo.id === s.track.id ? skipTo.pos : (s.pos || 0);
     const pos = Math.max(0, Math.min((s.dur || 0) - 1, from + d));
     skipTo = { pos, at: Date.now(), id: s.track.id };
+    seekHold = { to: pos, at: performance.now(), until: Date.now() + 2500 };
+    if (clock) { clock.pos = pos; clock.at = seekHold.at; paintTime(); }
     api.musicCmd('seek', pos);
   };
   const bar = h('div', { id: 'npbar', hidden: true, 'data-navrow': '1' });
@@ -515,8 +472,12 @@ window.createParlor = function createParlor(ctx) {
   };
   placeTabs();
   if (phoneMQ.addEventListener) phoneMQ.addEventListener('change', placeTabs);
-  if (window.ResizeObserver && navEl) new ResizeObserver(() => document.documentElement.style.setProperty('--navh', navEl.offsetHeight + 'px')).observe(navEl);
+  const setNavH = () => { if (navEl) document.documentElement.style.setProperty('--navh', navEl.offsetHeight + 'px'); };
+  if (window.ResizeObserver && navEl) new ResizeObserver(setNavH).observe(navEl, { box: 'border-box' });
+  addEventListener('resize', setNavH); addEventListener('orientationchange', () => setTimeout(setNavH, 300));
+  setTimeout(setNavH, 500); setTimeout(setNavH, 1500);
   let fullOpen = false;
+  statusBar();
   let lastTrack = null, lastPaused = null;
 
   function drawBar(force) {
@@ -536,7 +497,7 @@ window.createParlor = function createParlor(ctx) {
     if (force || lastPaused !== s.paused) B.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
     B.pos.textContent = mmss(s.pos); B.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
     B.fill.style.width = pct(s) + '%';
-    if (fullOpen) drawFull(force || lastTrack !== t.id || lastPaused !== s.paused);
+    if (fullOpen) drawFull(force || lastTrack !== t.id);
     lastTrack = t.id; lastPaused = s.paused;
   }
 
@@ -548,7 +509,7 @@ window.createParlor = function createParlor(ctx) {
   const full = h('div', { id: 'npfull', hidden: true });
   const F = {
     bg: h('div', { class: 'npf-bg' }),
-    stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: 'Big cover', onclick: () => setBig(!full.classList.contains('big')) }),
+    stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: window.S_IOS ? '' : 'Big cover', onclick: () => { if (!window.S_IOS) setBig(!full.classList.contains('big')); } }),
     from: h('div', { class: 'npf-from' }), title: h('h1', {}), artist: h('h2', {}), album: h('h3', {}),
     pos: h('span', {}), left: h('span', {}), fill: h('div', {}),
     vol: h('span', { class: 'npf-vol' }),
@@ -582,7 +543,13 @@ window.createParlor = function createParlor(ctx) {
   const endScrub = (e, cancel) => {
     if (!scrubbing || e.pointerId !== scrubbing.id) return;
     const to = scrubbing.to; scrubbing = null; full.classList.remove('scrubbing');
-    if (!cancel && to != null) api.musicCmd('seek', to); else drawFull(false);
+    if (!cancel && to != null) {
+      // show the new place at once and keep it there until the player reports it (no jump back)
+      seekHold = { to, at: performance.now(), until: Date.now() + 2500 };
+      if (clock) { clock.pos = to; clock.at = seekHold.at; }
+      paintTime();
+      api.musicCmd('seek', to);
+    } else paintTime();
   };
   F.scrub.addEventListener('pointerup', (e) => endScrub(e, false));
   F.scrub.addEventListener('pointercancel', (e) => endScrub(e, true));
@@ -620,7 +587,7 @@ window.createParlor = function createParlor(ctx) {
   }
   function wakeFull() {
     clearTimeout(idle);
-    if (fullOpen) idle = setTimeout(() => { if (fullOpen && !full.contains(document.querySelector('.poverlay'))) setBig(true); }, BIG_AFTER);
+    if (fullOpen && !window.S_IOS) idle = setTimeout(() => { if (fullOpen && !full.contains(document.querySelector('.poverlay'))) setBig(true); }, BIG_AFTER);
   }
   // In big-cover mode the first key / click only brings the controls back.
   full.addEventListener('keydown', (e) => {
@@ -726,6 +693,8 @@ window.createParlor = function createParlor(ctx) {
     pull = { y: t.clientY, x: t.clientX, t: Date.now(), dy: 0, on: false };
   }, { passive: true });
   full.addEventListener('touchmove', (e) => {
+    // nothing here scrolls except the queue (so the page behind doesn't scroll, and no scroll bar appears)
+    if (e.cancelable && !e.target.closest('.npf-queue, .npf-qcard')) e.preventDefault();
     if (!pull) return;
     const t = e.touches[0];
     const dy = t.clientY - pull.y, dx = t.clientX - pull.x;
@@ -754,6 +723,8 @@ window.createParlor = function createParlor(ctx) {
     clearTimeout(leaving); full.classList.remove('leaving'); full.style.transform = '';
     fullFrom = document.activeElement;
     fullOpen = true; full.hidden = false; full.classList.remove('big');
+    document.documentElement.classList.add('np-open');
+    statusBar();
     if (matchMedia('(pointer: coarse)').matches) { // slide up from the bottom
       full.style.transition = 'none'; full.style.transform = 'translateY(100%)'; void full.offsetHeight;
       full.style.transition = ''; full.style.transform = '';
@@ -762,6 +733,8 @@ window.createParlor = function createParlor(ctx) {
   }
   function closeFull() {
     fullOpen = false; clearTimeout(idle); F.qsheet.hidden = true;
+    document.documentElement.classList.remove('np-open');
+    statusBar();
     // on a touch screen it slides away downwards, like Apple Music
     if (matchMedia('(pointer: coarse)').matches) {
       full.classList.add('leaving');
@@ -792,19 +765,34 @@ window.createParlor = function createParlor(ctx) {
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
       drawQuality(t);
       F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
-      F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause));
     }
     drawQueue();
+    if (F.play.dataset.p !== String(!!s.paused)) { F.play.dataset.p = String(!!s.paused); F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause)); }
     F.shuf.classList.toggle('on', !!s.shuffle); F.shuf.setAttribute('aria-pressed', String(!!s.shuffle));
     const r = s.repeat || 'off';
     F.rep.classList.toggle('on', r !== 'off'); F.rep.setAttribute('aria-pressed', String(r !== 'off'));
     F.rep.title = r === 'one' ? 'Repeating this song' : r === 'all' ? 'Repeating the queue' : 'Repeat';
     if (F.rep.dataset.mode !== r) { F.rep.dataset.mode = r; F.rep.replaceChildren(svg(r === 'one' ? ICON.repeat1 : ICON.repeat)); }
     full.classList.toggle('paused', !!s.paused);
-    if (scrubbing) return; // the finger is in charge of the times while scrubbing
-    F.pos.textContent = mmss(s.pos); F.left.textContent = '-' + mmss((s.dur || 0) - s.pos);
-    F.fill.style.width = pct(s) + '%';
     F.vol.textContent = `${s.volume}%`;
+    // where the song is, as of this update; the bar moves on smoothly from here (see tick)
+    if (seekHold && (Math.abs(s.pos - seekHold.to) < 1.5 || Date.now() > seekHold.until)) seekHold = null;
+    clock = { pos: seekHold ? seekHold.to : s.pos, at: performance.now(), dur: s.dur || 0, paused: !!s.paused, id: t.id };
+    if (seekHold) clock.at = seekHold.at;
+    paintTime();
+    if (!ticking) { ticking = true; requestAnimationFrame(tick); }
+  }
+  let clock = null, seekHold = null, ticking = false;
+  function paintTime() {
+    if (scrubbing || !clock) return; // the finger is in charge of the times while scrubbing
+    const pos = Math.min(clock.dur || Infinity, clock.pos + (clock.paused ? 0 : (performance.now() - clock.at) / 1000));
+    F.pos.textContent = mmss(pos); F.left.textContent = '-' + mmss(Math.max(0, (clock.dur || 0) - pos));
+    F.fill.style.width = (clock.dur ? Math.min(100, (pos / clock.dur) * 100) : 0) + '%';
+  }
+  function tick() {
+    if (!fullOpen || full.hidden) { ticking = false; return; }
+    paintTime();
+    requestAnimationFrame(tick);
   }
 
   api.onMusicState((s) => {
@@ -812,6 +800,7 @@ window.createParlor = function createParlor(ctx) {
     const changed = !P.player || !s.track || !P.player.track || P.player.track.id !== (s.track && s.track.id);
     P.player = s;
     drawBar();
+    if (openOnPlay && s.track && s.track.id === openOnPlay) { openOnPlay = null; if (!fullOpen) openFull(); }
     // highlight the playing song in lists
     if (changed) document.querySelectorAll('.srow').forEach((r) => r.classList.toggle('now', !!s.track && r.dataset.id === s.track.id));
     // a new song started: "Recently Played" has moved on (shown next time the page is drawn)
@@ -843,10 +832,7 @@ window.createParlor = function createParlor(ctx) {
     },
     onModalClosed() {
       const k = openKey; openKey = null;
-      const c = $('#modal .modal-card');
-      if (c && c.classList.contains('pmodal') && k) slideAway(c);
-      if (c) { c.classList.remove('pmodal', 'pulling'); c.style.transform = ''; }
-      modalEl.style.removeProperty('--dim'); cardBox = null;
+      const c = $('#modal .modal-card'); c && c.classList.remove('pmodal');
       const el = k && main.querySelector(`.card[data-key="${CSS.escape(k)}"]`); if (el) el.focus({ preventScroll: true });
     },
     cdIcon,

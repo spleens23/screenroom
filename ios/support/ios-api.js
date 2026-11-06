@@ -78,7 +78,9 @@
   const pall = () => pdata.profiles;
   const pget = (id) => pall().find((p) => p.id === id) || null;
   const plast = () => pget(pdata.last) || pall()[0];
-  const needsPicker = () => pall().length > 1 || !!pall()[0].pinHash;
+  // Parlor is one person's music player: no profile picker; it uses the last grown-up profile.
+  const SOLO = EDITION === 'music';
+  const needsPicker = () => !SOLO && (pall().length > 1 || !!pall()[0].pinHash);
   const savePro = () => save('profiles', pdata);
   async function pinHash(salt, pin) { return native('sha256', `${salt}:${pin}`); }
   async function checkPin(id, pin) {
@@ -440,6 +442,7 @@
           savePro();
         }
         currentId = plast().id;
+        if (SOLO && plast().kids) currentId = (pall().find((x) => !x.kids) || plast()).id;
         needPick = needsPicker();
         progress = await load(progressName(currentId), {});
         ratings = await load('ratings', {});
@@ -812,6 +815,7 @@
       await native('musicPlay', { tracks: list, start: start || 0, context: context || null });
       return ok();
     },
+    setStatusBar: (style) => native('statusBar', style).catch(() => {}),
     musicCmd: async (cmd, arg) => {
       if (cmd === 'enqueue') {
         const okIds = visibleTrackIds();

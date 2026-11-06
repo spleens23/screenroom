@@ -88,6 +88,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             }
         case "sha256":
             return sha256Hex(arg(a, 0) ?? "")
+        case "statusBar":
+            // "dark" text on a light screen, "light" text on a dark one (Parlor shows the clock and battery)
+            (host as? ScreenController)?.setStatusBar(dark: (arg(a, 0) as String?) == "dark")
+            return nil
         case "random":
             return randomHex((arg(a, 0) as NSNumber?)?.intValue ?? 8)
         case "playVideo":

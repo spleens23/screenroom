@@ -165,6 +165,14 @@ final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInte
         if loaded { bridge.emit("files-changed", [:]) }
     }
 
-    override var prefersStatusBarHidden: Bool { true }
-    override var prefersHomeIndicatorAutoHidden: Bool { true }
+    // Screenroom is a cinema: no clock. Parlor keeps the clock and battery visible, in the colour the screen asks for.
+    override var prefersStatusBarHidden: Bool { !isParlorApp }
+    override var prefersHomeIndicatorAutoHidden: Bool { !isParlorApp }
+    private var statusDark = true
+    override var preferredStatusBarStyle: UIStatusBarStyle { statusDark ? .darkContent : .lightContent }
+    func setStatusBar(dark: Bool) {
+        guard dark != statusDark else { return }
+        statusDark = dark
+        UIView.animate(withDuration: 0.25) { self.setNeedsStatusBarAppearanceUpdate() }
+    }
 }

@@ -81,6 +81,8 @@
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UIStatusBarHidden</key>
+	<false/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<!-- iPhone: the screens turn either way -->
 	<key>UISupportedInterfaceOrientations</key>

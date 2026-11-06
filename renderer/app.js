@@ -14,6 +14,8 @@
   const EDITION = (window.api && api.edition) || 'all';
   const APP = EDITION === 'music' ? 'Parlor' : 'Screenroom';
   // The standard theme ('2020s'): Matinee in Screenroom, Encore in Parlor.
+  // Parlor on a phone or iPad is a solo app: no profiles to switch between or manage.
+  const SOLO = EDITION === 'music' && !!window.S_IOS;
   const THEME_NAME = EDITION === 'music' ? 'Encore' : 'Matinee';
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
@@ -710,8 +712,60 @@
     $('#modal').scrollTop = 0;
     const first = $('#modal .btn.primary'); first && first.focus();
   }
+  // On a touch screen a film's page (and an album's) closes when pulled down from the top, as well as with ✕ /
+  // Back; either way it slides away rather than vanishing.
+  const modalEl = $('#modal');
+  const sheetCard = () => (!modalEl.hidden && modalEl.querySelector('.modal-card')) || null;
+  const touchy = () => matchMedia('(pointer: coarse)').matches;
+  let cardBox = null, sheetPull = null;
+  const noteCard = () => { const c = sheetCard(); if (c) { const r = c.getBoundingClientRect(); cardBox = { top: r.top, left: r.left, width: r.width }; } };
+  modalEl.addEventListener('scroll', () => noteCard(), { passive: true });
+  modalEl.addEventListener('touchstart', (e) => {
+    const c = sheetCard();
+    noteCard();
+    sheetPull = c && e.touches.length === 1 && modalEl.scrollTop <= 0 && !e.target.closest('input, textarea, select')
+      ? { c, y: e.touches[0].clientY, x: e.touches[0].clientX, t: Date.now(), dy: 0, on: false } : null;
+  }, { passive: true });
+  modalEl.addEventListener('touchmove', (e) => {
+    const p = sheetPull; if (!p) return;
+    const dy = e.touches[0].clientY - p.y, dx = e.touches[0].clientX - p.x;
+    if (!p.on) {
+      if (Math.abs(dx) > Math.abs(dy) || dy < 8 || modalEl.scrollTop > 0) { if (dy < -8 || Math.abs(dx) > 12) sheetPull = null; return; }
+      p.on = true; p.c.classList.add('pulling');
+    }
+    e.preventDefault();
+    p.dy = Math.max(0, dy);
+    p.c.style.transform = `translateY(${p.dy}px)`;
+    modalEl.style.setProperty('--dim', String(Math.max(0.15, 1 - p.dy / 700)));
+  }, { passive: false });
+  const endSheetPull = () => {
+    const p = sheetPull; sheetPull = null;
+    if (!p || !p.on) return;
+    p.c.classList.remove('pulling');
+    const v = p.dy / Math.max(1, Date.now() - p.t);
+    if (p.dy > innerHeight * 0.22 || (v > 0.6 && p.dy > 60)) { noteCard(); closeModal(); }
+    else { p.c.style.transform = ''; modalEl.style.removeProperty('--dim'); }
+  };
+  modalEl.addEventListener('touchend', endSheetPull);
+  modalEl.addEventListener('touchcancel', endSheetPull);
+  // the page itself is hidden at once (the rest of the app counts on that); a copy of it slides away
+  function slideAway(card) {
+    if (!cardBox || !touchy() || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const g = card.cloneNode(true);
+    g.querySelectorAll('video').forEach((v) => v.remove());
+    g.classList.add('sheet-ghost'); g.removeAttribute('id');
+    g.style.cssText = `top:${cardBox.top}px;left:${cardBox.left}px;width:${cardBox.width}px;`;
+    const dim = h('div', { class: 'sheet-dim', style: `opacity:${modalEl.style.getPropertyValue('--dim') || 1}` });
+    document.body.append(dim, g);
+    void g.offsetHeight;
+    g.classList.add('go'); dim.style.opacity = '0';
+    setTimeout(() => { g.remove(); dim.remove(); }, 420);
+  }
   const closeModal = () => {
     const o = open;
+    const card = sheetCard();
+    if (card) { if (!sheetPull) noteCard(); slideAway(card); card.classList.remove('pulling'); card.style.transform = ''; }
+    modalEl.style.removeProperty('--dim'); cardBox = null;
     $('#modal').hidden = true; open = null;
     if (parlorUI) parlorUI.onModalClosed();
     if (!o) return;
@@ -1782,7 +1836,7 @@
       $('#settings-btn').before(b);
     }
     const p = S.profile;
-    b.hidden = !p || (S.profiles || []).length < 2;
+    b.hidden = !p || (S.profiles || []).length < 2 || SOLO;
     b.replaceChildren(p ? avatar(p) : '');
   }
 
@@ -1995,8 +2049,8 @@
     const films = EDITION !== 'music', music = EDITION !== 'films', box = EDITION === 'all';
     $('#settings-body').replaceChildren(...[
       h('h2', {}, 'Settings'),
-      api.saveProfile && S.profile ? h('h3', {}, 'Profiles') : null,
-      api.saveProfile && S.profile ? profilesBlock() : null,
+      api.saveProfile && S.profile && !SOLO ? h('h3', {}, 'Profiles') : null,
+      api.saveProfile && S.profile && !SOLO ? profilesBlock() : null,
       api.setTheme ? h('h3', {}, 'Theme') : null,
       api.setTheme ? themeBlock() : null,
       films && api.clearInProgress ? h('h3', {}, 'Continue Watching') : null,
