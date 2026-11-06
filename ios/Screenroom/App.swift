@@ -62,7 +62,7 @@ final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInte
     override func loadView() {
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(bridge, name: "screenroom")
-        cfg.userContentController.addUserScript(WKUserScript(source: "window.S_IOS = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.S_IOS = true; window.SR_APP = '\(appKind)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // Page errors are kept in a small log (Library/Caches/page-errors.log), and a problem while the screens start
         // up is shown on screen, so it can be reported instead of leaving a half-drawn page.
         cfg.userContentController.addUserScript(WKUserScript(source: """

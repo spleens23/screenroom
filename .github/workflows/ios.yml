@@ -149,6 +149,30 @@ jobs:
           run "api.state().then(s => { const f = s.library.find(i => /Last Signal/.test(i.title || i.path)); f && api.play({ id: f.id }); })"; shot player-apple 16
           if [ -s "$PDATA/Library/Caches/page-errors.log" ]; then cp "$PDATA/Library/Caches/page-errors.log" shots/iphone-page-errors.txt; else echo "(no page errors)" > shots/iphone-page-errors.txt; fi
           cat shots/iphone-page-errors.txt
+      - name: Try Parlor (the music app) in the simulated iPad
+        continue-on-error: true
+        run: |
+          mkdir -p shots
+          exec > >(tee shots/parlor.txt) 2>&1
+          set -x
+          UDID="$(cat udid.txt)"
+          cd ios
+          xcodebuild -project Screenroom.xcodeproj -scheme Parlor -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-parlor.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build-parlor.log || { grep -E "error:" -B2 -A3 build-parlor.log | head -80 > ../shots/parlor-build-errors.txt; exit 1; }
+          cd ..
+          APP="$(find ios/build/Build/Products -name Parlor.app -maxdepth 3 | head -1)"
+          xcrun simctl install "$UDID" "$APP"
+          PD="$(xcrun simctl get_app_container "$UDID" dev.screenroom.parlor data)"
+          ios/scripts/make-test-media.sh "$PD/Documents"
+          shot() { sleep "$2"; xcrun simctl io "$UDID" screenshot "shots/parlor-$1.png"; }
+          run() { xcrun simctl terminate "$UDID" dev.screenroom.parlor 2>/dev/null || true; xcrun simctl launch "$UDID" dev.screenroom.parlor --ui-script "$1"; }
+          xcrun simctl launch "$UDID" dev.screenroom.parlor; shot home 30
+          # the album with a moving cover: is the loop playing?
+          run "const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Long Album/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('moving cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime, err: v.error && v.error.code }) : 'none')); }, 6000)"; shot album 16
+          run "api.parlorState().then(p => { const a = p.albums.find(x => /Long Album/.test(x.title)); return api.musicPlay({ trackIds: a.tracks, start: 0 }); }).then(() => setTimeout(() => { const b = document.querySelector('.npb-art'); b && b.click(); }, 2500))"; shot nowplaying 18
+          if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
+          cat shots/parlor-page-errors.txt
       - name: Share the screenshots
         if: always()
         env:
@@ -193,40 +217,16 @@ jobs:
           KEY="$RUNNER_TEMP/AuthKey.p8"
           printf '%s' "$ASC_KEY_P8" | (base64 --decode 2>/dev/null || cat) > "$KEY"
           grep -q "BEGIN PRIVATE KEY" "$KEY" || printf '%s' "$ASC_KEY_P8" > "$KEY"
-          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
-          # The archive is built unsigned: signing it for development would need a registered iPad. The export below
-          # signs it for the App Store with Apple's cloud-managed distribution certificate (needs an Admin key).
-          xcodebuild -project Screenroom.xcodeproj -scheme Screenroom -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath build/Screenroom.xcarchive DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            archive 2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
-          mkdir -p ../shots
-          grep -q "ARCHIVE SUCCEEDED" archive.log || { grep -E "error:" -B2 -A3 archive.log | head -100 | tee ../shots/testflight-errors.txt; tail -30 archive.log >> ../shots/testflight-errors.txt; exit 1; }
-          # mpv's libraries are static (already linked into the app); Xcode still copies their empty framework folders
-          # into the app, which App Store Connect rejects as unsigned code. Take them out before signing.
-          APPDIR="$(find build/Screenroom.xcarchive/Products -maxdepth 3 -name '*.app' -type d | head -1)"
-          {
-            echo "app: $APPDIR"
-            for f in "$APPDIR"/Frameworks/*.framework; do
-              [ -d "$f" ] || continue
-              b="$f/$(basename "$f" .framework)"
-              kind="$(file -b "$b" 2>&1 | tr '\n' ' ')"
-              if echo "$kind" | grep -q "dynamically linked"; then echo "keep: $(basename "$f") ($kind)"
-              else echo "static, not shipped: $(basename "$f") ($kind)"; rm -rf "$f"; fi
-            done
-            echo "left:"; ls "$APPDIR/Frameworks" 2>&1 || echo "(no Frameworks folder: everything is built into the app)"
-          } 2>&1 | tee ../shots/testflight-frameworks.txt
-          sed "s/TEAM_ID_HERE/$TEAM_ID/" ExportOptions.plist > build/ExportOptions.plist
-          xcodebuild -exportArchive -archivePath build/Screenroom.xcarchive -exportOptionsPlist build/ExportOptions.plist \
-            -exportPath build/export "${AUTH[@]}" > export.log 2>&1 || true
-          tail -20 export.log
-          { grep -q "EXPORT SUCCEEDED" export.log && ! grep -qiE "EXPORT FAILED|Upload failed|Validation failed" export.log; } || { mkdir -p ../shots; { grep -iE "error|fail" export.log | head -40; echo ----; tail -80 export.log; } > ../shots/testflight-errors.txt; exit 1; }
-          echo "::notice title=TestFlight::Build $GITHUB_RUN_NUMBER sent to App Store Connect. It shows up in TestFlight once Apple has processed it (usually 10–30 minutes)."
+          export KEY BUILD="$GITHUB_RUN_NUMBER"
+          # Screenroom (films) must go through; Parlor (music) needs its own app in App Store Connect first, so it
+          # doesn't stop Screenroom's upload when it can't go yet (its notes say why)
+          scripts/ship.sh Screenroom
+          scripts/ship.sh Parlor || echo "::warning title=Parlor::Parlor wasn't uploaded: see testflight-parlor-errors.txt. It needs an app for dev.screenroom.parlor in App Store Connect."
       - name: What App Store Connect says
         if: always() && steps.key.outputs.ready == 'yes'
         run: |
           mkdir -p shots
-          cp ios/export.log shots/testflight-export.log 2>/dev/null || true
+          cp shots/testflight-screenroom-export.log shots/testflight-export.log 2>/dev/null || true
           KEY="$RUNNER_TEMP/AuthKey-status.p8"
           printf '%s' "$ASC_KEY_P8" | (base64 --decode 2>/dev/null || cat) > "$KEY"
           grep -q "BEGIN PRIVATE KEY" "$KEY" || printf '%s' "$ASC_KEY_P8" > "$KEY"
@@ -234,6 +234,8 @@ jobs:
           sleep 90
           ASC_KEY_FILE="$KEY" python3 ios/scripts/asc-status.py > shots/testflight-status.txt 2>&1 || true
           cat shots/testflight-status.txt
+          ASC_BUNDLE=dev.screenroom.parlor ASC_KEY_FILE="$KEY" python3 ios/scripts/asc-status.py > shots/testflight-parlor-status.txt 2>&1 || true
+          cat shots/testflight-parlor-status.txt
       - name: Keep the upload notes
         if: always() && steps.key.outputs.ready == 'yes'
         env:

@@ -4,7 +4,7 @@ processing state). Uses the same API key as the upload.  env: ASC_KEY_ID, ASC_IS
 import json, os, sys, time, urllib.request, urllib.error
 import jwt  # PyJWT
 
-BUNDLE = 'dev.screenroom.ipad'
+BUNDLE = os.environ.get('ASC_BUNDLE', 'dev.screenroom.ipad')
 key = open(os.environ['ASC_KEY_FILE']).read()
 token = jwt.encode({'iss': os.environ['ASC_ISSUER_ID'], 'iat': int(time.time()), 'exp': int(time.time()) + 900, 'aud': 'appstoreconnect-v1'},
                    key, algorithm='ES256', headers={'kid': os.environ['ASC_KEY_ID'], 'typ': 'JWT'})

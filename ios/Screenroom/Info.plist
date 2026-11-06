@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Which app this is: screenroom (films) or parlor (music). The same code and screens build both. -->
+	<key>SRApp</key>
+	<string>screenroom</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -32,7 +35,7 @@
 	<array>
 		<string>audio</string>
 	</array>
-	<!-- "Open in Screenroom" and AirDrop for films and songs. -->
+	<!-- "Open in Screenroom" and AirDrop for films (songs go to Parlor). -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -47,21 +50,6 @@
 				<string>public.mpeg-4</string>
 				<string>com.apple.m4v-video</string>
 				<string>com.apple.quicktime-movie</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Song</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.audio</string>
-				<string>public.mp3</string>
-				<string>public.mpeg-4-audio</string>
-				<string>org.xiph.flac</string>
 			</array>
 		</dict>
 	</array>

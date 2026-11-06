@@ -29,7 +29,8 @@ final class Storage {
     }
 
     func prepare() {
-        for d in [films, music, data, art, avatars] {
+        // each app has its own folder in the Files app: Screenroom › Films, Parlor › Music
+        for d in [isParlorApp ? music : films, data, art, avatars] {
             try? fm.createDirectory(at: d, withIntermediateDirectories: true)
         }
         // Profiles and progress are backed up; the cover-art cache (rebuilt by a scan) isn't.
@@ -176,3 +177,7 @@ let avVideoExtensions: Set<String> = ["mp4", "m4v", "mov"]
 /// Pictures and subtitles that travel with films and songs when a folder is imported.
 let sidecarExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "srt", "vtt", "ass", "ssa"]
 let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "flac", "alac", "wav", "aif", "aiff", "caf"]
+
+/// Which app this is: "screenroom" (films) or "parlor" (music), from the app's Info.plist. The same code builds both.
+let appKind: String = (Bundle.main.object(forInfoDictionaryKey: "SRApp") as? String) ?? "screenroom"
+let isParlorApp = appKind == "parlor"

@@ -5,6 +5,8 @@ FONT = sys.argv[1]
 INK_TOP, INK_BOT = (38, 29, 22), (20, 15, 11)
 CREAM, AMBER = (243, 233, 220), (240, 167, 58)
 
+LETTER = sys.argv[4] if len(sys.argv) > 4 else 'S'  # 'P' makes Parlor's icon
+
 def tile(size, bleed):
     """bleed=True: full square (iOS, Android masks it); False: macOS-style rounded tile with margin."""
     S = 4
@@ -27,14 +29,14 @@ def tile(size, bleed):
     # a thin amber line along the bottom of the tile: the edge of the stage
     # (kept off: the letter and dot carry it)
     f = ImageFont.truetype(FONT, int(w * 0.78))
-    bb = d.textbbox((0, 0), 'S', font=f)
+    bb = d.textbbox((0, 0), LETTER, font=f)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
     dot = int(w * 0.085)
     gap = int(w * 0.02)
     total = tw + gap + dot
     tx = x0 + (w - total) / 2 - bb[0]
     ty = y0 + (w - th) / 2 - bb[1] - w * 0.01
-    d.text((tx, ty), 'S', font=f, fill=CREAM)
+    d.text((tx, ty), LETTER, font=f, fill=CREAM)
     base = ty + bb[3]
     dx = tx + bb[2] + gap
     d.ellipse([dx, base - dot, dx + dot, base], fill=AMBER)
@@ -56,6 +58,14 @@ def banner(w, h):
     return img.resize((w, h), Image.LANCZOS)
 
 out = sys.argv[3]
+if LETTER == 'P':
+    # Parlor (the music app on iPhone and iPad): the same tile with its own letter
+    import os
+    d = f'{out}/ios/Screenroom/Assets.xcassets/ParlorIcon.appiconset'
+    os.makedirs(d, exist_ok=True)
+    tile(1024, True).convert('RGB').save(f'{d}/icon-1024.png')
+    open(f'{d}/Contents.json', 'w').write('{\n  "images" : [\n    { "filename" : "icon-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }\n  ],\n  "info" : { "author" : "xcode", "version" : 1 }\n}\n')
+    sys.exit(0)
 tile(1024, False).save(f'{out}/build/icon.png')
 tile(1024, True).convert('RGB').save(f'{out}/ios/Screenroom/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
 tile(96, True).save(f'{out}/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png')

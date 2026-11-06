@@ -127,9 +127,11 @@ Screenroom can run as a streaming box with no subscriptions: it boots straight i
 - **Library updates itself** every 30 minutes and on launch.
 - **Not included:** recording live TV (DVR). Screenroom plays files you already have.
 
-## iPad
+## iPhone and iPad
 
-`ios/` is the iPad version. It shows the same screens (the pages in `renderer/` with `ios/support/ios-api.js` in place of the desktop bridge) and plays films with Apple's player when it can (HDR, Dolby Vision) and with [mpv](https://mpv.io) for everything else (DTS, TrueHD including TrueHD inside MP4, MKV), both behind Screenroom's own controls.
+`ios/` builds two apps for iPhone and iPad from the same code and screens: **Screenroom** (films) and **Parlor** (music, with moving album covers: put a short looping `cover.mp4` beside an album's songs). Each app's `Info.plist` says which it is (`SRApp`).
+
+Screenroom It shows the same screens (the pages in `renderer/` with `ios/support/ios-api.js` in place of the desktop bridge) and plays films with Apple's player when it can (HDR, Dolby Vision) and with [mpv](https://mpv.io) for everything else (DTS, TrueHD including TrueHD inside MP4, MKV), both behind Screenroom's own controls.
 
 **Build it yourself** (a Mac with Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen)):
 
@@ -139,7 +141,7 @@ ios/scripts/prepare-web.sh      # the screens, into ios/Web/
 cd ios && xcodegen generate && open Screenroom.xcodeproj
 ```
 
-Choose your own Apple ID as the team (a free one works) and run it on your iPad. This is also how to use your own build of mpv, FFmpeg or any other library: replace its `.xcframework` in `ios/vendor/mpvkit/` and build again. Every push to `main` also builds the app on GitHub (`.github/workflows/ios.yml`), tests it in a simulated iPad and sends it to TestFlight.
+Choose your own Apple ID as the team (a free one works), pick the Screenroom or Parlor scheme and run it on your iPhone or iPad. This is also how to use your own build of mpv, FFmpeg or any other library: replace its `.xcframework` in `ios/vendor/mpvkit/` and build again. Every push to `main` also builds the app on GitHub (`.github/workflows/ios.yml`), tests it in a simulated iPad and sends it to TestFlight.
 
 ## Troubleshooting
 

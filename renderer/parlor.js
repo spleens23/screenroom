@@ -53,8 +53,20 @@ window.createParlor = function createParlor(ctx) {
     const box = h('div', { class: `cover ${size || ''}` });
     if (a && a.art) box.append(h('img', { src: fileUrl(a.art), alt: '', loading: 'lazy', draggable: 'false' }));
     else box.append(generatedSleeve(a, /tiny/.test(size || '')));
+    // the album's moving cover (cover.mp4 in its folder) plays over the still one on the album page and in
+    // Now Playing, silently and on a loop; if it can't play, the still cover stays
+    if (a && a.motion && /big|huge/.test(size || '')) box.append(motion(a));
     box.append(h('div', { class: 'gloss' }));
     return box;
+  }
+  function motion(a) {
+    const v = h('video', { class: 'motion', src: fileUrl(a.motion), loop: '', playsinline: '', 'webkit-playsinline': '', preload: 'auto', disablepictureinpicture: '', 'aria-hidden': 'true' });
+    v.muted = true; v.defaultMuted = true; v.autoplay = true;
+    v.addEventListener('playing', () => v.classList.add('on'));
+    v.addEventListener('error', () => v.remove());
+    // (some browsers want play() asked for once the video is in the page)
+    requestAnimationFrame(() => { const p = v.play && v.play(); if (p && p.catch) p.catch(() => {}); });
+    return v;
   }
   /** Album card artwork: the sleeve, with the record tucked behind it (it slides out when the card is chosen). */
   function sleeve(a) {
@@ -90,7 +102,7 @@ window.createParlor = function createParlor(ctx) {
       h('h1', {}, 'Welcome to the Parlor'),
       P.canManage
         ? (ctx.isIOS && ctx.isIOS()
-          ? [h('p', {}, `Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My ${ctx.device ? ctx.device() : 'iPad'} › Screenroom, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.`),
+          ? [h('p', {}, `Your music library is empty. Put albums in Screenroom’s Music folder (Files app › On My ${ctx.device ? ctx.device() : 'iPad'} › ${ctx.appName || 'Screenroom'}, Finder on a Mac, or AirDrop), or import them. Albums are yours, and you can share any album with other profiles.`),
               h('button', { class: 'btn primary', onclick: async () => { const r = await api.parlorAddDir(null); if (r.ok) { P = r.state; render(); } else ctx.flash(r.error); } }, 'Import music…')]
           : [h('p', {}, 'Your music library is empty. Add the folder your music is in: albums found there are yours, and you can share any album with other profiles.'),
               h('button', { class: 'btn primary', onclick: () => ctx.openSettings('parlor') }, 'Add music')])

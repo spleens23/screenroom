@@ -20,7 +20,7 @@ final class Scanner {
         guard let e = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
         for case let url as URL in e {
             if url.lastPathComponent == ".Trash" { e.skipDescendants(); continue }
-            if exts.contains(url.pathExtension.lowercased()) { out.append(url) }
+            if exts.contains(url.pathExtension.lowercased()), !(exts == videoExtensions && isMotionCover(url.lastPathComponent)) { out.append(url) }
         }
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
@@ -32,6 +32,7 @@ final class Scanner {
 
     // ---- films --------------------------------------------------------------------------------------------
     func scanVideos(cacheOnly: Bool, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
+        if isParlorApp { return [] } // Parlor is music only
         let cache = (st.readJson(videoCacheName) as? [String: [String: Any]]) ?? [:]
         let list = files(withExtensions: videoExtensions)
         if cacheOnly || videoBusy {
@@ -275,6 +276,7 @@ final class Scanner {
 
     // ---- songs --------------------------------------------------------------------------------------------
     func scanAudio(cacheOnly: Bool, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
+        if !isParlorApp { return [] } // Screenroom is films only (music is Parlor's)
         let cache = (st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:]
         let list = files(withExtensions: audioExtensions)
         if cacheOnly || audioBusy {
@@ -285,6 +287,7 @@ final class Scanner {
         var next: [String: [String: Any]] = [:]
         var dirArt: [String: String] = [:]     // a folder's embedded cover, saved once
         var dirCover: [String: String?] = [:]  // a folder's cover picture (cover.jpg …)
+        var dirMotion: [String: String?] = [:] // a folder's moving cover (cover.mp4 …)
         var done = 0
         for url in list {
             let s = stat(url)
@@ -297,6 +300,8 @@ final class Scanner {
             let dir = url.deletingLastPathComponent().path
             if dirCover[dir] == nil { dirCover[dir] = folderCover(url.deletingLastPathComponent()) }
             entry["folderArt"] = dirCover[dir] ?? nil
+            if dirMotion[dir] == nil { dirMotion[dir] = folderMotion(url.deletingLastPathComponent()) }
+            entry["folderMotion"] = dirMotion[dir] ?? nil
             if let cover = entry.removeValue(forKey: "_cover") as? Data, dirArt[dir] == nil, let img = UIImage(data: cover) {
                 let dest = st.art.appendingPathComponent("\(sha1Hex(st.relativeToDocs(url.deletingLastPathComponent())).prefix(16))-album.jpg")
                 if let saved = saveJPEG(img, width: 600, to: dest, quality: 0.85) { dirArt[dir] = saved }
@@ -380,6 +385,13 @@ final class Scanner {
         return entry
     }
 
+    /// The album's moving cover in its folder: a short looping video (cover.mp4 …), like Apple Music's animated
+    /// covers. Parlor plays it silently in place of the still cover; the film library skips these files.
+    func folderMotion(_ dir: URL) -> String? {
+        guard let names = try? st.fm.contentsOfDirectory(atPath: dir.path) else { return nil }
+        return names.first { !$0.hasPrefix(".") && isMotionCover($0) }.map { dir.appendingPathComponent($0).path }
+    }
+
     /// The album's cover picture in its folder: cover.jpg, folder.jpg, front.jpg … (like lib/music.js).
     func folderCover(_ dir: URL) -> String? {
         guard let names = try? st.fm.contentsOfDirectory(atPath: dir.path) else { return nil }
@@ -422,3 +434,9 @@ func saveJPEG(_ img: UIImage, width: CGFloat, to dest: URL, quality: CGFloat) ->
     return dest.path
 }
 
+
+/// cover.mp4, motion.mov, animated-cover.mp4 … beside an album's songs (same names as lib/music.js).
+func isMotionCover(_ name: String) -> Bool {
+    name.range(of: #"^(cover|folder|front|album|artwork|motion|animated|(animated|motion)[ _-]?cover|cover[ _-]?(animated|motion|loop))\.(mp4|m4v|mov|webm)$"#,
+               options: [.regularExpression, .caseInsensitive]) != nil
+}

@@ -1,4 +1,4 @@
-# Screenroom for iPad. The Xcode project is generated from this file by XcodeGen
+# Screenroom and Parlor for iPhone and iPad. The Xcode project is generated from this file by XcodeGen
 # (the build workflow does it: `xcodegen generate` in this folder).
 name: Screenroom
 options:
@@ -13,12 +13,15 @@ settings:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1,2"  # iPhone and iPad
     ENABLE_USER_SCRIPT_SANDBOXING: NO
-targets:
-  Screenroom:
+# Two apps from the same code and screens: Screenroom (films) and Parlor (music). Each one's Info.plist says
+# which it is (SRApp), and the screens open in films or in Parlor accordingly.
+targetTemplates:
+  App:
     type: application
     platform: iOS
     sources:
       - path: Screenroom
+        excludes: ["Info.plist"]
       # The same screens as the desktop app (copied in by scripts/prepare-web.sh), as a folder in the app.
       - path: Web
         type: folder
@@ -49,15 +52,29 @@ targets:
       - sdk: libresolv.tbd
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.ipad
         OTHER_LDFLAGS: ["$(inherited)", "-ObjC"]
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+targets:
+  Screenroom:
+    templates: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.ipad
         PRODUCT_NAME: Screenroom
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: Screenroom/Info.plist
-        GENERATE_INFOPLIST_FILE: NO
     scheme:
       testTargets: [ScreenroomUITests]
+  Parlor:
+    templates: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.parlor
+        PRODUCT_NAME: Parlor
+        ASSETCATALOG_COMPILER_APPICON_NAME: ParlorIcon
+        INFOPLIST_FILE: Parlor/Info.plist
+    scheme: {}
   # Taps through the player in a simulated iPad (the build workflow runs it)
   ScreenroomUITests:
     type: bundle.ui-testing

@@ -42,6 +42,8 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ---- storage -------------------------------------------------------------------------------------------
+  // Two apps share these screens: Screenroom (films) and Parlor (music); the app says which (window.SR_APP).
+  const EDITION = window.SR_APP === 'parlor' ? 'music' : 'films';
   let env = null;           // { docs, films, music, data, art, avatars, device }
   const cache = {};
   async function load(name, fallback) {
@@ -167,7 +169,7 @@
       profile: currentProfile(), profiles: profilesList(), pickProfile: needPick,
       playbackProblems: await load('playback-problems', []),
       ratings, recs, watchedBy: await watchedBy(), duplicates: dups,
-      theme: t.theme, retroFx: t.fx, edition: 'all', canDelete: true,
+      theme: t.theme, retroFx: t.fx, edition: EDITION, canDelete: true,
     };
   }
 
@@ -222,6 +224,7 @@
       sampleRate: r.sampleRate || 0,
       art: r.art || null,
       folderArt: r.folderArt || null,
+      folderMotion: r.folderMotion || null,
     };
   }
 
@@ -253,7 +256,8 @@
       albums.push({
         key, title: first.album, artist: first.compilation ? 'Various Artists' : first.albumArtist,
         various: first.compilation || artists.size > 2, year: years.length ? Math.min(...years) : null, genre: first.genre,
-        art, added: Math.max(...list.map((t) => t.mtime || 0)), tracks: list.map((t) => t.id),
+        art, motion: list.map((t) => t.folderMotion).find(Boolean) || null,
+        added: Math.max(...list.map((t) => t.mtime || 0)), tracks: list.map((t) => t.id),
         duration: list.reduce((s, t) => s + (t.duration || 0), 0), lossless: list.every((t) => t.lossless),
         dirs: [...new Set(all.map((t) => dirOf(t.path)))],
       });
@@ -464,7 +468,7 @@
   const withState = async (r) => (r && r.ok ? { ...r, state: await snapshot() } : r);
 
   window.api = {
-    edition: 'all',
+    edition: EDITION,
     platform: 'ios',
     state: async () => { await boot(); return snapshot(); },
     scan: async () => { await boot(); emit('scan-progress', { done: 0, total: 1 }); await scanFilms(); return snapshot(); },

@@ -323,6 +323,10 @@ body.navmode .card.pcard:focus .cover { outline: 3px solid var(--p-blue); outlin
 .pgrid { --card-w: 170px; gap: 22px 18px; }
 .cover { position: relative; width: 100%; aspect-ratio: 1; background: #d9d9d9; box-shadow: 0 4px 12px rgba(0,0,0,.22); overflow: hidden; }
 .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* a moving cover fades in over the still one once it's playing */
+.cover video.motion { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .6s ease; pointer-events: none; }
+.cover video.motion.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .cover video.motion { display: none; } }
 .cover.round { border-radius: 50%; }
 .cover-blank { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, #fafafa, #c9d6e6); color: #8a9bb1; font-size: 54px; }

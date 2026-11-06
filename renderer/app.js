@@ -40,7 +40,7 @@
   // the same app runs on iPad and iPhone: name the one in your hand
   const device = () => (typeof S !== 'undefined' && S && S.device === 'iPhone' ? 'iPhone' : 'iPad');
   const here = () => (isIOS() ? `this ${device()}` : 'this box');
-  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My ${device()} › Screenroom${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
+  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My ${device()} › ${APP}${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
   const bg = (p) => (p ? `background-image:url("${fileUrl(p)}")` : '');
   const fmtDur = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const fmtTime = (s) => { s = Math.floor(s); const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
@@ -563,10 +563,10 @@
     const what = music ? 'music' : 'films and shows';
     return h('div', { class: 'addmedia' }, h('div', { class: 'am-card' },
       h('h3', {}, music ? `Put music on this ${device()}` : `Put films on this ${device()}`),
-      h('p', { class: 'am-hint' }, `Screenroom keeps ${what} in its own folder, so they play anywhere, even without internet. In the Files app it's On My ${device()} › Screenroom (${music ? 'Music' : 'Films'}).`),
+      h('p', { class: 'am-hint' }, `Screenroom keeps ${what} in its own folder, so they play anywhere, even without internet. In the Files app it's On My ${device()} › ${APP} (${music ? 'Music' : 'Films'}).`),
       h('div', { class: 'ios-ways' },
-        h('p', { class: 'am-hint' }, h('b', {}, 'From a Mac: '), `connect the ${device()}, select it in Finder, open the Files tab and drag them onto Screenroom.`),
-        h('p', { class: 'am-hint' }, h('b', {}, 'AirDrop: '), `send them to the ${device()} and choose Screenroom.`),
+        h('p', { class: 'am-hint' }, h('b', {}, 'From a Mac: '), `connect the ${device()}, select it in Finder, open the Files tab and drag them onto ${APP}.`),
+        h('p', { class: 'am-hint' }, h('b', {}, 'AirDrop: '), `send them to the ${device()} and choose ${APP}.`),
         h('p', { class: 'am-hint' }, h('b', {}, 'A USB-C drive or iCloud Drive: '), 'press Import and pick them.')),
       h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: async () => {
         setScanning(true, 'Importing…');
@@ -2661,7 +2661,7 @@
   const FILM_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="1.6"/></svg>';
   if (window.createParlor && api.parlorState && EDITION !== 'films') {
     parlorUI = window.createParlor({
-      h, $, api, flash, focusEl, here, prettyPath, isIOS, device,
+      h, $, api, flash, focusEl, here, prettyPath, isIOS, device, appName: APP,
       query: () => query,
       clearQuery: () => { query = ''; $('#search').value = ''; },
       isOpen: () => mode === 'parlor',

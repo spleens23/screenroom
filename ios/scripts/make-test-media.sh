@@ -50,4 +50,6 @@ song "$D/Music/Slow Band/Long Album/01 Long Song.m4a" "Long Song" "Slow Band" "L
 song "$D/Music/Slow Band/Long Album/02 Middle.m4a" "Middle" "Slow Band" "Long Album" "2/2" 262
 song "$D/Music/Harbor Lights/Low Tide/01 Low Tide.m4a" "Low Tide" "Harbor Lights" "Low Tide" "1/1" 294
 ffmpeg -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$D/Music/Slow Band/Long Album/cover.jpg"
+# a moving cover (a short loop beside the songs): Parlor plays it on the album page and in Now Playing
+ffmpeg -v error -y -f lavfi -i "testsrc2=s=600x600:r=24" -t 4 -c:v libx264 -pix_fmt yuv420p -an -movflags +faststart "$D/Music/Slow Band/Long Album/cover.mp4" || echo "no moving cover"
 echo "Test media in $D"
