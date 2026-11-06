@@ -287,6 +287,10 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body.parlor.parlor.parlor .palbum tr.srow td:last-child { padding-right: 12px; white-space: nowrap; }
   html body.parlor.parlor.parlor .palbum .rowbtn { width: 40px; height: 40px; }
 
+}
+
+/* ==== Now Playing on a phone, and on a tablet held upright: the cover big at the top, the controls under it ==== */
+@media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
   /* -- Now Playing: the cover big at the top, everything else at the bottom, like Apple Music -- */
   html body:not(#_) #npfull .npf { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 0; height: 100%; overflow: hidden;
     padding: calc(var(--sat) + 40px) 26px calc(var(--sab) + 14px); }
@@ -303,7 +307,7 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body:not(#_) #npfull .npf-side h3 { display: none; }
   html body:not(#_) #npfull .npf-prog { margin: 22px 0 8px; }
   html body:not(#_) #npfull .npf-ctrl { justify-content: space-evenly; margin: 0 -8px 6px; flex-wrap: nowrap; }
-  /* (no 10-second skips or volume buttons on a phone: its own volume buttons do that) */
+  /* (no 10-second skips or volume buttons on a phone or tablet: its own volume buttons do that) */
   html body:not(#_) #npfull .npf-ctrl .npb[data-b="rew"], html body:not(#_) #npfull .npf-ctrl .npb[data-b="fwd"],
   html body:not(#_) #npfull .npf-ctrl .npb.vol, html body:not(#_) #npfull .npf-vol { display: none; }
   html body:not(#_) #npfull .npf-ctrl .npb { width: 76px; height: 76px; }
@@ -324,6 +328,40 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; }
   html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
   html body:not(#_) #npfull.has-motion.queue-open .npf-motion { opacity: .0; }
+  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(70px) saturate(1.5) brightness(.55); }
+  /* -- Now Playing never shows a scroll bar (only the queue scrolls) -- */
+  html body:not(#_) #npfull, html body:not(#_) #npfull .npf { overflow: hidden; scrollbar-width: none; }
+  html body:not(#_) #npfull ::-webkit-scrollbar { display: none; }
+  /* Apple Music's soft edge: the bottom of a moving cover blurs as it melts into the controls */
+  html body:not(#_) #npfull .npf-melt { position: absolute; z-index: 1; left: 0; right: 0; top: 34vh; height: 40vh; pointer-events: none; display: none;
+    backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%); }
+  html body:not(#_) #npfull.has-motion:not(.queue-open) .npf-melt { display: block; }
+}
+/* a tablet held upright: the same layout with room to breathe */
+@media (min-width: 601px) and (pointer: coarse) and (orientation: portrait) {
+  html body:not(#_) #npfull .npf { padding: calc(var(--sat) + 56px) max(60px, calc((100vw - 640px) / 2)) calc(var(--sab) + 36px); }
+  html body:not(#_) #npfull .npf-stage .cover.huge { width: min(100%, 52vh); border-radius: 16px; }
+  html body:not(#_) #npfull .npf-side h1 { font-size: 30px; }
+  html body:not(#_) #npfull .npf-side h2 { font-size: 24px; }
+  html body:not(#_) #npfull .npf-prog { font-size: 14px; margin: 30px 0 14px; }
+  html body:not(#_) #npfull .npf-queue { margin: 0 calc(-1 * max(60px, calc((100vw - 640px) / 2))) 14px; padding: 0 max(60px, calc((100vw - 640px) / 2)) 8px; }
+  html body:not(#_) #npfull .npf-motion { height: 70vh; }
+  html body:not(#_) #npfull .npf-qsheet { align-items: center; }
+  html body:not(#_) #npfull .npf-qcard { width: min(440px, 100%); border-radius: 22px; padding: 24px 24px 22px; }
+}
+/* a tablet on its side: a moving cover fills the left of the screen and melts into the controls on the right */
+@media (min-width: 601px) and (pointer: coarse) and (orientation: landscape) {
+  html body:not(#_) #npfull .npf-motion { inset: 0 auto 0 0; width: 58vw; height: 100%; filter: none; transform: none;
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 50%, rgba(0,0,0,.5) 76%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, #000 50%, rgba(0,0,0,.5) 76%, transparent 100%); }
+  html body:not(#_) #npfull .npf-melt { position: absolute; z-index: 1; top: 0; bottom: 0; left: 34vw; width: 26vw; pointer-events: none; display: none;
+    backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 60%); mask-image: linear-gradient(to right, transparent, #000 60%); }
+  html body:not(#_) #npfull.has-motion:not(.queue-open) .npf-melt { display: block; }
+  html body:not(#_) #npfull.has-motion .npf-stage { visibility: hidden; }
+  html body:not(#_) #npfull.has-motion.queue-open .npf-motion { opacity: .35; }
+  html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
   html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(70px) saturate(1.5) brightness(.55); }
 }
 
@@ -396,9 +434,6 @@ body.mat.parlor .poverlay-card, body.mat.parlor #settings .settings-card { backg
   html body.parlor.parlor.parlor .modal-card.pmodal { max-width: 100vw; overflow-x: clip; }
   html body.parlor.parlor.parlor .modal-card.pmodal .close { width: 34px; height: 34px; font-size: 14px; }
 
-  /* -- Now Playing never shows a scroll bar (only the queue scrolls) -- */
-  html body:not(#_) #npfull, html body:not(#_) #npfull .npf { overflow: hidden; scrollbar-width: none; }
-  html body:not(#_) #npfull ::-webkit-scrollbar { display: none; }
 
   /* -- Heirloom: its paper scrolls with the page (a "fixed" background makes iPhone scrolling stick) -- */
   html body.heir.parlor.parlor.parlor { background-attachment: scroll; }
@@ -410,3 +445,29 @@ body.ios-app #npfull .npb.vol, body.ios-app #npfull .npf-vol, body.ios-app #npba
 /* Settings: what the last scan made of each moving cover */
 .motion-report { margin: 4px 0 12px; padding-left: 18px; font-size: 13px; line-height: 1.45; opacity: .9; user-select: text; -webkit-user-select: text; }
 .motion-report .mr-d { opacity: .65; }
+
+/* iPad (and an iPhone on its side): the top bar starts below the clock and battery */
+@media (min-width: 601px) {
+  html body.ios-app.parlor.parlor.parlor #nav, html body.ios-app.parlor.parlor.parlor #nav.solid { height: calc(78px + var(--sat)); padding-top: var(--sat); }
+  html body.ios-app.heir.parlor.parlor.parlor #nav, html body.ios-app.heir.parlor.parlor.parlor #nav.solid { height: calc(58px + var(--sat)); }
+  html body.ios-app.parlor.parlor.parlor .ppage { padding-top: calc(92px + var(--sat)); }
+}
+@media (min-width: 601px) {
+  /* page titles just under the top bar (the film side's big gap isn't wanted here) */
+  html body.parlor.parlor.parlor .ppage .page-title { margin-top: 12px; }
+  /* the artist and album have their own columns here; the line under the title is for a phone */
+  html body.parlor.parlor.parlor table.songs .nm-s { display: none; }
+}
+
+/* ---- Encore: dark enough text on the light background ---- */
+body.mat.parlor { --m-muted: #4A443E; --m-dim: #6A635B; --p-muted: #6A635B; --muted: #6A635B; }
+body.mat.parlor .pempty { color: #1e1a16; }
+body.mat.parlor .pempty h1 { color: #1e1a16; }
+body.mat.parlor .pempty p, body.mat.parlor .empty { color: #4a443e; }
+body.mat.parlor .pcard-s, body.mat.parlor .pmeta { color: #6a635b; }
+body.mat.parlor table.songs .t, body.mat.parlor table.songs .n, body.mat.parlor table.songs .g, body.mat.parlor table.songs .nm-s { color: #6a635b; }
+body.mat.parlor #search::placeholder { color: #77706a; }
+body.mat.parlor #pnav a { color: #3f3a34; }
+body.mat.parlor .am-hint, body.mat.parlor .hint, body.mat.parlor .muted { color: #5a534c; }
+body.mat .modal-card.pmodal .palbum-info, body.mat .modal-card.pmodal .pmeta { color: #4a443e; }
+@media (max-width: 600px) { html body.mat.parlor.parlor.parlor > #pnav a { color: #5e574f; } }

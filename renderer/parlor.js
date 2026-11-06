@@ -455,7 +455,8 @@ window.createParlor = function createParlor(ctx) {
   };
   B.lcd = h('button', { class: 'lcd', 'data-b': 'lcd', title: 'Now Playing', onclick: () => openFull() },
     B.title, B.sub, h('div', { class: 'lcd-p' }, B.pos, h('div', { class: 'lcd-bar' }, B.fill), B.left));
-  bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, B.rew, B.play, B.fwd, B.next), B.lcd);
+  // (no 10-second skips on an iPhone or iPad)
+  bar.append(B.art, h('div', { class: 'npb-ctrl' }, B.prev, window.S_IOS ? null : B.rew, B.play, window.S_IOS ? null : B.fwd, B.next), B.lcd);
   document.body.append(bar);
   // A "Now Playing" button in the top bar, on both sides of the app: always one press of Back away
   // (Back jumps to the top bar), so the music is easy to reach with a remote from anywhere.
@@ -565,9 +566,9 @@ window.createParlor = function createParlor(ctx) {
   F.play = h('button', { class: 'npb big', 'data-b': 'play', title: 'Play / Pause', onclick: () => api.musicCmd('toggle') });
   F.ctrl = h('div', { class: 'npf-ctrl', 'data-navrow': '1' },
     h('button', { class: 'npb', 'data-b': 'prev', title: 'Previous', onclick: () => api.musicCmd('prev') }, svg(ICON.prev)),
-    h('button', { class: 'npb', 'data-b': 'rew', title: 'Back 10 seconds', onclick: () => skip(-10) }, svg(ICON.rew, 'ico skip')),
+    window.S_IOS ? null : h('button', { class: 'npb', 'data-b': 'rew', title: 'Back 10 seconds', onclick: () => skip(-10) }, svg(ICON.rew, 'ico skip')),
     F.play,
-    h('button', { class: 'npb', 'data-b': 'fwd', title: 'Forward 10 seconds', onclick: () => skip(10) }, svg(ICON.fwd, 'ico skip')),
+    window.S_IOS ? null : h('button', { class: 'npb', 'data-b': 'fwd', title: 'Forward 10 seconds', onclick: () => skip(10) }, svg(ICON.fwd, 'ico skip')),
     h('button', { class: 'npb', 'data-b': 'next', title: 'Next', onclick: () => api.musicCmd('next') }, svg(ICON.next)),
     h('button', { class: 'npb vol', 'data-b': 'vdown', title: 'Quieter', onclick: () => api.musicCmd('volume', P.player.volume - 10) }, '−'),
     F.vol,
@@ -581,7 +582,9 @@ window.createParlor = function createParlor(ctx) {
   F.body = h('div', { class: 'npf' }, F.stage, F.queue,
       h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
         h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.tools));
-  full.append(F.bg, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, F.bigBtn, F.close), F.body, F.caption, F.qsheet);
+  // (the big-cover button is for a TV or computer; on an iPhone or iPad it's just the close button)
+  F.melt = h('div', { class: 'npf-melt', 'aria-hidden': 'true' });
+  full.append(F.bg, F.melt, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, window.S_IOS ? null : F.bigBtn, F.close), F.body, F.caption, F.qsheet);
   document.body.append(full);
 
   let idle = null;
@@ -764,7 +767,7 @@ window.createParlor = function createParlor(ctx) {
       // a moving cover also fills the top of the screen behind everything, fading into the controls
       if (F.mbg) { F.mbg.remove(); F.mbg = null; }
       full.classList.toggle('has-motion', !!a.motion);
-      if (a.motion) { F.mbg = motion(a); F.mbg.classList.add('npf-motion'); F.bg.after(F.mbg); }
+      if (a.motion) { F.mbg = motion(a); F.mbg.classList.add('npf-motion'); F.bg.after(F.mbg); } // (under the soft edge, F.melt)
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
