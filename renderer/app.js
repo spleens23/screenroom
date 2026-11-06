@@ -1252,12 +1252,14 @@
   // Settings → Free up space: delete films, shows and music from the box's own storage (to make room for
   // the next lot; USB drives are never touched).
   function freeSpaceBlock() {
-    const free = h('p', { class: 'am-hint' }, `Delete films, shows and music stored on ${here()}, to make room for others. Copies on USB drives are never touched.`);
-    api.deleteList().then((r) => { if (r && r.free != null) free.textContent = `${fmtBytes(r.free)} free on ${here()}. Delete films, shows and music stored on it to make room for others${isIOS() ? '' : ' (copies on USB drives are never touched)'}.`; }).catch(() => {});
+    // (each app talks only about what it holds: Parlor music, Screenroom on an iPad films; the box both)
+    const what = EDITION === 'music' ? 'music' : EDITION === 'films' ? 'films and shows' : 'films, shows and music';
+    const free = h('p', { class: 'am-hint' }, `Delete ${what} stored on ${here()}, to make room for others.${isIOS() ? '' : ' Copies on USB drives are never touched.'}`);
+    api.deleteList().then((r) => { if (r && r.free != null) free.textContent = `${fmtBytes(r.free)} free on ${here()}. Delete ${what} stored on it to make room for others${isIOS() ? '' : ' (copies on USB drives are never touched)'}.`; }).catch(() => {});
     return h('div', { class: 'am-card' }, free,
       h('div', { class: 'btns' },
-        h('button', { class: 'btn secondary', 'data-key': 'del-video', onclick: () => deleteSheet('video') }, 'Delete films & shows…'),
-        h('button', { class: 'btn secondary', 'data-key': 'del-music', onclick: () => deleteSheet('music') }, 'Delete music…'),
+        EDITION === 'music' ? null : h('button', { class: 'btn secondary', 'data-key': 'del-video', onclick: () => deleteSheet('video') }, 'Delete films & shows…'),
+        EDITION === 'films' ? null : h('button', { class: 'btn secondary', 'data-key': 'del-music', onclick: () => deleteSheet('music') }, 'Delete music…'),
         api.dedupePlan ? h('button', { class: 'btn secondary', 'data-key': 'dedupe', onclick: () => dedupeSheet() }, 'Remove lower-quality copies…') : null));
   }
   // Settings → Subtitles: English subtitles for films without any, made from another copy's (a DVD's subtitle
@@ -2077,7 +2079,9 @@
       mobile || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       mobile || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
       mobile || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
-      isIOS() ? h('p', { class: 'am-hint' }, `Sound plays from the ${device()}, AirPlay (to a TV or speaker) or Bluetooth headphones. Dolby Atmos plays where the film, and your headphones or TV, support it.`)
+      isIOS() ? h('p', { class: 'am-hint' }, EDITION === 'music'
+        ? `Music plays from the ${device()}, AirPlay (to a TV or speaker) or Bluetooth headphones. Lossless songs play in full quality on the ${device()} and wired headphones; Bluetooth headphones get a compressed copy.`
+        : `Sound plays from the ${device()}, AirPlay (to a TV or speaker) or Bluetooth headphones. Dolby Atmos plays where the film, and your headphones or TV, support it.`)
       : isAndroid ? h('p', { class: 'am-hint' }, 'Sound: Dolby and DTS are sent to your receiver or soundbar automatically when it supports them. Change the output under System settings → Display & Sound.')
         : h('label', { class: 'row-set' }, h('span', {}, 'Audio output', h('small', {}, S.platform === 'linux' && api.btStatus
           ? 'The TV, the headphone jack, or a Bluetooth speaker (pair it under Bluetooth below).'
@@ -2145,7 +2149,9 @@
     const list = (window.SR_LICENSES || []).filter((x) => x.platforms === 'all' || x.platforms === plat);
     const link = 'github.com/spleens23/screenroom';
     return h('div', { class: 'about' },
-      h('p', {}, 'Screenroom is free, open-source software: your own films and music, played on your own devices, with no accounts and no subscriptions. It is licensed under the GNU General Public License, version 3.'),
+      h('p', {}, EDITION === 'music'
+        ? 'Parlor is free, open-source software: your own music, played on your own devices, with no accounts and no subscriptions. It is licensed under the GNU General Public License, version 3.'
+        : 'Screenroom is free, open-source software: your own films and music, played on your own devices, with no accounts and no subscriptions. It is licensed under the GNU General Public License, version 3.'),
       // (only the iPad opens web pages; elsewhere the address is shown to type in on a phone or computer)
       h('p', {}, 'Source code: ', isIOS() ? h('a', { href: SOURCE_URL }, link) : h('strong', {}, link)),
       h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: () => licensesSheet(list) }, 'Open-source licenses')));

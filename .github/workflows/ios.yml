@@ -168,11 +168,14 @@ jobs:
           shot() { sleep "$2"; xcrun simctl io "$UDID" screenshot "shots/parlor-$1.png"; }
           run() { xcrun simctl terminate "$UDID" dev.screenroom.parlor 2>/dev/null || true; xcrun simctl launch "$UDID" dev.screenroom.parlor --ui-script "$1"; }
           xcrun simctl launch "$UDID" dev.screenroom.parlor; shot home 30
+          # a moving cover added after the library was scanned (Parlor should notice next time it opens)
+          cp "$PD/Documents/Music/Slow Band/Long Album/cover.mp4" "$PD/Documents/Music/Late Band/Late Album/cover.mp4"
           # the album with a moving cover: is the loop playing?
           run "const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Long Album/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('moving cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime, err: v.error && v.error.code }) : 'none')); }, 6000)"; shot album 16
           # an H.265 cover labelled "hev1", 10-bit and bigger than 4 MB, like ones made by many apps
           run "const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Low Tide/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('hevc cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime, err: v.error && v.error.code }) : 'none')); api.parlorMotionReport().then(r => console.error('motion report: ' + JSON.stringify(r))); }, 8000)"; shot album-hevc 18
           run "api.parlorState().then(p => { const a = p.albums.find(x => /Long Album/.test(x.title)); return api.musicPlay({ trackIds: a.tracks, start: 0 }); }).then(() => setTimeout(() => { const b = document.querySelector('.npb-art'); b && b.click(); }, 2500))"; shot nowplaying 18
+          run "setTimeout(() => { const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Late Album/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('late cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime }) : 'none')); }, 6000); }, 9000)"; shot late-cover 22
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt
       - name: Share the screenshots

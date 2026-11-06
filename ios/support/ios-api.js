@@ -462,6 +462,20 @@
         // after an import, or the very first time)
         (EDITION === 'music' && rawTracks.length ? native('musicChanged').catch(() => true) : Promise.resolve(true))
           .then((changed) => Promise.all([scanFilms(), changed ? scanMusic() : null])).then(async () => emit('library-updated', await snapshot())).catch(() => {});
+        // Parlor also keeps half an eye on its folder while it's open (the Files app beside it on an iPad, Finder
+        // over USB …): a quick look every 20 seconds, and whenever it comes back on screen; nothing is read
+        // unless something there changed.
+        if (EDITION === 'music') {
+          let looking = false;
+          const lookAgain = async () => {
+            if (looking || musicScanning || document.hidden) return;
+            looking = true;
+            try { if (await native('musicChanged')) { await scanMusic(); emit('library-updated', await snapshot()); } } catch {} finally { looking = false; }
+          };
+          setInterval(lookAgain, 20000);
+          document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(lookAgain, 600); });
+          addEventListener('focus', () => setTimeout(lookAgain, 600));
+        }
       })();
     }
     return ready;

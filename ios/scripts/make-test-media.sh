@@ -48,6 +48,8 @@ song() { # out, title, artist, album, track, freq
 }
 song "$D/Music/Slow Band/Long Album/01 Long Song.m4a" "Long Song" "Slow Band" "Long Album" "1/2" 220
 song "$D/Music/Slow Band/Long Album/02 Middle.m4a" "Middle" "Slow Band" "Long Album" "2/2" 262
+mkdir -p "$D/Music/Late Band/Late Album"
+song "$D/Music/Late Band/Late Album/01 Late.m4a" "Late" "Late Band" "Late Album" "1/1" 330 # (its moving cover is added after the first scan)
 song "$D/Music/Harbor Lights/Low Tide/01 Low Tide.m4a" "Low Tide" "Harbor Lights" "Low Tide" "1/1" 294
 ffmpeg -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$D/Music/Slow Band/Long Album/cover.jpg"
 # a moving cover (a short loop beside the songs): Parlor plays it on the album page and in Now Playing

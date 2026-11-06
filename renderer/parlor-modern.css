@@ -483,10 +483,14 @@ body.parlor[data-accent="rose"]      { --acc: #DB4F78; --acc2: #B5355B; }
 body.parlor[data-accent="red"]       { --acc: #D2443A; --acc2: #AA2E25; }
 body.parlor[data-accent="green"]     { --acc: #3B9A4C; --acc2: #2A7738; }
 body.parlor[data-accent="graphite"]  { --acc: #55524E; --acc2: #3B3835; }
-.accent-set { align-items: center; }
-.accent-swatches { justify-content: flex-end; max-width: 330px; }
-.accent-swatches .swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 0 0 1px rgba(0,0,0,.18); padding: 0; }
-.accent-swatches .swatch.on { box-shadow: 0 0 0 3px var(--fg, #1e1a16); }
+html body .accent-set { display: block; }
+html body .accent-set > span { display: block; }
+html body .accent-set > span small { display: block; margin-top: 2px; color: var(--muted); font-size: inherit; }
+html body .accent-set > span small { font-size: .85em; }
+html body .accent-swatches { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 12px; max-width: none; margin-top: 12px; }
+html body .accent-swatches .swatch { flex: 0 0 36px; width: 36px !important; height: 36px !important; min-width: 0 !important; min-height: 0 !important; aspect-ratio: 1 / 1;
+  border-radius: 50%; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 0 0 1px rgba(0,0,0,.18); padding: 0 !important; margin: 0; }
+html body .accent-swatches .swatch.on { box-shadow: 0 0 0 3px var(--fg, #1e1a16); }
 
 /* ---- iPad (a touch screen wider than a phone) ---- */
 @media (min-width: 601px) {
