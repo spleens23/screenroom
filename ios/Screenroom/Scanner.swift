@@ -288,6 +288,7 @@ final class Scanner {
         var dirArt: [String: String] = [:]     // a folder's embedded cover, saved once
         var dirCover: [String: String?] = [:]  // a folder's cover picture (cover.jpg …)
         var dirMotion: [String: String?] = [:] // a folder's moving cover (cover.mp4 …)
+        var motionNotes: [[String: Any]] = []  // what happened to each one, for Settings
         var done = 0
         for url in list {
             let s = stat(url)
@@ -305,7 +306,12 @@ final class Scanner {
                 let here = url.deletingLastPathComponent(), up = here.deletingLastPathComponent()
                 var m = folderMotion(here)
                 if m == nil, up.standardizedFileURL.path != st.music.standardizedFileURL.path, st.isInside(up.path, st.music) { m = folderMotion(up) }
-                if let p = m { m = await playableMotion(p) }
+                if let p = m {
+                    let (use, how) = await playableMotion(p)
+                    motionNotes.append(["album": here.lastPathComponent, "file": (p as NSString).lastPathComponent, "path": p, "status": how,
+                                        "detail": FFProbe.describeVideo(URL(fileURLWithPath: p))])
+                    m = use
+                }
                 dirMotion[dir] = m
             }
             entry["folderMotion"] = dirMotion[dir] ?? nil
@@ -323,6 +329,15 @@ final class Scanner {
             if let a = dirArt[(p as NSString).deletingLastPathComponent] { e["art"] = a; next[p] = e }
         }
         try? st.writeJson(audioCacheName, next)
+        // videos in the music folder that aren't anyone's moving cover (misnamed, or not beside any songs)
+        let used = Set(motionNotes.compactMap { n in (n["path"] as? String).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } })
+        if let walk = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+            for case let f as URL in walk where videoExtensions.contains(f.pathExtension.lowercased()) && !used.contains(f.resolvingSymlinksInPath().path) {
+                motionNotes.append(["album": f.deletingLastPathComponent().lastPathComponent, "file": f.lastPathComponent,
+                                    "status": isMotionCover(f.lastPathComponent) ? "nosongs" : "name", "detail": FFProbe.describeVideo(f)])
+            }
+        }
+        try? st.writeJson("motion-report", motionNotes)
         return list.compactMap { next[$0.path] }
     }
 
@@ -407,17 +422,17 @@ final class Scanner {
     /// A moving cover the phone can actually play. If Apple's player refuses the file as it is (most often HEVC
     /// labelled "hev1"), a rewrapped copy is made once in the art folder and used instead; the original is left
     /// alone. If even that can't be played, the album just shows its still cover.
-    func playableMotion(_ path: String) async -> String? {
+    func playableMotion(_ path: String) async -> (String?, String) {
         let src = URL(fileURLWithPath: path)
         let s = stat(src)
         let fixed = st.art.appendingPathComponent("\(sha1Hex(st.relativeToDocs(src)).prefix(16))-\(Int(s.mtime))-motion.mp4")
-        if st.fm.fileExists(atPath: fixed.path) { return fixed.path }
-        if await canPlay(src) { return path }
+        if st.fm.fileExists(atPath: fixed.path) { return (fixed.path, "fixed") }
+        if await canPlay(src) { return (path, "plays") }
         let made = await Task.detached(priority: .utility) { FFProbe.rewrapForApple(src, to: fixed) }.value
-        if made, await canPlay(fixed) { return fixed.path }
+        if made, await canPlay(fixed) { return (fixed.path, "fixed") }
         try? st.fm.removeItem(at: fixed)
         NSLog("Parlor: the moving cover %@ can't be played on this device", src.lastPathComponent)
-        return nil
+        return (nil, made ? "unplayable" : "unreadable")
     }
 
     private func canPlay(_ url: URL) async -> Bool {

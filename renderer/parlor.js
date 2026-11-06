@@ -869,6 +869,14 @@ window.createParlor = function createParlor(ctx) {
           const r = await api.parlorAddDir(dir); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error);
         } }, ctx.isIOS && ctx.isIOS() ? 'Import music…' : 'Add music folder…'),
         P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Scanning…'; P = await api.parlorRescan(); draw(); } }, 'Rescan music') : null));
+      if (api.parlorMotionReport) {
+        const rep = await api.parlorMotionReport();
+        const say = { plays: 'plays', fixed: 'plays (Parlor made a copy the phone can play)', unplayable: "can't be played on this phone",
+          unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover' };
+        box.append(h('p', { class: 'am-hint' }, rep.length ? 'Moving covers found in the last scan:' : 'No moving covers found in the last scan. Put a video called cover.mp4 in an album\'s folder, next to its songs, then tap Rescan music.'));
+        if (rep.length) box.append(h('ul', { class: 'motion-report' }, rep.map((r) =>
+          h('li', {}, h('b', {}, `${r.album} / ${r.file}`), ` ${say[r.status] || r.status}`, r.detail ? h('span', { class: 'mr-d' }, ` · ${r.detail}`) : null))));
+      }
       const noArt = P.albums.filter((a) => !a.art).length;
       if (noArt && api.parlorCoversAuto) {
         box.append(h('p', { class: 'am-hint' }, `${noArt} album${noArt === 1 ? ' has' : 's have'} no cover. Screenroom can look them up online (needs an internet connection) and save each as cover.jpg in the album's folder; or pick one on the album's page.`),

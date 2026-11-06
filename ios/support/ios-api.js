@@ -694,6 +694,8 @@
     // ---- Parlor ----
     parlorState: async () => { await boot(); return parlorState(); },
     parlorRescan: async () => { await boot(); await scanMusic(); return parlorState(); },
+    // what the last scan made of each moving cover (cover.mp4 …), shown in Settings
+    parlorMotionReport: async () => { try { return (await native('readJson', 'motion-report')) || []; } catch { return []; } },
     parlorAddDir: async (dir) => {
       await boot();
       if (!canManage()) return fail('Kids profiles can\'t add music.');

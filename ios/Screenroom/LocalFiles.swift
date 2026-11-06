@@ -12,7 +12,7 @@ final class LocalFiles: NSObject, WKURLSchemeHandler {
     private var live = Set<ObjectIdentifier>()
     private let lock = NSLock()
 
-    private struct Reply { let status: Int; let headers: [String: String]; let body: Data }
+    private struct Reply { let status: Int; let headers: [String: String]; let path: String; let start: Int64; let length: Int64 }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         let key = ObjectIdentifier(task)
@@ -21,18 +21,28 @@ final class LocalFiles: NSObject, WKURLSchemeHandler {
         let range = task.request.value(forHTTPHeaderField: "Range")
         io.async { [weak self] in
             guard let self else { return }
-            let reply = url.flatMap { self.read($0, range: range) }
-            DispatchQueue.main.async {
-                self.lock.lock(); let ok = self.live.remove(key) != nil; self.lock.unlock()
-                guard ok, let url else { return }
-                guard let reply else {
+            guard let url, let reply = self.plan(url, range: range), let fh = FileHandle(forReadingAtPath: reply.path) else {
+                DispatchQueue.main.async {
+                    guard self.finish(key) else { return }
                     task.didFailWithError(NSError(domain: NSURLErrorDomain, code: NSURLErrorFileDoesNotExist))
-                    return
                 }
-                task.didReceive(HTTPURLResponse(url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: reply.headers)!)
-                task.didReceive(reply.body)
-                task.didFinish()
+                return
             }
+            defer { try? fh.close() }
+            let response = HTTPURLResponse(url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: reply.headers)!
+            guard self.onMain(key, { task.didReceive(response) }) else { return }
+            // The whole piece that was asked for, sent 1 MB at a time. (Sending less than the page asked for
+            // stalled a moving cover bigger than a few MB on a real phone: the player waited for bytes that
+            // never came.)
+            try? fh.seek(toOffset: UInt64(reply.start))
+            var left = reply.length
+            while left > 0 {
+                let chunk = (try? fh.read(upToCount: Int(min(left, 1 << 20)))) ?? Data()
+                if chunk.isEmpty { break }
+                left -= Int64(chunk.count)
+                guard self.onMain(key, { task.didReceive(chunk) }) else { return }
+            }
+            DispatchQueue.main.async { if self.finish(key) { task.didFinish() } }
         }
     }
 
@@ -40,31 +50,45 @@ final class LocalFiles: NSObject, WKURLSchemeHandler {
         lock.lock(); live.remove(ObjectIdentifier(task)); lock.unlock()
     }
 
-    private func read(_ url: URL, range: String?) -> Reply? {
+    private func isLive(_ key: ObjectIdentifier) -> Bool { lock.lock(); defer { lock.unlock() }; return live.contains(key) }
+    private func finish(_ key: ObjectIdentifier) -> Bool { lock.lock(); defer { lock.unlock() }; return live.remove(key) != nil }
+
+    /// Runs `body` on the main thread while the task is still wanted; false once the page has cancelled it.
+    private func onMain(_ key: ObjectIdentifier, _ body: @escaping () -> Void) -> Bool {
+        var ok = false
+        DispatchQueue.main.sync { if self.isLive(key) { body(); ok = true } }
+        return ok
+    }
+
+    private func plan(_ url: URL, range: String?) -> Reply? {
         let path = (url.path as NSString).standardizingPath
         // (the app's folder is also reachable as /private/var/…, a link to /var/…)
         let homes = [NSHomeDirectory(), "/private" + NSHomeDirectory()].map { ($0 as NSString).standardizingPath }
         guard homes.contains(where: { path.hasPrefix($0 + "/") }),
-              let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value,
-              let fh = FileHandle(forReadingAtPath: path) else { return nil }
-        defer { try? fh.close() }
+              let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value else { return nil }
         let mime = UTType(filenameExtension: (path as NSString).pathExtension)?.preferredMIMEType ?? "application/octet-stream"
         var headers = ["Content-Type": mime, "Accept-Ranges": "bytes", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"]
-        // "bytes=START-END" or "bytes=START-": send that piece (at most 4 MB at a time)
+        // "bytes=START-END", "bytes=START-" or "bytes=-SUFFIX"
         if let range, range.hasPrefix("bytes="), size > 0 {
-            let parts = range.dropFirst(6).split(separator: "-", omittingEmptySubsequences: false)
-            if let first = parts.first, let start = Int64(first), start < size {
-                var end = parts.count > 1 ? (Int64(parts[1]) ?? size - 1) : size - 1
-                end = min(end, size - 1, start + 4 * 1024 * 1024 - 1)
-                try? fh.seek(toOffset: UInt64(start))
-                let body = (try? fh.read(upToCount: Int(end - start + 1))) ?? Data()
-                headers["Content-Range"] = "bytes \(start)-\(start + Int64(body.count) - 1)/\(size)"
-                headers["Content-Length"] = String(body.count)
-                return Reply(status: 206, headers: headers, body: body)
+            let parts = range.dropFirst(6).split(separator: ",").first?.split(separator: "-", omittingEmptySubsequences: false) ?? []
+            if parts.count == 2 {
+                var start: Int64, end: Int64
+                if parts[0].isEmpty, let suffix = Int64(parts[1].trimmingCharacters(in: .whitespaces)) {
+                    start = max(0, size - suffix); end = size - 1
+                } else if let s0 = Int64(parts[0].trimmingCharacters(in: .whitespaces)) {
+                    start = s0; end = Int64(parts[1].trimmingCharacters(in: .whitespaces)) ?? size - 1
+                } else { start = 0; end = size - 1 }
+                end = min(end, size - 1)
+                if start <= end {
+                    headers["Content-Range"] = "bytes \(start)-\(end)/\(size)"
+                    headers["Content-Length"] = String(end - start + 1)
+                    return Reply(status: 206, headers: headers, path: path, start: start, length: end - start + 1)
+                }
+                headers["Content-Range"] = "bytes */\(size)"
+                return Reply(status: 416, headers: headers, path: path, start: 0, length: 0)
             }
         }
-        let body = (try? fh.readToEnd()) ?? Data()
-        headers["Content-Length"] = String(body.count)
-        return Reply(status: 200, headers: headers, body: body)
+        headers["Content-Length"] = String(size)
+        return Reply(status: 200, headers: headers, path: path, start: 0, length: size)
     }
 }

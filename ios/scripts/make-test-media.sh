@@ -52,4 +52,8 @@ song "$D/Music/Harbor Lights/Low Tide/01 Low Tide.m4a" "Low Tide" "Harbor Lights
 ffmpeg -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$D/Music/Slow Band/Long Album/cover.jpg"
 # a moving cover (a short loop beside the songs): Parlor plays it on the album page and in Now Playing
 ffmpeg -v error -y -f lavfi -i "testsrc2=s=600x600:r=24" -t 4 -c:v libx264 -pix_fmt yuv420p -an -movflags +faststart "$D/Music/Slow Band/Long Album/cover.mp4" || echo "no moving cover"
+# and an H.265 one labelled "hev1" (what many apps write; iPhones won't play it as it is), 10-bit and over 4 MB
+ffmpeg -v error -y -f lavfi -i "testsrc2=s=1080x1080:r=30,noise=alls=30:allf=t" -t 8 -c:v libx265 -tag:v hev1 -pix_fmt yuv420p10le -b:v 8M -x265-params log-level=error \
+  -an "$D/Music/Harbor Lights/Low Tide/cover.mp4" || echo "no HEVC moving cover"
+ls -l "$D/Music/Harbor Lights/Low Tide/" || true
 echo "Test media in $D"

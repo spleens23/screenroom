@@ -406,3 +406,7 @@ body.mat.parlor .poverlay-card, body.mat.parlor #settings .settings-card { backg
 @media (pointer: coarse) { body.parlor { background-attachment: scroll !important; } }
 /* iPhone and iPad: the device's own buttons set the volume */
 body.ios-app #npfull .npb.vol, body.ios-app #npfull .npf-vol, body.ios-app #npbar .npb.vol, body.ios-app #npbar .npb-vol { display: none !important; }
+
+/* Settings: what the last scan made of each moving cover */
+.motion-report { margin: 4px 0 12px; padding-left: 18px; font-size: 13px; line-height: 1.45; opacity: .9; user-select: text; -webkit-user-select: text; }
+.motion-report .mr-d { opacity: .65; }

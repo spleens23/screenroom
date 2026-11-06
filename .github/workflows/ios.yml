@@ -170,6 +170,8 @@ jobs:
           xcrun simctl launch "$UDID" dev.screenroom.parlor; shot home 30
           # the album with a moving cover: is the loop playing?
           run "const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Long Album/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('moving cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime, err: v.error && v.error.code }) : 'none')); }, 6000)"; shot album 16
+          # an H.265 cover labelled "hev1", 10-bit and bigger than 4 MB, like ones made by many apps
+          run "const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Low Tide/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('hevc cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime, err: v.error && v.error.code }) : 'none')); api.parlorMotionReport().then(r => console.error('motion report: ' + JSON.stringify(r))); }, 8000)"; shot album-hevc 18
           run "api.parlorState().then(p => { const a = p.albums.find(x => /Long Album/.test(x.title)); return api.musicPlay({ trackIds: a.tracks, start: 0 }); }).then(() => setTimeout(() => { const b = document.querySelector('.npb-art'); b && b.click(); }, 2500))"; shot nowplaying 18
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt

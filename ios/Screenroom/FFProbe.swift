@@ -91,6 +91,27 @@ enum FFProbe {
     /// Rewrap a moving cover so Apple's player will take it: the picture is copied as it is (no re-encoding) into
     /// a new MP4 whose label says "hvc1" for HEVC (or "avc1" for H.264). Many tools label HEVC "hev1", which
     /// iPhones and iPads refuse to play even though they can decode it. Sound, if any, is left out.
+    /// A short description of a video for the moving-cover report: "HEVC (hev1) 2048×2048, 10-bit, 12 MB".
+    static func describeVideo(_ url: URL) -> String {
+        let mb = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.doubleValue ?? 0) / 1_048_576
+        let size = mb >= 10 ? "\(Int(mb.rounded())) MB" : String(format: "%.1f MB", mb)
+        guard let ic = open(url) else { return "can't be read, \(size)" }
+        var ctx: UnsafeMutablePointer<AVFormatContext>? = ic
+        defer { avformat_close_input(&ctx) }
+        let vi = av_find_best_stream(ic, AVMEDIA_TYPE_VIDEO, -1, -1, nil, 0)
+        guard vi >= 0, let st = ic.pointee.streams[Int(vi)], let par = st.pointee.codecpar else { return "no picture inside, \(size)" }
+        var codec = String(cString: avcodec_get_name(par.pointee.codec_id)).uppercased()
+        let t = par.pointee.codec_tag
+        if t != 0 {
+            let chars = [t & 0xff, (t >> 8) & 0xff, (t >> 16) & 0xff, (t >> 24) & 0xff].map { Character(UnicodeScalar(UInt8($0))) }
+            let tag = String(chars).trimmingCharacters(in: .whitespaces)
+            if tag.allSatisfy({ $0.isLetter || $0.isNumber }) { codec += " (\(tag))" }
+        }
+        var bits = ""
+        if let d = av_pix_fmt_desc_get(AVPixelFormat(rawValue: par.pointee.format)) { bits = ", \(d.pointee.comp.0.depth)-bit" }
+        return "\(codec) \(par.pointee.width)×\(par.pointee.height)\(bits), \(size)"
+    }
+
     static func rewrapForApple(_ src: URL, to dest: URL) -> Bool {
         guard let ic = open(src) else { return false }
         var inCtx: UnsafeMutablePointer<AVFormatContext>? = ic
