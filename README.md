@@ -131,7 +131,7 @@ Screenroom can run as a streaming box with no subscriptions: it boots straight i
 
 `ios/` builds two apps for iPhone and iPad from the same code and screens: **Screenroom** (films) and **Parlor** (music, with moving album covers: put a short looping `cover.mp4` beside an album's songs). Each app's `Info.plist` says which it is (`SRApp`).
 
-Screenroom It shows the same screens (the pages in `renderer/` with `ios/support/ios-api.js` in place of the desktop bridge) and plays films with Apple's player when it can (HDR, Dolby Vision) and with [mpv](https://mpv.io) for everything else (DTS, TrueHD including TrueHD inside MP4, MKV), both behind Screenroom's own controls.
+Screenroom shows the same screens (the pages in `renderer/` with `ios/support/ios-api.js` in place of the desktop bridge) and plays films with Apple's player when it can (HDR, Dolby Vision) and with [mpv](https://mpv.io) for everything else (DTS, TrueHD including TrueHD inside MP4, MKV), both behind Screenroom's own controls.
 
 **Build it yourself** (a Mac with Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen)):
 
