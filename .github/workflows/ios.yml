@@ -18,7 +18,7 @@ jobs:
   # "ios-ci-screens" release (not an app to install).
   check:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
       - name: Use Xcode 26
