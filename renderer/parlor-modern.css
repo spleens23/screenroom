@@ -548,19 +548,20 @@ html body .accent-swatches .swatch.on { box-shadow: 0 0 0 3px var(--fg, #1e1a16)
 /* -- moving covers show the whole cover: a square as wide as the screen allows (no cropping of the cover's own
       lettering), with only its bottom edge melting into the controls; the blurred cover behind keeps its colours -- */
 @media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
-  html body:not(#_) #npfull { --mv: min(100vw, calc(100vh - 400px)); }
-  html body:not(#_) #npfull .npf-motion { inset: 0 auto auto 50%; width: var(--mv); height: var(--mv); transform: translateX(-50%); object-fit: cover;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%); }
-  html body:not(#_) #npfull .npf-melt { top: calc(var(--mv) * .84); height: calc(var(--mv) * .3); bottom: auto;
+  /* (set down from the top, in the room above the controls, so its top edge melts up towards the grab bar) */
+  html body:not(#_) #npfull { --mv: min(100vw, calc(100vh - 400px)); --mvt: clamp(calc(var(--sat) + 16px), calc(100vh - 380px - var(--mv)), calc(var(--sat) + 44px)); }
+  html body:not(#_) #npfull .npf-motion { inset: var(--mvt) auto auto 50%; width: var(--mv); height: var(--mv); transform: translateX(-50%); object-fit: cover;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 8%, #000 18%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 8%, #000 18%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%); }
+  html body:not(#_) #npfull .npf-melt { top: calc(var(--mvt) + var(--mv) * .84); height: calc(var(--mv) * .3); bottom: auto;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 50%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 50%, transparent 100%); }
 }
 /* narrower than the screen (an upright iPad): the sides melt away too */
 @media (min-width: 601px) and (pointer: coarse) and (orientation: portrait) {
   html body:not(#_) #npfull .npf-motion {
-    -webkit-mask-image: linear-gradient(to bottom, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,.5) 8%, #000 18%, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
     -webkit-mask-composite: source-in;
-    mask-image: linear-gradient(to bottom, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,.5) 8%, #000 18%, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
     mask-composite: intersect; }
 }
 @media (min-width: 601px) and (pointer: coarse) and (orientation: landscape) {
