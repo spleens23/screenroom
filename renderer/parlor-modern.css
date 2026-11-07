@@ -594,3 +594,9 @@ html body:not(#_) #npfull .qtop .qclear:active { background: rgba(255,255,255,.2
 html body.parlor .srow .e.sur { background: none; color: inherit; opacity: .6; border: 1px solid currentColor; font-size: 9px; padding: 0 3px; letter-spacing: .02em; }
 html body:not(#_) #npfull .npf-q.surround { color: #bfe3ff; background: rgba(150,205,255,.16); }
 html body:not(#_) #npfull .npf-q.surround.spatial { color: #fff; background: linear-gradient(90deg, rgba(120,170,255,.35), rgba(200,140,255,.35)); }
+
+/* the quality chip never pushes the times off screen: it shrinks, and its small print is cut short first */
+html body:not(#_) #npfull .npf-prog { grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr); }
+html body:not(#_) #npfull .npf-q { min-width: 0; max-width: 100%; overflow: hidden; }
+html body:not(#_) #npfull .npf-q b, html body:not(#_) #npfull .npf-q-ico { flex: none; }
+html body:not(#_) #npfull .npf-q small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

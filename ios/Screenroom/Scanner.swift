@@ -31,15 +31,38 @@ final class Scanner {
     func musicSignature() -> String {
         var parts: [String] = []
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
-        if let e = st.fm.enumerator(at: st.music, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+        // (all of Parlor's folder, not just Music: songs dropped in from the Files app can land beside it)
+        if let e = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
             for case let u as URL in e {
                 let v = try? u.resourceValues(forKeys: Set(keys))
                 if v?.isDirectory == true { continue }
-                parts.append("\(u.path)|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
+                let ext = u.pathExtension.lowercased()
+                if !audioExtensions.contains(ext) && !["mp4", "m4v", "mov", "jpg", "jpeg", "png", "webp"].contains(ext) { continue }
+                parts.append("\(st.relativeToDocs(u))|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
             }
         }
         parts.sort()
         return sha1Hex(parts.joined(separator: "\n"))
+    }
+
+    /// A scan cache, with its paths moved to where the app's folders are now. (iOS can move an app's whole folder
+    /// when the app is updated; paths saved before then no longer matched, so nothing was found in the cache and
+    /// covers saved earlier went missing until everything had been read again.)
+    private func readCache(_ name: String) -> [String: [String: Any]] {
+        guard let raw = st.readJson(name) as? [String: [String: Any]] else { return [:] }
+        let root = st.docs.deletingLastPathComponent().path // the app's folder: …/Application/<id>
+        guard let any = raw.keys.first, let r = any.range(of: "/Documents/") else { return raw }
+        let oldRoot = String(any[..<r.lowerBound])
+        if oldRoot == root { return raw }
+        func move(_ v: Any) -> Any {
+            if let str = v as? String, str.hasPrefix(oldRoot + "/") { return root + str.dropFirst(oldRoot.count) }
+            if let d = v as? [String: Any] { return d.mapValues(move) }
+            if let a = v as? [Any] { return a.map(move) }
+            return v
+        }
+        var out: [String: [String: Any]] = [:]
+        for (k, e) in raw { out[(move(k) as? String) ?? k] = e.mapValues(move) }
+        return out
     }
 
     /// True when the music folder isn't how the last scan left it.
@@ -55,7 +78,7 @@ final class Scanner {
     // ---- films --------------------------------------------------------------------------------------------
     func scanVideos(cacheOnly: Bool, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
         if isParlorApp { return [] } // Parlor is music only
-        let cache = (st.readJson(videoCacheName) as? [String: [String: Any]]) ?? [:]
+        let cache = readCache(videoCacheName)
         let list = files(withExtensions: videoExtensions)
         if cacheOnly || videoBusy {
             return list.compactMap { cache[$0.path] }
@@ -299,12 +322,12 @@ final class Scanner {
     // ---- songs --------------------------------------------------------------------------------------------
     func scanAudio(cacheOnly: Bool, deep: Bool = false, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
         if !isParlorApp { return [] } // Screenroom is films only (music is Parlor's)
-        let cache = deep ? [:] : ((st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:])
+        let cache = deep ? [:] : readCache(audioCacheName)
         // songs, plus MP4 / MOV files in the music folder with no picture in them (Dolby Atmos music often comes as .mp4)
         let list = (files(withExtensions: audioExtensions) + musicFolderVideos()).sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         let busy = audioBusy && Date().timeIntervalSince(audioStarted) < 240
         if cacheOnly || busy {
-            let old = (st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:]
+            let old = readCache(audioCacheName)
             return list.compactMap { old[$0.path] }.filter { $0["notSong"] == nil }
         }
         audioBusy = true

@@ -126,8 +126,9 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
             }
             try? st.fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             if st.fm.fileExists(atPath: target.path) {
-                // a song that's already here is skipped; a cover that changed (a new moving cover) replaces the old one
-                guard isCover, fileSize(target) != fileSize(f) else { continue }
+                // a file that's already here as it is is skipped; one that changed (a song retagged or swapped for an
+                // upmixed version, a new moving cover) replaces the old one, so bringing a folder in again updates it
+                guard !sameFile(target, f) else { continue }
                 if isMotionCover(f.lastPathComponent) { removeMotionCovers(in: target.deletingLastPathComponent()) }
                 else { try? st.fm.removeItem(at: target) }
             } else if isParlorApp && isMotionCover(f.lastPathComponent) {
@@ -139,6 +140,13 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     }
 
     private func place(_ url: URL, in dir: URL, name: String, copy: Bool) -> Bool {
+        // in Parlor, a song brought in again under the same name replaces the one there (if it changed) rather than
+        // sitting beside it as "Song 2"
+        let same = dir.appendingPathComponent(name)
+        if isParlorApp, st.fm.fileExists(atPath: same.path) {
+            if sameFile(same, url) { return true }
+            try? st.fm.removeItem(at: same)
+        }
         let dest = st.freeName(in: dir, for: name)
         do {
             if copy { try st.fm.copyItem(at: url, to: dest) } else { try st.fm.moveItem(at: url, to: dest) }
@@ -284,6 +292,13 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
             }
         }
     }
+}
+
+/// Same size and (to the second) the same date: the same file brought in again.
+private func sameFile(_ a: URL, _ b: URL) -> Bool {
+    guard fileSize(a) == fileSize(b) else { return false }
+    let d = { (u: URL) in (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate?.timeIntervalSince1970) ?? 0 }
+    return abs(d(a) - d(b)) < 2
 }
 
 private func fileSize(_ u: URL) -> Int64 {

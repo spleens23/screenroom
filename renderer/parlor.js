@@ -691,7 +691,7 @@ window.createParlor = function createParlor(ctx) {
     if (t.atmos) {
       return {
         t, kind: 'surround atmos' + (spatial ? ' spatial' : ''),
-        name: 'Dolby Atmos', spec: [spatial ? 'Spatial Audio' : '', t.codec || ''].filter(Boolean).join(' · '),
+        name: 'Dolby Atmos', spec: spatial ? 'Spatial Audio' : '', // (the format's in the sheet; the chip stays short)
         about: spatial
           ? `Dolby Atmos, playing as Spatial Audio on ${route.name || 'your headphones'}: sounds are placed all around you, above too, and with head tracking they stay put when you turn your head.`
           : 'Dolby Atmos. It plays as Spatial Audio on AirPods (3rd generation or later, Pro or Max) and Beats that support it; the speaker and wired headphones get a stereo version.',

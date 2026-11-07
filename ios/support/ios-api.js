@@ -197,6 +197,14 @@
   const num = (v) => { const n = parseInt(String(v || '').split('/')[0], 10); return Number.isFinite(n) ? n : 0; };
   const total = (v) => { const n = parseInt(String(v || '').split('/')[1], 10); return Number.isFinite(n) ? n : 0; };
 
+  // a song with no title tag is named after its file, less a leading track number ("01 Song", "1-03 Song", "7. Song"); a number that's part of the name ("400 Lux", "22 Acacia Avenue") stays
+  const titleFromName = (name, track) => {
+    const m = name.match(/^(\d{1,3})(?:-(\d{1,3}))?(\s*[.\-_]\s*|\s+)(?=\S)/);
+    if (!m) return name;
+    const n = Number(m[2] || m[1]);
+    const looksLikeTrack = (track && n === Number(track)) || !!m[2] || /^0\d/.test(m[1]) || /[.\-_]/.test(m[3]);
+    return looksLikeTrack ? name.slice(m[0].length) : name;
+  };
   function buildTrack(r) {
     const tags = r.tags || {};
     const dir = dirOf(r.path);
@@ -210,7 +218,7 @@
     const y = date.match(/\d{4}/);
     return {
       id: r.id, path: r.path, mtime: r.mtime, size: r.size,
-      title: MediaCore.plainChars(tagOf(tags, 'title')) || baseOf(r.path).replace(/\.[^.]+$/, '').replace(/^\d+[\s.-]+/, ''),
+      title: MediaCore.plainChars(tagOf(tags, 'title')) || titleFromName(baseOf(r.path).replace(/\.[^.]+$/, ''), num(tagOf(tags, 'track', 'tracknumber'))),
       artist, albumArtist, album,
       track: num(tagOf(tags, 'track', 'tracknumber')),
       trackTotal: total(tagOf(tags, 'track', 'tracknumber')) || num(tagOf(tags, 'tracktotal', 'totaltracks')),
@@ -459,6 +467,13 @@
         ratings = await load('ratings', {});
         recs = await load('recommendations', []);
         pstore = await load('parlor', null);
+        // iOS can move the app's whole folder when it's updated: saved paths (covers picked by hand …) are moved with it
+        if (pstore) {
+          const root = String(env.docs).replace(/\/Documents\/?$/, '');
+          const txt = JSON.stringify(pstore);
+          const moved = txt.replace(/[^"]*?\/Containers\/Data\/Application\/[0-9A-Fa-f-]{36}(?=\/)/g, (m) => (m === root ? m : root));
+          if (moved !== txt) { pstore = JSON.parse(moved); savePar(); }
+        }
         if (!pstore) {
           // The first profile owns the iPad's Music folder, so songs put there show up straight away.
           pstore = { profiles: {}, covers: {} };
