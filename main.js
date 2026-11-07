@@ -646,7 +646,7 @@ app.whenReady().then(async () => {
   parlorApi = setupParlor({
     ipcMain, dialog, getWin: () => win, dataDir, toolPaths, findMpv: () => findBinary('mpv', config.mpvPath),
     currentProfile, profilesList: () => profiles.list(), isMoviePlaying: () => playing,
-    soundDevice: async () => (await soundFor()).audioDevice || '', mediaRoot: () => mediaRoot, drives: () => drives,
+    soundDevice: async () => (await soundFor()).audioDevice || '', sound: async () => ({ ...(await soundFor()), truehdPassthrough: config.truehdPassthrough, dtsPassthrough: config.dtsPassthrough }), mediaRoot: () => mediaRoot, drives: () => drives,
     exclusiveAudio: isAppliance,
   });
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));

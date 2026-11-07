@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('api', {
   parlorShare: (albumKey, pid, on) => ipcRenderer.invoke('parlor-share', albumKey, pid, on),
   parlorCoverSearch: (key) => ipcRenderer.invoke('parlor-cover-search', key),
   parlorCoverSet: (key, choice) => ipcRenderer.invoke('parlor-cover-set', key, choice || null),
+  parlorMotionSet: (key, how) => ipcRenderer.invoke('parlor-motion-set', key, how || 'files'),
   parlorCoversAuto: () => ipcRenderer.invoke('parlor-covers-auto'),
   playlistCreate: (name, trackIds) => ipcRenderer.invoke('playlist-create', name, trackIds),
   playlistUpdate: (id, patch) => ipcRenderer.invoke('playlist-update', id, patch),

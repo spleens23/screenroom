@@ -394,8 +394,8 @@ window.createParlor = function createParlor(ctx) {
     overlay('covers', h('h2', {}, `Moving cover for ${a.title}`),
       h('p', { class: 'pnote small' }, 'Pick a short looping video. It plays silently in place of the cover on the album page and in Now Playing.'),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn primary', onclick: () => go('photos') }, 'From Photos'),
-        h('button', { class: 'btn secondary', onclick: () => go('files') }, 'From Files'),
+        window.S_IOS ? h('button', { class: 'btn primary', onclick: () => go('photos') }, 'From Photos') : null,
+        h('button', { class: window.S_IOS ? 'btn secondary' : 'btn primary', onclick: () => go('files') }, window.S_IOS ? 'From Files' : 'Choose a Video…'),
         a.motion ? h('button', { class: 'btn secondary', onclick: () => go('remove') }, 'Take Away') : null,
         h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
   }
