@@ -20,7 +20,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
         var types: [UTType] = isParlorApp ? [.audio] : [.movie, .audiovisualContent]
         types.append(.folder)
         // MKV, AVI and other films the system doesn't know as movies; FLAC for Parlor
-        for ext in isParlorApp ? ["flac", "alac"] : ["mkv", "avi", "webm", "ts", "m2ts", "wmv", "flv"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
+        for ext in isParlorApp ? ["flac", "alac", "ac3", "ec3", "eac3", "wav"] : ["mkv", "avi", "webm", "ts", "m2ts", "wmv", "flv"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
         return await withCheckedContinuation { cont in
             filesDone = { n in cont.resume(returning: n) }
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)

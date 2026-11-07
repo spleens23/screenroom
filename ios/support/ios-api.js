@@ -225,6 +225,7 @@
       bitrate: r.bitrate || 0,
       sampleRate: r.sampleRate || 0,
       bitDepth: r.bitDepth || 0,
+      channels: r.channels || 0,
       art: r.art || null,
       folderArt: r.folderArt || null,
       folderMotion: r.folderMotion || null,
@@ -320,7 +321,7 @@
       for (const id of a.tracks) {
         const t = music.tracks[id];
         if (t) tracks[id] = { id, title: t.title, artist: t.artist, album: t.album, albumKey: a.key, track: t.track, disc: t.disc,
-          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, explicit: t.explicit };
+          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, channels: t.channels || 0, explicit: t.explicit };
       }
     }
     const mine = pOf(me.id);
@@ -358,7 +359,7 @@
     const queue = (s.queue || []).map((id, i) => strip(id, i) || { id, title: '', artist: '', album: '', duration: 0, missing: true });
     return { playing: !!s.playing, paused: !!s.paused, index: s.index, pos: s.pos || 0, dur: s.dur || 0, volume: s.volume == null ? 100 : s.volume,
       muted: !!s.muted, track: queue[s.index] && !queue[s.index].missing ? queue[s.index] : null, queue, context: s.context || null,
-      shuffle: !!s.shuffle, repeat: s.repeat || 'off' };
+      shuffle: !!s.shuffle, repeat: s.repeat || 'off', route: s.route || null };
   }
   function musicStop() { if (player && player.playing) native('musicCmd', 'stop').catch(() => {}); }
 

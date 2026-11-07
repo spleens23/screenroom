@@ -265,7 +265,8 @@ window.createParlor = function createParlor(ctx) {
         h('div', { class: 'palbum-info' },
           h('h1', {}, a.title),
           h('button', { class: 'linkish partist', onclick: () => { ctx.closeModal(); go('artist:' + a.artist); } }, a.artist),
-          h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless ? 'Lossless' : fmt.codec].filter(Boolean).join(' · ')),
+          h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless ? 'Lossless' : fmt.codec,
+            ids.some((id) => (P.tracks[id] || {}).channels > 2) ? 'Surround' : ''].filter(Boolean).join(' · ')),
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
@@ -283,7 +284,7 @@ window.createParlor = function createParlor(ctx) {
           multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '4' }, `Disc ${t.disc}`)) : null,
           h('tr', { class: 'srow' + (cur ? ' now' : ''), tabindex: '0', 'data-id': t.id, style: `--i:${Math.min(i, 16)}`, onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, ctxa); } },
             h('td', { class: 'n' }, cur ? svg(ICON.play, 'ico tiny') : (t.track || i + 1)),
-            h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
+            h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, t.channels > 2 ? h('span', { class: 'e sur', title: 'Surround: Spatial Audio on AirPods' }, chLabel(t.channels)) : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
             h('td', { class: 't' }, mmss(t.duration)),
             h('td', { class: 'x' },
               P.player && P.player.playing ? h('button', { class: 'rowbtn qadd', title: 'Play next', 'aria-label': `Play ${t.title} next`, onclick: () => queueUp([t.id], true, t.title) }, svg(ICON.queue, 'ico tiny')) : null,
@@ -683,6 +684,20 @@ window.createParlor = function createParlor(ctx) {
     const spec = t.lossless
       ? [t.bitDepth ? `${t.bitDepth}-bit` : '', t.sampleRate ? khz(t.sampleRate) : ''].filter(Boolean).join(' / ')
       : (t.bitrate ? `${t.bitrate} kbps` : '');
+    // a surround mix (5.1, 7.1): AirPods and Beats play it as Spatial Audio, everything else gets it in stereo
+    const route = (P && P.player && P.player.route) || null;
+    const spatial = !!(route && route.spatial);
+    if (t.channels > 2) {
+      const lay = chLabel(t.channels);
+      return {
+        t, kind: 'surround' + (spatial ? ' spatial' : ''),
+        name: spatial ? 'Spatial Audio' : `${lay} Surround`,
+        spec: [spatial ? lay : '', t.lossless ? 'Lossless' : (t.codec || '')].filter(Boolean).join(' · '),
+        about: spatial
+          ? `A ${lay} surround mix, playing as Spatial Audio on ${route.name || 'your headphones'}: each channel is placed around you, and with head tracking the sound stays put when you turn your head.`
+          : `A ${lay} surround mix. It plays as Spatial Audio on AirPods (3rd generation or later, Pro or Max) and Beats that support it; ${route && route.name ? route.name + ' gets' : 'the speaker and wired headphones get'} it mixed down to stereo.`,
+      };
+    }
     return {
       t,
       kind: hi ? 'hires' : t.lossless ? 'lossless' : 'lossy',
@@ -693,6 +708,8 @@ window.createParlor = function createParlor(ctx) {
           : 'A compressed file: smaller, with some detail removed to save space. Fine for most listening.',
     };
   }
+  /** 6 channels → "5.1", 8 → "7.1" … */
+  function chLabel(n) { return ({ 1: 'Mono', 2: 'Stereo', 3: '2.1', 4: '4.0', 5: '5.0', 6: '5.1', 7: '6.1', 8: '7.1', 10: '7.1.2', 12: '7.1.4' })[n] || `${n}-channel`; }
   const waveIcon = () => { const i = h('span', { class: 'npf-q-ico', 'aria-hidden': 'true' }); i.innerHTML = '<svg viewBox="0 0 20 14" width="16" height="12"><path d="M1 7h2M5 3v8M9 1v12M13 4v6M17 6v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>'; return i; };
   function drawQuality(t) {
     const q = quality(t);
@@ -708,6 +725,9 @@ window.createParlor = function createParlor(ctx) {
       h('div', { class: 'qhead' }, waveIcon(), h('h2', {}, q.name)),
       h('p', {}, q.about),
       row('Format', q.t.codec),
+      row('Channels', q.t.channels ? `${chLabel(q.t.channels)}${q.t.channels > 2 ? ' surround' : ''}` : ''),
+      row('Spatial Audio', P.player && P.player.route ? (P.player.route.spatial ? `On (${P.player.route.name || 'headphones'})`
+        : q.t.channels > 2 ? 'Off: needs AirPods or Beats that support it' : '') : ''),
       row('Bit depth', q.t.bitDepth ? `${q.t.bitDepth}-bit` : ''),
       row('Sample rate', q.t.sampleRate ? khz(q.t.sampleRate) : ''),
       row('Bit rate', q.t.bitrate ? `${q.t.bitrate.toLocaleString()} kbps` : ''),
@@ -804,9 +824,10 @@ window.createParlor = function createParlor(ctx) {
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
-      drawQuality(t);
       F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
     }
+    const qlook = [t.id, s.route && s.route.spatial, s.route && s.route.name].join('|');
+    if (rebuild || qlook !== lastQLook) { lastQLook = qlook; drawQuality(t); }
     drawQueue();
     if (F.play.dataset.p !== String(!!s.paused)) { F.play.dataset.p = String(!!s.paused); F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause)); }
     F.shuf.classList.toggle('on', !!s.shuffle); F.shuf.setAttribute('aria-pressed', String(!!s.shuffle));
@@ -823,7 +844,7 @@ window.createParlor = function createParlor(ctx) {
     paintTime();
     if (!ticking) { ticking = true; requestAnimationFrame(tick); }
   }
-  let clock = null, seekHold = null, ticking = false, lastLook = '';
+  let clock = null, seekHold = null, ticking = false, lastLook = '', lastQLook = '';
   function paintTime() {
     if (scrubbing || !clock) return; // the finger is in charge of the times while scrubbing
     const pos = Math.min(clock.dur || Infinity, clock.pos + (clock.paused ? 0 : (performance.now() - clock.at) / 1000));

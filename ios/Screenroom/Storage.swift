@@ -188,7 +188,7 @@ let videoExtensions: Set<String> = ["mp4", "m4v", "mov", "mkv", "avi", "webm", "
 let avVideoExtensions: Set<String> = ["mp4", "m4v", "mov"]
 /// Pictures and subtitles that travel with films and songs when a folder is imported.
 let sidecarExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "srt", "vtt", "ass", "ssa"]
-let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "flac", "alac", "wav", "aif", "aiff", "caf"]
+let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "flac", "alac", "wav", "aif", "aiff", "caf", "ac3", "ec3", "eac3"] // (Dolby Digital surround too)
 
 /// Which app this is: "screenroom" (films) or "parlor" (music), from the app's Info.plist. The same code builds both.
 let appKind: String = (Bundle.main.object(forInfoDictionaryKey: "SRApp") as? String) ?? "screenroom"

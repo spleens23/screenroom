@@ -314,7 +314,8 @@ final class Scanner {
         for url in list {
             let s = stat(url)
             var entry: [String: Any]
-            if let hit = cache[url.path], (hit["mtime"] as? Double) == s.mtime, (hit["size"] as? NSNumber)?.int64Value == s.size {
+            // (songs read before Parlor noted channels are read once more, so surround ones are known)
+            if let hit = cache[url.path], (hit["mtime"] as? Double) == s.mtime, (hit["size"] as? NSNumber)?.int64Value == s.size, hit["channels"] != nil {
                 entry = hit
             } else {
                 entry = await probeAudio(url, mtime: s.mtime, size: s.size)
@@ -367,7 +368,7 @@ final class Scanner {
         let id = String(sha1Hex(st.relativeToDocs(url)).prefix(16))
         let asset = AVURLAsset(url: url)
         var tags: [String: String] = [:]
-        var entry: [String: Any] = ["id": id, "path": url.path, "mtime": mtime, "size": size]
+        var entry: [String: Any] = ["id": id, "path": url.path, "mtime": mtime, "size": size, "channels": 0]
         do {
             let d = try await asset.load(.duration).seconds
             entry["duration"] = d.isFinite ? d : 0
@@ -379,6 +380,7 @@ final class Scanner {
                 entry["lossless"] = ["alac", "fLaC", "lpcm"].contains(sub)
                 if let fd = fds.first, let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee {
                     entry["sampleRate"] = Int(asbd.mSampleRate)
+                    entry["channels"] = Int(asbd.mChannelsPerFrame) // 6 = 5.1, 8 = 7.1
                     // PCM says its bit depth outright; Apple Lossless and FLAC keep it in the format flags (1 = 16-bit … 4 = 32-bit)
                     if asbd.mBitsPerChannel > 0 { entry["bitDepth"] = Int(asbd.mBitsPerChannel) }
                     else if sub == "alac" || sub == "fLaC", let d = [1: 16, 2: 20, 3: 24, 4: 32][Int(asbd.mFormatFlags)] { entry["bitDepth"] = d }

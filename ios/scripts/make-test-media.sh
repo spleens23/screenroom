@@ -50,6 +50,12 @@ song "$D/Music/Slow Band/Long Album/01 Long Song.m4a" "Long Song" "Slow Band" "L
 song "$D/Music/Slow Band/Long Album/02 Middle.m4a" "Middle" "Slow Band" "Long Album" "2/2" 262
 mkdir -p "$D/Music/Late Band/Late Album"
 song "$D/Music/Late Band/Late Album/01 Late.m4a" "Late" "Late Band" "Late Album" "1/1" 330 # (its moving cover is added after the first scan)
+# surround songs, like ones an upmixer makes: 5.1 AAC and 7.1 FLAC (Spatial Audio on AirPods)
+mkdir -p "$D/Music/Round Band/Six Room"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=300:sample_rate=48000" -t 30 -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:a aac -b:a 384k \
+  -metadata title="Six Around" -metadata artist="Round Band" -metadata album="Six Room" -metadata track=1/2 "$D/Music/Round Band/Six Room/01 Six Around.m4a" || echo "no 5.1 AAC"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=350:sample_rate=48000" -t 30 -af "pan=7.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0|c6=c0|c7=c0" -c:a flac \
+  -metadata title="Eight Around" -metadata artist="Round Band" -metadata album="Six Room" -metadata track=2/2 "$D/Music/Round Band/Six Room/02 Eight Around.flac" || echo "no 7.1 FLAC"
 song "$D/Music/Harbor Lights/Low Tide/01 Low Tide.m4a" "Low Tide" "Harbor Lights" "Low Tide" "1/1" 294
 ffmpeg -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$D/Music/Slow Band/Long Album/cover.jpg"
 # a moving cover (a short loop beside the songs): Parlor plays it on the album page and in Now Playing

@@ -588,3 +588,8 @@ html body:not(#_) #npfull .qtop .qclear:active { background: rgba(255,255,255,.2
     background: rgba(24,24,24,.86); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); }
   html body.parlor.ios-app.mat #modal:not([hidden])::before, html body.parlor.ios-app.heir #modal:not([hidden])::before { background: rgba(255,255,255,.86); }
 }
+
+/* -- surround songs: a small 5.1 / 7.1 tag in song lists; Now Playing says Spatial Audio when AirPods are spatializing -- */
+html body.parlor .srow .e.sur { background: none; color: inherit; opacity: .6; border: 1px solid currentColor; font-size: 9px; padding: 0 3px; letter-spacing: .02em; }
+html body:not(#_) #npfull .npf-q.surround { color: #bfe3ff; background: rgba(150,205,255,.16); }
+html body:not(#_) #npfull .npf-q.surround.spatial { color: #fff; background: linear-gradient(90deg, rgba(120,170,255,.35), rgba(200,140,255,.35)); }
