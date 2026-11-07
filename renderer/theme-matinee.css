@@ -96,7 +96,7 @@ body.mat.big .card .ttl { font-size: 16px; } body.mat.big .card .ttl .sub { font
 body.mat .card:not(.pcard):not([style*="url("])::before { content: attr(title); position: absolute; left: 14px; right: 14px; bottom: 16px; font-family: var(--m-serif);
   font-weight: 600; font-size: 19px; line-height: 1.12; color: var(--m-cream); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 body.mat .card .bar { height: 5px; background: var(--m-amber); border-radius: 0 0 0 12px; }
-body.mat .card .card-stars { background: rgba(22,17,13,.85); color: var(--m-amber2); border-color: rgba(240,167,58,.45); }
+body.mat .card .card-stars { background: rgba(22,17,13,.85); color: var(--m-amber2); border-color: rgba(var(--m-amber-rgb, 240,167,58),.45); }
 body.mat .card-who .avatar { border-color: var(--m-ink); }
 body.mat .card-from, body.mat .card-who .more { background: rgba(22,17,13,.88); }
 body.mat .badge { background: rgba(22,17,13,.8); border-color: rgba(243,233,220,.4); color: var(--m-cream); border-radius: 6px; }
@@ -130,7 +130,7 @@ body.mat .ep-watch.on { background: var(--m-amber); border-color: var(--m-amber)
 body.mat .ep-title, body.mat .ep-top h3, body.mat .tracks h3 { font-family: var(--m-serif); font-weight: 600; }
 body.mat .meta .rating { border-color: var(--m-edge); color: var(--m-text); border-radius: 5px; }
 body.mat .desc-more { color: var(--m-amber2); }
-body.mat .rec-banner { background: rgba(240,167,58,.12); border-left-color: var(--m-amber); border-radius: 10px; }
+body.mat .rec-banner { background: rgba(var(--m-amber-rgb, 240,167,58),.12); border-left-color: var(--m-amber); border-radius: 10px; }
 body.mat .rating-chip { background: var(--m-panel2); border-color: var(--m-line); }
 
 /* ---- settings and pop-ups ---- */
@@ -227,7 +227,7 @@ body.mat.parlor .phead h1, body.mat.parlor .page-title { font-family: var(--m-se
 body.mat.parlor .row h2 { color: var(--m-cream); }
 body.mat.parlor table.songs { background: #1A140F; border-color: var(--m-line); }
 body.mat.parlor table.songs th { background: var(--m-panel2); color: var(--m-muted); border-color: var(--m-line); }
-body.mat.parlor .srow:hover td { background: rgba(240,167,58,.08); }
+body.mat.parlor .srow:hover td { background: rgba(var(--m-amber-rgb, 240,167,58),.08); }
 body.mat.parlor .srow:focus td, body.mat.parlor.navmode .srow:focus td { background: var(--m-amber); color: var(--m-on-amber); }
 body.mat.parlor .srow.now td:first-child, body.mat.parlor .srow.now td:nth-child(2) { color: var(--m-amber2); }
 body.mat.parlor .rowbtn { color: var(--m-amber2); }
@@ -266,7 +266,7 @@ body.mat .npb:focus, body.mat .npb-art:focus, body.mat .lcd:focus, body.mat .npf
 }
 
 /* Parlor's album cards keep their record-sliding-out highlight, framed in amber */
-body.mat.navmode .card.pcard:focus .cover, body.mat.navmode .card.pcard:focus .sleeve .cover { outline-color: var(--m-amber); box-shadow: 0 0 0 8px rgba(240,167,58,.2), 0 6px 18px rgba(0,0,0,.4); }
+body.mat.navmode .card.pcard:focus .cover, body.mat.navmode .card.pcard:focus .sleeve .cover { outline-color: var(--m-amber); box-shadow: 0 0 0 8px rgba(var(--m-amber-rgb, 240,167,58),.2), 0 6px 18px rgba(0,0,0,.4); }
 body.mat .pcard-t { color: var(--m-cream); }
 
 /* narrow screens (an iPad held upright, a small window): the top bar keeps to one line, the hero is shorter */
@@ -290,7 +290,7 @@ body.mat .pcard-t { color: var(--m-cream); }
 
 /* the profile picker: the highlighted seat gets the amber ring on its picture, not a box around the whole tile */
 body.mat.navmode .who-tile:focus { outline: none; }
-body.mat .who-tile:focus .avatar.big { border-color: var(--m-amber); box-shadow: 0 0 0 4px rgba(240,167,58,.25); }
+body.mat .who-tile:focus .avatar.big { border-color: var(--m-amber); box-shadow: 0 0 0 4px rgba(var(--m-amber-rgb, 240,167,58),.25); }
 
 /* ---- phones (an iPhone held upright, a very narrow window) ----
    The top bar becomes two rows: the wordmark and the round buttons, then the sections and the search box.
@@ -338,3 +338,15 @@ body.mat .who-tile:focus .avatar.big { border-color: var(--m-amber); box-shadow:
   body.mat #main { padding-bottom: env(safe-area-inset-bottom); }
   body.mat .hero, body.mat .strip, body.mat .page-title, body.mat section.row h2 { margin-left: max(var(--m-gut), env(safe-area-inset-left)); }
 }
+
+/* ---- the accent colour chosen in Settings, on Screenroom's (dark) side: lighter tints, so the dark lettering on them still reads ---- */
+html body.mat:not(.parlor)[data-accent="amber"] { --m-amber: #F0A73A; --m-amber2: #FFC46B; --m-amber-rgb: 240,167,58; --accent: #F0A73A; }
+html body.mat:not(.parlor)[data-accent="turquoise"] { --m-amber: #3CC4C4; --m-amber2: #7ADCDC; --m-amber-rgb: 60,196,196; --accent: #3CC4C4; }
+html body.mat:not(.parlor)[data-accent="blue"] { --m-amber: #5AA2F0; --m-amber2: #90C2FF; --m-amber-rgb: 90,162,240; --accent: #5AA2F0; }
+html body.mat:not(.parlor)[data-accent="violet"] { --m-amber: #A985F0; --m-amber2: #C8AFFF; --m-amber-rgb: 169,133,240; --accent: #A985F0; }
+html body.mat:not(.parlor)[data-accent="rose"] { --m-amber: #F07A9C; --m-amber2: #FFA8C0; --m-amber-rgb: 240,122,156; --accent: #F07A9C; }
+html body.mat:not(.parlor)[data-accent="red"] { --m-amber: #F06B5E; --m-amber2: #FF9A90; --m-amber-rgb: 240,107,94; --accent: #F06B5E; }
+html body.mat:not(.parlor)[data-accent="green"] { --m-amber: #5FC271; --m-amber2: #8FDC9C; --m-amber-rgb: 95,194,113; --accent: #5FC271; }
+html body.mat:not(.parlor)[data-accent="graphite"] { --m-amber: #B4AEA6; --m-amber2: #D6D1CA; --m-amber-rgb: 180,174,166; --accent: #B4AEA6; }
+/* the keyboard focus ring follows the accent colour too (Linux's own ring is orange) */
+html body.mat :focus-visible { outline-color: var(--m-amber, #F0A73A); }

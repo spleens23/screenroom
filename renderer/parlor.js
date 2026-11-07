@@ -487,8 +487,7 @@ window.createParlor = function createParlor(ctx) {
   const chipTitle = h('span', { class: 'npc-t' });
   const chip = h('button', { id: 'np-chip', hidden: true, title: 'Now Playing', onclick: () => openFull() },
     h('span', { class: 'npc-disc' }), chipTitle);
-  const navRight = $('#nav .nav-right');
-  if (navRight) navRight.prepend(chip);
+  // (no longer put in the top bar: it squeezed the titles beside it; the bar along the bottom does the job)
   // On a phone the sections become a tab bar along the bottom. It has to live outside the top bar (the bar's
   // blur would trap it inside), and the page starts just below the top bar however tall that has grown.
   const navEl = $('#nav'), pnavEl = $('#pnav'), pnavNext = pnavEl && pnavEl.nextElementSibling;
@@ -512,7 +511,7 @@ window.createParlor = function createParlor(ctx) {
     const s = P && P.player;
     const t = s && s.track;
     bar.hidden = !t;
-    chip.hidden = !t;
+    chip.hidden = true;
     document.body.classList.toggle('has-npbar', !!t);
     document.body.classList.toggle('music-paused', !!(s && s.paused));
     if (!t) { lastTrack = null; if (fullOpen) closeFull(); return; }

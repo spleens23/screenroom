@@ -22,7 +22,7 @@
     ['rose', 'Rose', '#DB4F78'], ['red', 'Red', '#D2443A'], ['green', 'Green', '#3B9A4C'], ['graphite', 'Graphite', '#55524E']];
   const getAccent = () => { try { return localStorage.getItem('parlor-accent') || 'amber'; } catch { return 'amber'; } };
   const applyAccent = (v) => { if (document.body) document.body.dataset.accent = v || getAccent(); };
-  if (EDITION === 'music') { if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent()); }
+  if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent());
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
 
@@ -1974,7 +1974,7 @@
       h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks${SOLO ? '' : ` for ${who}`}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own light look, after the old iTunes" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
         h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
           [['2020s', THEME_NAME], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
-      EDITION === 'music' ? h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `The colour of the buttons, the playing song and the + buttons${S.theme === 'heirloom' ? ' (in the Encore theme; Heirloom keeps its blue)' : ''}.`)),
+      EDITION === 'music' || !window.S_IOS ? h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : 'The colour of the buttons, highlights and the playing song, for films and music'}${S.theme === 'heirloom' ? ` (in the ${THEME_NAME} theme; Heirloom keeps its blue)` : ''}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
           style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))) : null,
       kids || SOLO ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
