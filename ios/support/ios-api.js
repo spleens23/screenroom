@@ -249,7 +249,9 @@
       const seen = new Map();
       for (const t of all) {
         const k = `${t.disc || 1}|${t.track || ''}|${String(t.title || '').toLowerCase()}|${Math.round(t.duration || 0)}`;
-        if (!seen.has(k)) seen.set(k, t);
+        // (the same song twice, e.g. a stereo copy and an upmixed 5.1 one: the one with more channels is kept, then the newer)
+        const had = seen.get(k);
+        if (!had || (t.channels || 0) > (had.channels || 0) || ((t.channels || 0) === (had.channels || 0) && (t.mtime || 0) > (had.mtime || 0))) seen.set(k, t);
       }
       const list = [...seen.values()];
       list.sort((a, b) => (a.disc - b.disc) || ((a.track || 999) - (b.track || 999)) || a.path.localeCompare(b.path));
