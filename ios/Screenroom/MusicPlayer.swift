@@ -32,17 +32,47 @@ final class MusicPlayer {
         }
         setUpRemote()
         // AirPods put in or taken out, Spatial Audio switched on or off in Control Center: the page shows it
+        // (the audio system is only ever asked on its own queue: its answers can take a moment, and the screen
+        // mustn't wait for them)
         let nc = NotificationCenter.default
-        nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.emit() }
-        nc.addObserver(forName: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil, queue: .main) { [weak self] _ in self?.emit() }
+        nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { [weak self] _ in self?.refreshRoute() }
+        nc.addObserver(forName: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil, queue: nil) { [weak self] _ in self?.refreshRoute() }
+        refreshRoute()
     }
 
+    private let audioQ = DispatchQueue(label: "parlor.audio-session", qos: .userInitiated)
+    private var routeNow: [String: Any] = [:]   // read on the main thread only
+
     /// Where the sound is going: the headphones or speaker, and whether iOS is playing it as Spatial Audio there.
-    private func route() -> [String: Any] {
-        let s = AVAudioSession.sharedInstance()
-        let outs = s.currentRoute.outputs
-        return ["spatial": outs.contains { $0.isSpatialAudioEnabled }, "name": outs.first?.portName ?? "",
-                "kind": outs.first?.portType.rawValue ?? "", "channels": s.outputNumberOfChannels]
+    private func refreshRoute() {
+        audioQ.async { [weak self] in
+            let s = AVAudioSession.sharedInstance()
+            let outs = s.currentRoute.outputs
+            let r: [String: Any] = ["spatial": outs.contains { $0.isSpatialAudioEnabled }, "name": outs.first?.portName ?? "",
+                                    "kind": outs.first?.portType.rawValue ?? "", "channels": s.outputNumberOfChannels]
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let changed = !NSDictionary(dictionary: self.routeNow).isEqual(to: r)
+                self.routeNow = r
+                if changed { self.emit() }
+            }
+        }
+    }
+
+    /// Surround songs (5.1, 7.1): telling iOS Parlor plays multichannel sound is what lets AirPods (and Beats) play
+    /// them as Spatial Audio, each channel placed around you with head tracking; the speaker and wired headphones
+    /// get them mixed down to stereo.
+    private func prepareSession() {
+        audioQ.async { [weak self] in
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback, mode: .default)
+            try? session.setSupportsMultichannelContent(true)
+            try? session.setActive(true)
+            if session.maximumOutputNumberOfChannels > 2, session.preferredOutputNumberOfChannels != session.maximumOutputNumberOfChannels {
+                try? session.setPreferredOutputNumberOfChannels(session.maximumOutputNumberOfChannels)
+            }
+            self?.refreshRoute()
+        }
     }
 
     // ---- what the page sees ----------------------------------------------------------------------------------
@@ -60,7 +90,7 @@ final class MusicPlayer {
             "queued": queue.map { ($0["queued"] as? Bool) == true },
             "shuffle": shuffle, "repeat": repeatMode,
             "context": context ?? NSNull(),
-            "route": route(),
+            "route": routeNow,
         ]
     }
 
@@ -84,14 +114,7 @@ final class MusicPlayer {
 
     private func go(to i: Int) {
         guard i >= 0, i < queue.count, let path = queue[i]["path"] as? String else { stop(); return }
-        // Surround songs (5.1, 7.1): telling iOS Parlor plays multichannel sound is what lets AirPods (and Beats) play
-        // them as Spatial Audio, each channel placed around you with head tracking; the speaker and wired
-        // headphones get them mixed down to stereo.
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default)
-        try? session.setSupportsMultichannelContent(true)
-        try? session.setActive(true)
-        try? session.setPreferredOutputNumberOfChannels(session.maximumOutputNumberOfChannels)
+        prepareSession()
         index = i
         let item = AVPlayerItem(url: URL(fileURLWithPath: path))
         // surround songs always spatialized; stereo ones too when "Spatialize Stereo" is on in Control Center
