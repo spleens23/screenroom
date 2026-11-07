@@ -266,7 +266,7 @@ window.createParlor = function createParlor(ctx) {
           h('h1', {}, a.title),
           h('button', { class: 'linkish partist', onclick: () => { ctx.closeModal(); go('artist:' + a.artist); } }, a.artist),
           h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless ? 'Lossless' : fmt.codec,
-            ids.some((id) => (P.tracks[id] || {}).channels > 2) ? 'Surround' : ''].filter(Boolean).join(' · ')),
+            ids.some((id) => (P.tracks[id] || {}).atmos) ? 'Dolby Atmos' : ids.some((id) => (P.tracks[id] || {}).channels > 2) ? 'Surround' : ''].filter(Boolean).join(' · ')),
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
@@ -284,7 +284,8 @@ window.createParlor = function createParlor(ctx) {
           multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '4' }, `Disc ${t.disc}`)) : null,
           h('tr', { class: 'srow' + (cur ? ' now' : ''), tabindex: '0', 'data-id': t.id, style: `--i:${Math.min(i, 16)}`, onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, ctxa); } },
             h('td', { class: 'n' }, cur ? svg(ICON.play, 'ico tiny') : (t.track || i + 1)),
-            h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, t.channels > 2 ? h('span', { class: 'e sur', title: 'Surround: Spatial Audio on AirPods' }, chLabel(t.channels)) : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
+            h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, t.atmos ? h('span', { class: 'e sur', title: 'Dolby Atmos: Spatial Audio on AirPods' }, 'Atmos') : t.channels > 2 ? h('span', { class: 'e sur', title: 'Surround: Spatial Audio on AirPods' }, chLabel(t.channels)) : null,
+              t.playable === false ? h('span', { class: 'e sur', title: "This phone can't play this file" }, "Can't play") : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
             h('td', { class: 't' }, mmss(t.duration)),
             h('td', { class: 'x' },
               P.player && P.player.playing ? h('button', { class: 'rowbtn qadd', title: 'Play next', 'aria-label': `Play ${t.title} next`, onclick: () => queueUp([t.id], true, t.title) }, svg(ICON.queue, 'ico tiny')) : null,
@@ -687,6 +688,15 @@ window.createParlor = function createParlor(ctx) {
     // a surround mix (5.1, 7.1): AirPods and Beats play it as Spatial Audio, everything else gets it in stereo
     const route = (P && P.player && P.player.route) || null;
     const spatial = !!(route && route.spatial);
+    if (t.atmos) {
+      return {
+        t, kind: 'surround atmos' + (spatial ? ' spatial' : ''),
+        name: 'Dolby Atmos', spec: [spatial ? 'Spatial Audio' : '', t.codec || ''].filter(Boolean).join(' · '),
+        about: spatial
+          ? `Dolby Atmos, playing as Spatial Audio on ${route.name || 'your headphones'}: sounds are placed all around you, above too, and with head tracking they stay put when you turn your head.`
+          : 'Dolby Atmos. It plays as Spatial Audio on AirPods (3rd generation or later, Pro or Max) and Beats that support it; the speaker and wired headphones get a stereo version.',
+      };
+    }
     if (t.channels > 2) {
       const lay = chLabel(t.channels);
       return {
@@ -925,7 +935,25 @@ window.createParlor = function createParlor(ctx) {
           if (ctx.isLinux && ctx.isLinux()) { dir = await ctx.pickPath({ title: 'Add a music folder', mode: 'folder' }); if (!dir) return; }
           const r = await api.parlorAddDir(dir); if (r.ok) { P = r.state; draw(); } else ctx.flash(r.error);
         } }, ctx.isIOS && ctx.isIOS() ? 'Import music…' : 'Add music folder…'),
-        P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Scanning…'; P = await api.parlorRescan(); draw(); } }, 'Rescan music') : null));
+        P.dirs.length ? h('button', { class: 'btn secondary', onclick: async (e) => {
+          e.target.textContent = 'Reading every song…'; e.target.disabled = true;
+          const before = P.albums.length;
+          P = await api.parlorRescan(); draw(); render(); drawBar(true);
+          ctx.flash(`Rescanned: ${plural(P.albums.length, 'album')}${P.albums.length !== before ? ` (${P.albums.length > before ? '+' : ''}${P.albums.length - before})` : ''}`);
+        } }, 'Rescan music') : null));
+      // what the last scan found, so it's clear whether it saw a new file (and why a file was left out)
+      if (api.parlorScanReport) {
+        const sr = await api.parlorScanReport();
+        if (sr && sr.at) {
+          const ago = Math.max(0, Math.round((Date.now() - sr.at) / 60000));
+          const why = { video: 'has a picture track (a video, not a song)', nosound: 'has no sound in it', unreadable: "couldn't be opened",
+            timeout: 'took too long to open (it will be tried again next scan)',
+            unplayable: "can't be played on this phone" };
+          box.append(h('p', { class: 'am-hint' }, `Last scan ${ago < 1 ? 'just now' : ago < 60 ? ago + ' min ago' : 'over an hour ago'}: ${plural(sr.songs, 'song')} in ${plural(sr.files, 'file')}, ${sr.read} read afresh${sr.deep ? ' (full rescan)' : ''}.`));
+          if (sr.skipped && sr.skipped.length) box.append(h('ul', { class: 'motion-report' }, sr.skipped.slice(0, 30).map((x) =>
+            h('li', {}, h('b', {}, `${x.folder} / ${x.file}`), ` ${why[x.why] || x.why}`, x.why === 'unplayable' && /truehd/i.test(x.codec || '') ? h('span', { class: 'mr-d' }, ' · Dolby TrueHD: save it as Dolby Digital Plus (E-AC-3) Atmos instead') : x.codec ? h('span', { class: 'mr-d' }, ` · ${x.codec}`) : null))));
+        }
+      }
       if (api.parlorMotionReport) {
         const rep = await api.parlorMotionReport();
         const say = { plays: 'plays', fixed: 'plays (Parlor made a copy the phone can play)', unplayable: "can't be played on this phone",

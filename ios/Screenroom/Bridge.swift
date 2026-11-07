@@ -69,6 +69,9 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         case "boot":
             return ["docs": st.docs.path, "films": st.films.path, "music": st.music.path, "data": st.data.path,
                     "art": st.art.path, "avatars": st.avatars.path, "device": UIDevice.current.model]
+        case "exists":
+            guard let path: String = arg(a, 0) else { return false }
+            return st.fm.fileExists(atPath: path)
         case "readJson":
             guard let name: String = arg(a, 0) else { return nil }
             return st.readJson(name)
@@ -82,8 +85,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
                 self.emit("scan-progress", ["done": done, "total": total])
             }
         case "scanAudio":
-            let cacheOnly = ((arg(a, 0) as [String: Any]?)?["cacheOnly"] as? Bool) ?? false
-            return await Scanner.shared.scanAudio(cacheOnly: cacheOnly) { done, total in
+            let o = arg(a, 0) as [String: Any]?
+            let cacheOnly = (o?["cacheOnly"] as? Bool) ?? false
+            let deep = (o?["deep"] as? Bool) ?? false // Settings › Rescan music: every file read afresh
+            return await Scanner.shared.scanAudio(cacheOnly: cacheOnly, deep: deep) { done, total in
                 self.emit("scan-progress", ["done": done, "total": total, "music": true])
             }
         case "musicChanged":

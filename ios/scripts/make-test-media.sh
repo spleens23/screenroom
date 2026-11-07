@@ -56,6 +56,11 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=300:sample_rate=48000" -t 30 -af 
   -metadata title="Six Around" -metadata artist="Round Band" -metadata album="Six Room" -metadata track=1/2 "$D/Music/Round Band/Six Room/01 Six Around.m4a" || echo "no 5.1 AAC"
 ffmpeg -v error -y -f lavfi -i "sine=frequency=350:sample_rate=48000" -t 30 -af "pan=7.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0|c6=c0|c7=c0" -c:a flac \
   -metadata title="Eight Around" -metadata artist="Round Band" -metadata album="Six Room" -metadata track=2/2 "$D/Music/Round Band/Six Room/02 Eight Around.flac" || echo "no 7.1 FLAC"
+# Dolby Digital Plus 5.1 in an .mp4 with no picture (how Dolby Atmos music usually comes), and a real video beside it
+ffmpeg -v error -y -f lavfi -i "sine=frequency=400:sample_rate=48000" -t 30 -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:a eac3 -b:a 640k \
+  -metadata title="Dolby Around" -metadata artist="Round Band" -metadata album="Six Room" -metadata track=3/3 "$D/Music/Round Band/Six Room/03 Dolby Around.mp4" || echo "no E-AC-3 mp4"
+ffmpeg -v error -y -f lavfi -i "color=c=red:s=320x240:r=24" -f lavfi -i "sine=frequency=500:sample_rate=48000" -t 5 -c:v libx264 -pix_fmt yuv420p -c:a aac \
+  "$D/Music/Round Band/Six Room/live clip.mp4" || echo "no video clip"
 song "$D/Music/Harbor Lights/Low Tide/01 Low Tide.m4a" "Low Tide" "Harbor Lights" "Low Tide" "1/1" 294
 ffmpeg -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$D/Music/Slow Band/Long Album/cover.jpg"
 # a moving cover (a short loop beside the songs): Parlor plays it on the album page and in Now Playing

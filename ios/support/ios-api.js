@@ -226,6 +226,8 @@
       sampleRate: r.sampleRate || 0,
       bitDepth: r.bitDepth || 0,
       channels: r.channels || 0,
+      atmos: !!r.atmos,
+      playable: r.playable !== false,
       art: r.art || null,
       folderArt: r.folderArt || null,
       folderMotion: r.folderMotion || null,
@@ -270,11 +272,17 @@
     music = { tracks: byId, albums };
   }
 
-  async function scanMusic() {
+  async function scanMusic(deep) {
+    if (deep && musicScanning) { try { await musicScanning; } catch {} } // (a full rescan waits for one that's running, then reads everything)
     if (!musicScanning) {
       musicScanning = (async () => {
         try {
-          rawTracks = await native('scanAudio');
+          rawTracks = await native('scanAudio', deep ? { deep: true } : {});
+          // covers picked by hand whose picture has gone are forgotten (the album's own cover shows again)
+          if (deep && pstore && pstore.covers) {
+            for (const [k, f] of Object.entries(pstore.covers)) { if (!f || !(await native('exists', f).catch(() => true))) delete pstore.covers[k]; }
+            savePar();
+          }
           groupAlbums();
         } finally { musicScanning = null; }
         emit('parlor-updated', null);
@@ -321,7 +329,7 @@
       for (const id of a.tracks) {
         const t = music.tracks[id];
         if (t) tracks[id] = { id, title: t.title, artist: t.artist, album: t.album, albumKey: a.key, track: t.track, disc: t.disc,
-          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, channels: t.channels || 0, explicit: t.explicit };
+          duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, channels: t.channels || 0, atmos: t.atmos, playable: t.playable, explicit: t.explicit };
       }
     }
     const mine = pOf(me.id);
@@ -709,7 +717,8 @@
 
     // ---- Parlor ----
     parlorState: async () => { await boot(); return parlorState(); },
-    parlorRescan: async () => { await boot(); await scanMusic(); return parlorState(); },
+    parlorRescan: async () => { await boot(); await scanMusic(true); emit('library-updated', await snapshot()); return parlorState(); },
+    parlorScanReport: async () => { try { return (await native('readJson', 'scan-report')) || null; } catch { return null; } },
     // what the last scan made of each moving cover (cover.mp4 …), shown in Settings
     parlorMotionReport: async () => { try { return (await native('readJson', 'motion-report')) || []; } catch { return []; } },
     parlorAddDir: async (dir) => {

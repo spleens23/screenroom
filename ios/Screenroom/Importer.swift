@@ -17,7 +17,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     func pick(kind: String, from host: UIViewController) async -> Int {
         self.kind = kind
         // Screenroom takes films, Parlor takes music
-        var types: [UTType] = isParlorApp ? [.audio] : [.movie, .audiovisualContent]
+        var types: [UTType] = isParlorApp ? [.audio, .mpeg4Movie, .quickTimeMovie] : [.movie, .audiovisualContent] // (Dolby Atmos songs are often .mp4)
         types.append(.folder)
         // MKV, AVI and other films the system doesn't know as movies; FLAC for Parlor
         for ext in isParlorApp ? ["flac", "alac", "ac3", "ec3", "eac3", "wav"] : ["mkv", "avi", "webm", "ts", "m2ts", "wmv", "flv"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
@@ -78,6 +78,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
         let dir: URL
         if videoExtensions.contains(ext), !isParlorApp { dir = st.films }
         else if audioExtensions.contains(ext), isParlorApp { dir = st.music }
+        else if isParlorApp, ["mp4", "m4v", "mov"].contains(ext) { dir = st.music } // a Dolby Atmos song (.mp4); Parlor's scan tells songs from videos
         else { return 0 } // (a song brought to Screenroom, or a film to Parlor, isn't kept)
         return place(url, in: dir, name: url.lastPathComponent, copy: copy) ? 1 : 0
     }
@@ -88,7 +89,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
         var files: [URL] = []
         for case let f as URL in e where (try? f.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true { files.append(f) }
         let hasVideo = !isParlorApp && files.contains { videoExtensions.contains($0.pathExtension.lowercased()) }
-        let hasAudio = isParlorApp && files.contains { audioExtensions.contains($0.pathExtension.lowercased()) }
+        let hasAudio = isParlorApp && files.contains { audioExtensions.contains($0.pathExtension.lowercased()) || ["mp4", "m4v", "mov"].contains($0.pathExtension.lowercased()) }
         guard hasVideo || hasAudio else { return 0 }
         let top = folder.lastPathComponent
         let rootPath = folder.standardizedFileURL.path
@@ -110,6 +111,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
             if videoExtensions.contains(ext) && !isParlorApp && !isMotionCover(f.lastPathComponent) { dest = st.films }
             else if audioExtensions.contains(ext) && isParlorApp { dest = st.music }
             else if isParlorApp && isMotionCover(f.lastPathComponent) { dest = st.music } // an album's moving cover
+            else if isParlorApp && ["mp4", "m4v", "mov"].contains(ext) { dest = st.music } // a Dolby Atmos song (.mp4) beside the others
             else if sidecarExtensions.contains(ext) { dest = hasVideo ? st.films : st.music }
             else { continue }
             var target = dest.appendingPathComponent(top).appendingPathComponent(rel)

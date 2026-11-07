@@ -12,6 +12,7 @@ final class Scanner {
     private let audioCacheName = "scan-music-3"
     private var videoBusy = false
     private var audioBusy = false
+    private var audioStarted = Date.distantPast // a scan that's been going far too long is taken as stuck
 
     // ---- walking Documents -------------------------------------------------------------------------------
     private func files(withExtensions exts: Set<String>) -> [URL] {
@@ -296,14 +297,21 @@ final class Scanner {
     }
 
     // ---- songs --------------------------------------------------------------------------------------------
-    func scanAudio(cacheOnly: Bool, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
+    func scanAudio(cacheOnly: Bool, deep: Bool = false, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
         if !isParlorApp { return [] } // Screenroom is films only (music is Parlor's)
-        let cache = (st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:]
-        let list = files(withExtensions: audioExtensions)
-        if cacheOnly || audioBusy {
-            return list.compactMap { cache[$0.path] }
+        let cache = deep ? [:] : ((st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:])
+        // songs, plus MP4 / MOV files in the music folder with no picture in them (Dolby Atmos music often comes as .mp4)
+        let list = (files(withExtensions: audioExtensions) + musicFolderVideos()).sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        let busy = audioBusy && Date().timeIntervalSince(audioStarted) < 240
+        if cacheOnly || busy {
+            let old = (st.readJson(audioCacheName) as? [String: [String: Any]]) ?? [:]
+            return list.compactMap { old[$0.path] }.filter { $0["notSong"] == nil }
         }
         audioBusy = true
+        audioStarted = Date()
+        let began = Date()
+        var skipped: [[String: Any]] = [] // files that aren't songs, or couldn't be read, for Settings
+        var probed = 0
         defer { audioBusy = false }
         var next: [String: [String: Any]] = [:]
         var dirArt: [String: String] = [:]     // a folder's embedded cover, saved once
@@ -315,10 +323,26 @@ final class Scanner {
             let s = stat(url)
             var entry: [String: Any]
             // (songs read before Parlor noted channels are read once more, so surround ones are known)
-            if let hit = cache[url.path], (hit["mtime"] as? Double) == s.mtime, (hit["size"] as? NSNumber)?.int64Value == s.size, hit["channels"] != nil {
+            if let hit = cache[url.path], abs(((hit["mtime"] as? NSNumber)?.doubleValue ?? -1) - s.mtime) < 1.5, (hit["size"] as? NSNumber)?.int64Value == s.size, hit["channels"] != nil {
                 entry = hit
             } else {
-                entry = await probeAudio(url, mtime: s.mtime, size: s.size)
+                probed += 1
+                // (one odd file can't hold the whole scan up: after 25 seconds it's left out and noted)
+                let u = url, m = s.mtime, z = s.size
+                entry = await withTimeout(25, fallback: ["id": "", "path": u.path, "mtime": m, "size": z, "channels": 0, "notSong": "timeout"] as [String: Any]) {
+                    await self.probeAudio(u, mtime: m, size: z)
+                }
+            }
+            if let why = entry["notSong"] as? String {
+                // (remembered, so it isn't opened again until it changes; a file that timed out is tried again next time)
+                if why != "timeout" { next[url.path] = entry }
+                skipped.append(["file": url.lastPathComponent, "folder": url.deletingLastPathComponent().lastPathComponent, "why": why])
+                done += 1
+                continue
+            }
+            if (entry["playable"] as? Bool) == false {
+                skipped.append(["file": url.lastPathComponent, "folder": url.deletingLastPathComponent().lastPathComponent,
+                                "why": "unplayable", "codec": entry["codec"] as? String ?? ""])
             }
             let dir = url.deletingLastPathComponent().path
             if dirCover[dir] == nil { dirCover[dir] = folderCover(url.deletingLastPathComponent()) }
@@ -329,7 +353,7 @@ final class Scanner {
                 var m = folderMotion(here)
                 if m == nil, up.standardizedFileURL.path != st.music.standardizedFileURL.path, st.isInside(up.path, st.music) { m = folderMotion(up) }
                 if let p = m {
-                    let (use, how) = await playableMotion(p)
+                    let (use, how) = await withTimeout(40, fallback: (String?.none, "timeout")) { await self.playableMotion(p) }
                     motionNotes.append(["album": here.lastPathComponent, "file": (p as NSString).lastPathComponent, "path": p, "status": how,
                                         "detail": FFProbe.describeVideo(URL(fileURLWithPath: p))])
                     m = use
@@ -354,14 +378,27 @@ final class Scanner {
         // videos in the music folder that aren't anyone's moving cover (misnamed, or not beside any songs)
         let used = Set(motionNotes.compactMap { n in (n["path"] as? String).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } })
         if let walk = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-            for case let f as URL in walk where videoExtensions.contains(f.pathExtension.lowercased()) && !used.contains(f.resolvingSymlinksInPath().path) {
+            for case let f as URL in walk where videoExtensions.contains(f.pathExtension.lowercased()) && !used.contains(f.resolvingSymlinksInPath().path)
+                && !(next[f.path] != nil && next[f.path]?["notSong"] == nil) { // (an .mp4 that's a song isn't a cover)
                 motionNotes.append(["album": f.deletingLastPathComponent().lastPathComponent, "file": f.lastPathComponent,
                                     "status": isMotionCover(f.lastPathComponent) ? "nosongs" : "name", "detail": FFProbe.describeVideo(f)])
             }
         }
         try? st.writeJson("motion-report", motionNotes)
         try? st.writeJson("scan-music-sig", ["sig": musicSignature()])
-        return list.compactMap { next[$0.path] }
+        let songs = list.compactMap { next[$0.path] }.filter { $0["notSong"] == nil }
+        try? st.writeJson("scan-report", ["at": Date().timeIntervalSince1970 * 1000, "seconds": Date().timeIntervalSince(began), "deep": deep,
+                                          "files": list.count, "songs": songs.count, "read": probed, "skipped": skipped])
+        return songs
+    }
+
+    /// MP4 / M4V / MOV files in the music folder that aren't moving covers: maybe songs (Dolby Atmos music is
+    /// usually an .mp4 with only sound in it). Each is opened once to tell.
+    private func musicFolderVideos() -> [URL] {
+        var out: [URL] = []
+        guard let e = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        for case let u as URL in e where ["mp4", "m4v", "mov"].contains(u.pathExtension.lowercased()) && !isMotionCover(u.lastPathComponent) { out.append(u) }
+        return out
     }
 
     private func probeAudio(_ url: URL, mtime: Double, size: Int64) async -> [String: Any] {
@@ -369,18 +406,43 @@ final class Scanner {
         let asset = AVURLAsset(url: url)
         var tags: [String: String] = [:]
         var entry: [String: Any] = ["id": id, "path": url.path, "mtime": mtime, "size": size, "channels": 0]
+        // what FFmpeg makes of it: whether an .mp4 is a song or a video, and whether its Dolby sound is Atmos
+        let ext = url.pathExtension.lowercased()
+        let dolbyOrBox = ["mp4", "m4v", "mov", "ec3", "eac3", "ac3"].contains(ext)
+        var ff = dolbyOrBox ? FFProbe.read(url) : nil
+        if ["mp4", "m4v", "mov"].contains(ext) {
+            let streams = ff?.streams ?? []
+            let audio = streams.filter { ($0["codec_type"] as? String) == "audio" }
+            let picture = streams.contains { ($0["codec_type"] as? String) == "video" && (($0["disposition"] as? [String: Int])?["attached_pic"] ?? 0) == 0 }
+            if ff == nil { entry["notSong"] = "unreadable"; return entry }
+            if audio.isEmpty { entry["notSong"] = "nosound"; return entry }
+            if picture { entry["notSong"] = "video"; return entry } // a music video or a film: not for Parlor
+        }
+        if let a = ff?.streams.first(where: { ($0["codec_type"] as? String) == "audio" }) {
+            let prof = (a["profile"] as? String ?? "").lowercased()
+            let name = a["codec_name"] as? String ?? ""
+            if prof.contains("atmos") { entry["atmos"] = true }
+            if name == "truehd" { entry["codec"] = "Dolby TrueHD" }
+            if let ch = a["channels"] as? Int, ch > 0 { entry["channels"] = ch }
+        }
         do {
             let d = try await asset.load(.duration).seconds
             entry["duration"] = d.isFinite ? d : 0
             if let t = try await asset.loadTracks(withMediaType: .audio).first {
                 let fds = (try? await t.load(.formatDescriptions)) ?? []
                 let sub = fds.first.map { fourCC(CMFormatDescriptionGetMediaSubType($0)) } ?? ""
-                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "AC3", "ec-3": "E-AC3", "opus": "Opus"][sub] ?? sub.uppercased()
+                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "Dolby Digital", "ec-3": "Dolby Digital Plus", "ec+3": "Dolby Digital Plus", "mlpa": "Dolby TrueHD", "opus": "Opus"][sub] ?? sub.uppercased()
+                if sub == "ec+3" { entry["atmos"] = true } // (Apple's name for Dolby Digital Plus with Atmos)
+                // Dolby sound in an .m4a: FFmpeg tells whether it's Atmos
+                if ff == nil, sub == "ec-3" || sub == "ec+3", let f = FFProbe.read(url) {
+                    ff = f
+                    if let a = f.streams.first(where: { ($0["codec_type"] as? String) == "audio" }), (a["profile"] as? String ?? "").lowercased().contains("atmos") { entry["atmos"] = true }
+                }
                 entry["codec"] = codec
                 entry["lossless"] = ["alac", "fLaC", "lpcm"].contains(sub)
                 if let fd = fds.first, let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee {
                     entry["sampleRate"] = Int(asbd.mSampleRate)
-                    entry["channels"] = Int(asbd.mChannelsPerFrame) // 6 = 5.1, 8 = 7.1
+                    if Int(asbd.mChannelsPerFrame) > 0 { entry["channels"] = Int(asbd.mChannelsPerFrame) } // 6 = 5.1, 8 = 7.1
                     // PCM says its bit depth outright; Apple Lossless and FLAC keep it in the format flags (1 = 16-bit … 4 = 32-bit)
                     if asbd.mBitsPerChannel > 0 { entry["bitDepth"] = Int(asbd.mBitsPerChannel) }
                     else if sub == "alac" || sub == "fLaC", let d = [1: 16, 2: 20, 3: 24, 4: 32][Int(asbd.mFormatFlags)] { entry["bitDepth"] = d }
@@ -429,9 +491,20 @@ final class Scanner {
                 guard let name = n, tags[name] == nil, let str = try? await item.load(.stringValue), !str.isEmpty else { continue }
                 tags[name] = str
             }
+            // can Apple's player play it here? (Dolby TrueHD, for one, it can't)
+            entry["playable"] = (try? await asset.load(.isPlayable)) ?? false
         } catch {
             NSLog("Screenroom: couldn't read \(url.lastPathComponent): \(error)")
+            entry["playable"] = false
         }
+        if entry["codec"] == nil, let a = ff?.streams.first(where: { ($0["codec_type"] as? String) == "audio" }) { entry["codec"] = (a["codec_name"] as? String ?? "").uppercased() }
+        // tags FFmpeg found that Apple's reader didn't (Atmos .mp4 files tagged by other apps)
+        for (k, v) in ff?.tags ?? [:] where !v.isEmpty {
+            let key = ["album_artist": "album_artist", "albumartist": "album_artist", "title": "title", "artist": "artist", "album": "album",
+                       "date": "date", "genre": "genre", "track": "track", "disc": "disc"][k]
+            if let key, tags[key] == nil { tags[key] = v }
+        }
+        if entry["_cover"] == nil, let c = ff?.cover { entry["_cover"] = c }
         entry["tags"] = tags
         return entry
     }
@@ -513,4 +586,19 @@ func saveJPEG(_ img: UIImage, width: CGFloat, to dest: URL, quality: CGFloat) ->
 func isMotionCover(_ name: String) -> Bool {
     name.range(of: #"^(cover|folder|front|album|artwork|motion|animated|(animated|motion)[ _-]?cover|cover[ _-]?(animated|motion|loop))\.(mp4|m4v|mov|webm)$"#,
                options: [.regularExpression, .caseInsensitive]) != nil
+}
+
+/// Runs `op`, but gives up after `seconds` and returns `fallback` (Apple's file readers can, rarely, never answer
+/// about an odd file; a scan mustn't wait for them forever).
+func withTimeout<T>(_ seconds: Double, fallback: T, _ op: @escaping () async -> T) async -> T {
+    await withCheckedContinuation { (cont: CheckedContinuation<T, Never>) in
+        let lock = NSLock()
+        var finished = false
+        let finish: (T) -> Void = { v in
+            lock.lock(); defer { lock.unlock() }
+            if !finished { finished = true; cont.resume(returning: v) }
+        }
+        Task.detached(priority: .utility) { finish(await op()) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { finish(fallback) }
+    }
 }

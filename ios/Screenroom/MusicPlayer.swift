@@ -17,6 +17,8 @@ final class MusicPlayer {
     private var endObserver: NSObjectProtocol?
     private var timeObserver: Any?
     private var rateObserver: NSKeyValueObservation?
+    private var statusObserver: NSKeyValueObservation?
+    private var failsInARow = 0
     private var lastEmit = Date.distantPast
     private var shuffle = false
     private var unshuffled: [[String: Any]]?   // the queue's own order while shuffled
@@ -122,6 +124,20 @@ final class MusicPlayer {
         if let o = endObserver { NotificationCenter.default.removeObserver(o) }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             self?.next(auto: true)
+        }
+        // a song the phone can't play (Dolby TrueHD, a damaged file) is skipped, with a word about it
+        let title = queue[i]["title"] as? String ?? "That song"
+        statusObserver = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+            DispatchQueue.main.async {
+                guard let self, self.player.currentItem === it else { return }
+                if it.status == .readyToPlay { self.failsInARow = 0; return }
+                guard it.status == .failed else { return }
+                NSLog("Parlor: can't play %@: %@", title, String(describing: it.error))
+                self.bridge?.emit("notice", "\(title) can't be played on this phone")
+                self.failsInARow += 1
+                if self.failsInARow >= max(1, self.queue.count) { self.failsInARow = 0; self.stop(); return }
+                if self.index + 1 < self.queue.count { self.go(to: self.index + 1) } else { self.stop() }
+            }
         }
         player.replaceCurrentItem(with: item)
         player.volume = muted ? 0 : volume
