@@ -165,6 +165,11 @@ jobs:
           xcrun simctl install "$UDID" "$APP"
           PD="$(xcrun simctl get_app_container "$UDID" dev.screenroom.parlor data)"
           ios/scripts/make-test-media.sh "$PD/Documents"
+          # an Atmos-style .mp4 dropped beside the Music folder rather than in it, with its cover stored as a one-picture video track
+          mkdir -p "$PD/Documents/Loose Atmos"
+          ffmpeg -v error -y -f lavfi -i "color=c=navy:s=600x600" -f lavfi -i "sine=frequency=450:sample_rate=48000" -map 0:v -map 1:a -frames:v 1 -t 30 \
+            -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:v mjpeg -c:a eac3 -b:a 640k -metadata title="Loose Around" -metadata artist="Round Band" -metadata album="Loose Atmos" \
+            "$PD/Documents/Loose Atmos/01 Loose Around.mp4" || echo "no loose E-AC-3 mp4"
           shot() { sleep "$2"; xcrun simctl io "$UDID" screenshot "shots/parlor-$1.png"; }
           run() { xcrun simctl terminate "$UDID" dev.screenroom.parlor 2>/dev/null || true; xcrun simctl launch "$UDID" dev.screenroom.parlor --ui-script "$1"; }
           xcrun simctl launch "$UDID" dev.screenroom.parlor; shot home 30
@@ -180,7 +185,7 @@ jobs:
           run "setTimeout(() => { const c=[...document.querySelectorAll('.card.pcard')].find(x=>/Late Album/.test(x.title)); c && c.click(); setTimeout(() => { const v = document.querySelector('#modal video.motion'); console.error('late cover: ' + (v ? JSON.stringify({ playing: v.classList.contains('on'), t: v.currentTime }) : 'none')); }, 6000); }, 9000)"; shot late-cover 22
           # surround songs: channels read, and the 7.1 FLAC actually playing
           ffmpeg -v error -y -i "$PD/Documents/Music/Late Band/Late Album/01 Late.m4a" -c copy -metadata title="Later" -metadata track=2/2 "$PD/Documents/Music/Late Band/Late Album/02 Later.m4a"
-          run "api.parlorRescan().then(() => api.parlorScanReport()).then(r => console.error('rescan: ' + JSON.stringify(r))).then(() => api.parlorState()).then(p => { const a = p.albums.find(x => /Late Album/.test(x.title)); console.error('rescan late album: ' + (a ? a.tracks.length : 'none') + ' songs'); })"; shot rescan 20
+          run "api.parlorRescan().then(() => api.parlorScanReport()).then(r => console.error('rescan: ' + JSON.stringify(r))).then(() => api.parlorState()).then(p => { const a = p.albums.find(x => /Late Album/.test(x.title)); console.error('rescan late album: ' + (a ? a.tracks.length : 'none') + ' songs'); const l = p.albums.find(x => /Loose Atmos/.test(x.title)); console.error('loose atmos: ' + JSON.stringify(l ? l.tracks.map(id => [p.tracks[id].title, p.tracks[id].channels, p.tracks[id].codec, p.tracks[id].playable]) : 'none')); })"; shot rescan 20
           run "api.parlorState().then(p => { const a = p.albums.find(x => /Six Room/.test(x.title)); console.error('surround: ' + JSON.stringify(a ? a.tracks.map(id => [p.tracks[id].title, p.tracks[id].channels, p.tracks[id].codec]) : 'no album')); return a && api.musicPlay({ trackIds: a.tracks, start: 1 }); }).then(() => setTimeout(() => api.parlorState().then(p => console.error('surround playing: ' + JSON.stringify({ pos: p.player && p.player.pos, track: p.player && p.player.track && p.player.track.title, route: p.player && p.player.route }))), 5000))"; shot surround 12
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt

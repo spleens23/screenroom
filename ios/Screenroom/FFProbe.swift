@@ -63,6 +63,7 @@ enum FFProbe {
                     if r.cover == nil, pkt.size > 0, let d = pkt.data { r.cover = Data(bytes: d, count: Int(pkt.size)) }
                 }
                 st["codec_type"] = "video"
+                if s.pointee.nb_frames > 0 { st["nb_frames"] = Int(s.pointee.nb_frames) }
                 st["width"] = Int(p.width)
                 st["height"] = Int(p.height)
                 let fr = s.pointee.avg_frame_rate

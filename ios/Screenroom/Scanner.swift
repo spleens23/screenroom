@@ -9,7 +9,7 @@ final class Scanner {
     static let shared = Scanner()
     private let st = Storage.shared
     private let videoCacheName = "scan-films-5"
-    private let audioCacheName = "scan-music-3"
+    private let audioCacheName = "scan-music-4" // (4: .mp4 songs anywhere, still-picture tracks aren't "video")
     private var videoBusy = false
     private var audioBusy = false
     private var audioStarted = Date.distantPast // a scan that's been going far too long is taken as stuck
@@ -392,13 +392,11 @@ final class Scanner {
         return songs
     }
 
-    /// MP4 / M4V / MOV files in the music folder that aren't moving covers: maybe songs (Dolby Atmos music is
-    /// usually an .mp4 with only sound in it). Each is opened once to tell.
+    /// MP4 / M4V / MOV files anywhere in Parlor's folder (not just Music: songs dropped in from the Files app can
+    /// land beside it) that aren't moving covers: maybe songs (Dolby Atmos music is usually an .mp4 with only sound
+    /// in it). Each is opened once to tell.
     private func musicFolderVideos() -> [URL] {
-        var out: [URL] = []
-        guard let e = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
-        for case let u as URL in e where ["mp4", "m4v", "mov"].contains(u.pathExtension.lowercased()) && !isMotionCover(u.lastPathComponent) { out.append(u) }
-        return out
+        files(withExtensions: ["mp4", "m4v", "mov"]).filter { !isMotionCover($0.lastPathComponent) }
     }
 
     private func probeAudio(_ url: URL, mtime: Double, size: Int64) async -> [String: Any] {
@@ -413,16 +411,33 @@ final class Scanner {
         if ["mp4", "m4v", "mov"].contains(ext) {
             let streams = ff?.streams ?? []
             let audio = streams.filter { ($0["codec_type"] as? String) == "audio" }
-            let picture = streams.contains { ($0["codec_type"] as? String) == "video" && (($0["disposition"] as? [String: Int])?["attached_pic"] ?? 0) == 0 }
-            if ff == nil { entry["notSong"] = "unreadable"; return entry }
-            if audio.isEmpty { entry["notSong"] = "nosound"; return entry }
-            if picture { entry["notSong"] = "video"; return entry } // a music video or a film: not for Parlor
+            if ff == nil {
+                // FFmpeg couldn't open it: Apple's reader decides (sound and no pictures = a song)
+                let a = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
+                let v = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+                if a.isEmpty { entry["notSong"] = v.isEmpty ? "unreadable" : "nosound"; return entry }
+                if !v.isEmpty { entry["notSong"] = "video"; return entry }
+            } else {
+                if audio.isEmpty { entry["notSong"] = "nosound"; return entry }
+                // a real moving picture makes it a music video or a film; a cover stored as a one-picture track doesn't
+                let moving = streams.contains { st in
+                    guard (st["codec_type"] as? String) == "video", ((st["disposition"] as? [String: Int])?["attached_pic"] ?? 0) == 0 else { return false }
+                    if ["mjpeg", "png", "bmp", "gif", "webp", "tiff"].contains(st["codec_name"] as? String ?? "") { return false }
+                    if let fr = st["avg_frame_rate"] as? String, let n = Double(fr.split(separator: "/").first ?? ""), let d = Double(fr.split(separator: "/").last ?? ""), d > 0, n / d < 2 { return false }
+                    if let nf = st["nb_frames"] as? Int, nf > 0, nf <= 2 { return false }
+                    return true
+                }
+                // Dolby or surround sound means it's music made for listening (an Atmos song with a picture track), so it stays
+                let dolby = audio.contains { ["eac3", "ac3", "ac4", "truehd", "mlp"].contains($0["codec_name"] as? String ?? "") || ($0["channels"] as? Int ?? 0) > 2 }
+                if moving && !dolby { entry["notSong"] = "video"; return entry } // a music video or a film: not for Parlor
+            }
         }
         if let a = ff?.streams.first(where: { ($0["codec_type"] as? String) == "audio" }) {
             let prof = (a["profile"] as? String ?? "").lowercased()
             let name = a["codec_name"] as? String ?? ""
             if prof.contains("atmos") { entry["atmos"] = true }
             if name == "truehd" { entry["codec"] = "Dolby TrueHD" }
+            if name == "ac4" { entry["codec"] = "Dolby AC-4"; entry["atmos"] = true } // (AC-4 music is Atmos)
             if let ch = a["channels"] as? Int, ch > 0 { entry["channels"] = ch }
         }
         do {
@@ -431,7 +446,7 @@ final class Scanner {
             if let t = try await asset.loadTracks(withMediaType: .audio).first {
                 let fds = (try? await t.load(.formatDescriptions)) ?? []
                 let sub = fds.first.map { fourCC(CMFormatDescriptionGetMediaSubType($0)) } ?? ""
-                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "Dolby Digital", "ec-3": "Dolby Digital Plus", "ec+3": "Dolby Digital Plus", "mlpa": "Dolby TrueHD", "opus": "Opus"][sub] ?? sub.uppercased()
+                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "Dolby Digital", "ec-3": "Dolby Digital Plus", "ec+3": "Dolby Digital Plus", "mlpa": "Dolby TrueHD", "ac-4": "Dolby AC-4", "opus": "Opus"][sub] ?? sub.uppercased()
                 if sub == "ec+3" { entry["atmos"] = true } // (Apple's name for Dolby Digital Plus with Atmos)
                 // Dolby sound in an .m4a: FFmpeg tells whether it's Atmos
                 if ff == nil, sub == "ec-3" || sub == "ec+3", let f = FFProbe.read(url) {
