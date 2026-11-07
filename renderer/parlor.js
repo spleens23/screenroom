@@ -273,13 +273,14 @@ window.createParlor = function createParlor(ctx) {
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, true, a.title) }, svg(ICON.queue), 'Play Next') : null,
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, false, a.title) }, 'Play Last') : null,
             P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null,
+            P.canManage && api.parlorMotionSet ? h('button', { class: 'btn secondary', onclick: () => motionCover(a) }, a.motion ? 'Moving Cover' : 'Add Moving Cover') : null,
             ctx.recommend && ctx.canRecommend() && !window.S_IOS ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '→ Recommend') : null),
           albumRecBanner(a),
           P.canManage && !window.S_IOS ? sharePanel(a) : null)),
-      h('table', { class: 'songs tracks' }, h('tbody', {}, albumTracks(a).map((t, i) => {
+      h('table', { class: 'songs tracks' + (P.player && P.player.playing ? ' two-btns' : '') }, h('tbody', {}, albumTracks(a).map((t, i) => {
         const cur = P.player && P.player.track && P.player.track.id === t.id;
         return [
-          multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '5' }, `Disc ${t.disc}`)) : null,
+          multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '4' }, `Disc ${t.disc}`)) : null,
           h('tr', { class: 'srow' + (cur ? ' now' : ''), tabindex: '0', 'data-id': t.id, style: `--i:${Math.min(i, 16)}`, onclick: (e) => { if (e.target.closest('.rowbtn')) return; playIds(ids, i, ctxa); } },
             h('td', { class: 'n' }, cur ? svg(ICON.play, 'ico tiny') : (t.track || i + 1)),
             h('td', {}, t.title, t.explicit ? h('span', { class: 'e' }, 'E') : null, a.various && t.artist !== a.artist ? h('span', { class: 'by' }, ` — ${t.artist}`) : null),
@@ -375,6 +376,27 @@ window.createParlor = function createParlor(ctx) {
   }
 
   // ---- album covers ------------------------------------------------------------------------------------
+  /** Add, change or take away the album's moving cover (a short video, like Apple Music's). */
+  function motionCover(a) {
+    const go = async (how) => {
+      closeOverlay();
+      const r = await api.parlorMotionSet(a.key, how);
+      if (!r.ok) { ctx.flash(r.error); return; }
+      if (r.cancelled) return;
+      P = r.state;
+      ctx.flash(how === 'remove' ? 'Moving cover taken away'
+        : r.plays ? 'Moving cover added' : `That video can't play here${r.detail ? ' (' + r.detail + ')' : ''}`);
+      drawAlbum(); render(); drawBar(true);
+      if (fullOpen) drawFull(true);
+    };
+    overlay('covers', h('h2', {}, `Moving cover for ${a.title}`),
+      h('p', { class: 'pnote small' }, 'Pick a short looping video. It plays silently in place of the cover on the album page and in Now Playing.'),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn primary', onclick: () => go('photos') }, 'From Photos'),
+        h('button', { class: 'btn secondary', onclick: () => go('files') }, 'From Files'),
+        a.motion ? h('button', { class: 'btn secondary', onclick: () => go('remove') }, 'Take Away') : null,
+        h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
+  }
   async function findCover(a) {
     overlay('covers', h('h2', {}, `Cover for ${a.title}`), h('p', { class: 'pnote small' }, 'Looking…'));
     const r = await api.parlorCoverSearch(a.key);
@@ -494,7 +516,8 @@ window.createParlor = function createParlor(ctx) {
     if (!t) { lastTrack = null; if (fullOpen) closeFull(); return; }
     if (force || !lastTrack || lastTrack !== t.id) {
       const a = album(t.albumKey) || { art: t.art, title: t.album, artist: t.artist, key: t.albumKey };
-      B.art.replaceChildren(cover(a, 'tiny'));
+      const blook = [a.key, a.art].join('|');
+      if (force === 'look' || B.art.dataset.look !== blook || !B.art.firstChild) { B.art.dataset.look = blook; B.art.replaceChildren(cover(a, 'tiny')); }
       B.title.textContent = t.title; B.sub.textContent = `${t.artist} — ${t.album}`;
       chipTitle.textContent = t.title;
     }
@@ -641,7 +664,11 @@ window.createParlor = function createParlor(ctx) {
     const mine = after.filter((x) => x.q.queued), rest = after.filter((x) => !x.q.queued);
     const from = s.context && s.context.name ? `Continue playing from ${s.context.name}` : 'Up Next';
     const mode = [s.shuffle ? 'Shuffled' : '', s.repeat === 'all' ? 'Repeating' : s.repeat === 'one' ? 'Repeating this song' : ''].filter(Boolean).join(' · ');
+    const clear = after.length ? h('button', { class: 'btn secondary qclear', 'data-b': 'qclear', onclick: async () => {
+      const r = await api.musicCmd('clear'); if (r && r.player && P) { P.player = r.player; drawFull(false); } ctx.flash('Queue cleared');
+    } }, 'Clear Queue') : null;
     F.queue.replaceChildren(
+      clear ? h('div', { class: 'qtop' }, clear) : null,
       mine.length ? h('div', { class: 'qsec' }, h('div', { class: 'qh' }, h('h4', {}, 'Playing Next'), h('small', {}, plural(mine.length, 'song') + ' you added')), ...mine.map((x) => row(x.q, x.i))) : null,
       h('div', { class: 'qsec' }, h('div', { class: 'qh' }, h('h4', {}, from), mode ? h('small', {}, mode) : null),
         ...(rest.length ? rest.slice(0, 200).map((x) => row(x.q, x.i)) : [h('p', { class: 'qempty' }, s.repeat === 'all' ? 'The queue starts again after this song.' : 'Nothing else is queued after this song.')])));
@@ -759,7 +786,11 @@ window.createParlor = function createParlor(ctx) {
     const t = s && s.track;
     if (!t) return closeFull();
     const a = album(t.albumKey) || { art: t.art, title: t.album, artist: t.artist, key: t.albumKey };
-    if (rebuild) {
+    // (the next song from the same album keeps the same cover and moving cover: nothing is redrawn or restarted)
+    const look = [a.key, a.art, a.motion].join('|');
+    const sameLook = rebuild && look === lastLook && F.stage.firstChild;
+    if (rebuild) lastLook = look;
+    if (rebuild && !sameLook) {
       F.bg.style.backgroundImage = a.art ? `url("${fileUrl(a.art)}")` : '';
       F.bg.style.setProperty('--h', hue(a.key || a.title));
       F.bg.classList.toggle('gen', !a.art);
@@ -768,6 +799,8 @@ window.createParlor = function createParlor(ctx) {
       if (F.mbg) { F.mbg.remove(); F.mbg = null; }
       full.classList.toggle('has-motion', !!a.motion);
       if (a.motion) { F.mbg = motion(a); F.mbg.classList.add('npf-motion'); F.bg.after(F.mbg); } // (under the soft edge, F.melt)
+    }
+    if (rebuild) {
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
       F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
@@ -790,7 +823,7 @@ window.createParlor = function createParlor(ctx) {
     paintTime();
     if (!ticking) { ticking = true; requestAnimationFrame(tick); }
   }
-  let clock = null, seekHold = null, ticking = false;
+  let clock = null, seekHold = null, ticking = false, lastLook = '';
   function paintTime() {
     if (scrubbing || !clock) return; // the finger is in charge of the times while scrubbing
     const pos = Math.min(clock.dur || Infinity, clock.pos + (clock.paused ? 0 : (performance.now() - clock.at) / 1000));

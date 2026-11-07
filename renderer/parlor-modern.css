@@ -525,3 +525,66 @@ html body .accent-swatches .swatch.on { box-shadow: 0 0 0 3px var(--fg, #1e1a16)
   html body.parlor.parlor.parlor .rowbtn { width: 44px; height: 40px; font-size: 28px; line-height: 1; font-weight: 400; border-radius: 12px; }
   html body.parlor.parlor.parlor .palbum .rowbtn { width: 44px; height: 44px; }
 }
+
+/* -- touch screens: the buttons at the end of a song row always fit their column (a squeezed cell turned the + into "…"),
+      and a tapped row doesn't stay lit up like a TV remote's selection -- */
+@media (pointer: coarse) {
+  html body.parlor.parlor.parlor table.songs td.x, html body.parlor.parlor.parlor table.songs th.x { overflow: visible; text-overflow: clip; white-space: nowrap; }
+  html body.parlor.parlor.parlor table.songs td.x { width: 64px; padding: 0 8px 0 4px; text-align: right; }
+  html body.parlor.parlor.parlor .palbum table.songs td.x, html body.parlor.parlor.parlor .palbum tr.srow td:last-child { width: 56px; padding: 0 8px 0 0; text-align: right; }
+  html body.parlor.parlor.parlor .palbum table.songs.two-btns td.x, html body.parlor.parlor.parlor .palbum table.songs.two-btns tr.srow td:last-child { width: 96px; }
+  html body.parlor.parlor.parlor table.songs .rowbtn, html body.parlor.parlor.parlor .palbum table.songs .rowbtn { width: 44px; height: 44px; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center; }
+  html body.parlor.parlor.parlor table.songs .rowbtn.qadd { width: 40px; }
+  html body.parlor.parlor.parlor table.songs .rowbtn .ico.tiny { width: 22px; height: 22px; color: inherit; vertical-align: middle; }
+  html body.parlor.parlor.parlor table.songs td.t { overflow: visible; text-overflow: clip; }
+  html body.parlor.parlor.parlor tr.srow:hover td, html body.parlor.parlor.parlor tr.srow:focus td { background: transparent !important; color: inherit !important; }
+  html body.parlor.parlor.parlor tr.srow.now:hover td:nth-child(-n+2), html body.parlor.parlor.parlor tr.srow.now:focus td:nth-child(-n+2),
+  html body.parlor.parlor.parlor tr.srow.now .nm-t { color: var(--m-amber2, #1e5cc4) !important; }
+  html body.parlor.parlor.parlor tr.srow:active td { background: color-mix(in srgb, var(--m-amber, #3875d7) 12%, transparent) !important; }
+  html body.parlor.parlor.parlor .rowbtn:hover, html body.parlor.parlor.parlor .rowbtn:focus { background: transparent !important; border-color: transparent !important; outline: none; }
+  html body.parlor.parlor.parlor .rowbtn:active { background: color-mix(in srgb, var(--m-amber, #3875d7) 16%, transparent) !important; }
+}
+
+/* -- moving covers show the whole cover: a square as wide as the screen allows (no cropping of the cover's own
+      lettering), with only its bottom edge melting into the controls; the blurred cover behind keeps its colours -- */
+@media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
+  html body:not(#_) #npfull { --mv: min(100vw, calc(100vh - 400px)); }
+  html body:not(#_) #npfull .npf-motion { inset: 0 auto auto 50%; width: var(--mv); height: var(--mv); transform: translateX(-50%); object-fit: cover;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 80%, rgba(0,0,0,.55) 91%, transparent 100%); }
+  html body:not(#_) #npfull .npf-melt { top: calc(var(--mv) * .84); height: calc(var(--mv) * .3); bottom: auto;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 50%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 50%, transparent 100%); }
+}
+/* narrower than the screen (an upright iPad): the sides melt away too */
+@media (min-width: 601px) and (pointer: coarse) and (orientation: portrait) {
+  html body:not(#_) #npfull .npf-motion {
+    -webkit-mask-image: linear-gradient(to bottom, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to bottom, #000 80%, rgba(0,0,0,.55) 91%, transparent), linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+    mask-composite: intersect; }
+}
+@media (min-width: 601px) and (pointer: coarse) and (orientation: landscape) {
+  html body:not(#_) #npfull { --mv: min(100vh, 52vw); }
+  /* the controls start where the cover ends, so none of the cover is hidden behind them */
+  html body:not(#_) #npfull.has-motion .npf { grid-template-columns: calc(var(--mv) * .9) minmax(0, 540px); justify-content: start; padding-left: 0; gap: 4vw; }
+  html body:not(#_) #npfull .npf-motion { inset: 50% auto auto 0; width: var(--mv); height: var(--mv); transform: translateY(-50%); object-fit: cover;
+    -webkit-mask-image: linear-gradient(to right, #000 82%, rgba(0,0,0,.5) 92%, transparent), linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to right, #000 82%, rgba(0,0,0,.5) 92%, transparent), linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+    mask-composite: intersect; }
+  html body:not(#_) #npfull .npf-melt { left: calc(var(--mv) * .84); width: calc(var(--mv) * .3);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 50%, transparent); mask-image: linear-gradient(to right, transparent, #000 50%, transparent); }
+}
+
+/* -- Clear Queue, at the top of the queue -- */
+html body:not(#_) #npfull .qtop { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+html body:not(#_) #npfull .qtop .qclear { min-height: 36px; padding: 6px 16px; border-radius: 18px; font-size: 14px; font-weight: 600;
+  color: #fff; background: rgba(255,255,255,.16); border: 0; box-shadow: none; text-shadow: none; }
+html body:not(#_) #npfull .qtop .qclear:active { background: rgba(255,255,255,.28); }
+
+/* -- an album page scrolled up slides under a backing for the clock and battery, not straight under them -- */
+@media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
+  html body.parlor.ios-app #modal:not([hidden])::before { content: ''; position: fixed; z-index: 60; top: 0; left: 0; right: 0; height: var(--sat); pointer-events: none;
+    background: rgba(24,24,24,.86); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); }
+  html body.parlor.ios-app.mat #modal:not([hidden])::before, html body.parlor.ios-app.heir #modal:not([hidden])::before { background: rgba(255,255,255,.86); }
+}

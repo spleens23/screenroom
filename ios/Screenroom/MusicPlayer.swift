@@ -102,6 +102,9 @@ final class MusicPlayer {
         case "mute": muted.toggle(); player.volume = muted ? 0 : volume
         case "jump": if let i = (arg as? NSNumber)?.intValue { go(to: i) }
         case "stop": stop()
+        case "clear":
+            // Clear Queue: only the song that's playing is left (it carries on)
+            if let cur = current { queue = [cur]; index = 0; unshuffled = nil }
         case "shuffle": toggleShuffle()
         case "repeat": repeatMode = ["off": "all", "all": "one"][repeatMode] ?? "off"
         case "enqueue":

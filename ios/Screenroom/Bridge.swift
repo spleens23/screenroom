@@ -133,6 +133,21 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             let file = "\((name ?? randomHex(4)).replacingOccurrences(of: "/", with: "-")).jpg"
             guard let saved = saveJPEG(img, width: 600, to: st.avatars.appendingPathComponent(file), quality: 0.85) else { throw ScreenroomError("Couldn't save the picture.") }
             return ["name": file, "path": saved]
+        case "pickMotion":
+            // an album's moving cover: arg 0 is the album's folder, arg 1 "photos" / "files" / "remove"
+            guard let dir: String = arg(a, 0), st.isInside(dir + "/x", st.music) else { throw ScreenroomError("That album isn't in Parlor's Music folder.") }
+            let how: String = arg(a, 1) ?? "photos"
+            let url = URL(fileURLWithPath: dir)
+            if how == "remove" {
+                importer.removeMotionCovers(in: url)
+                let up = url.deletingLastPathComponent()
+                if st.isInside(up.path + "/x", st.music), up.standardizedFileURL.path != st.music.standardizedFileURL.path { importer.removeMotionCovers(in: up) }
+                return ["removed": true]
+            }
+            guard let host else { return nil }
+            guard let made = await importer.pickMotion(from: host, source: how, into: url) else { return nil }
+            let (use, status) = await Scanner.shared.playableMotion(made.path)
+            return ["path": made.path, "plays": use != nil, "status": status, "detail": FFProbe.describeVideo(made)]
         case "deleteFiles":
             let r = st.deleteFiles(arg(a, 0) ?? [])
             return ["removed": r.removed, "freed": r.freed]

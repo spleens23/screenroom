@@ -790,6 +790,20 @@
         return ok({ state: parlorState() });
       } catch (e) { return fail(e.message); }
     },
+    // An album's moving cover: a video picked from Photos or Files, kept in the album's folder as cover.mp4/.mov.
+    parlorMotionSet: async (key, how) => {
+      if (!canManage()) return fail('Kids profiles can\'t change covers.');
+      const a = music.albums.find((x) => x.key === key);
+      if (!a) return fail('Album not found');
+      try {
+        // the folder its songs are in (the one above, for an album split into Disc folders, is checked too)
+        const dir = a.dirs[0];
+        const r = await native('pickMotion', dir, how || 'photos');
+        if (!r) return ok({ state: parlorState(), cancelled: true });
+        await scanMusic();
+        return ok({ state: parlorState(), plays: how === 'remove' ? true : !!r.plays, status: r.status, detail: r.detail });
+      } catch (e) { return fail(e.message); }
+    },
     parlorCoversAuto: async () => {
       if (!canManage()) return fail('Kids profiles can\'t change covers.');
       const missing = visibleAlbums().filter((a) => !a.art);

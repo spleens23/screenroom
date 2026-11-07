@@ -10,6 +10,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     private let st = Storage.shared
     private var filesDone: ((Int) -> Void)?
     private var photoDone: ((UIImage?) -> Void)?
+    private var motionDone: ((URL?) -> Void)?   // picking an album's moving cover (a video), from Photos or Files
     private var kind = "any"
 
     @MainActor
@@ -30,6 +31,14 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     }
 
     func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        if let done = motionDone {
+            motionDone = nil
+            DispatchQueue.global(qos: .userInitiated).async {
+                let out = urls.first.flatMap { self.keepPicked($0) }
+                DispatchQueue.main.async { done(out) }
+            }
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let n = urls.reduce(0) { $0 + self.bringIn($1, copy: true) }
             DispatchQueue.main.async { self.filesDone?(n); self.filesDone = nil }
@@ -37,6 +46,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     }
 
     func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) {
+        if let done = motionDone { motionDone = nil; done(nil); return }
         filesDone?(0)
         filesDone = nil
     }
@@ -82,6 +92,15 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
         guard hasVideo || hasAudio else { return 0 }
         let top = folder.lastPathComponent
         let rootPath = folder.standardizedFileURL.path
+        // Songs already in Music, by file name: an album folder brought in again (now with its cover.mp4) may have
+        // been imported before under another name or layout, and its cover belongs beside those songs.
+        var known: [String: URL] = [:]
+        if isParlorApp, files.contains(where: { isMotionCover($0.lastPathComponent) }),
+           let walk = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+            for case let k as URL in walk where audioExtensions.contains(k.pathExtension.lowercased()) {
+                known["\(k.lastPathComponent)|\(fileSize(k))"] = k.deletingLastPathComponent()
+            }
+        }
         var n = 0
         for f in files {
             let ext = f.pathExtension.lowercased()
@@ -93,10 +112,26 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
             else if isParlorApp && isMotionCover(f.lastPathComponent) { dest = st.music } // an album's moving cover
             else if sidecarExtensions.contains(ext) { dest = hasVideo ? st.films : st.music }
             else { continue }
-            let target = dest.appendingPathComponent(top).appendingPathComponent(rel)
+            var target = dest.appendingPathComponent(top).appendingPathComponent(rel)
+            let isCover = isParlorApp && (isMotionCover(f.lastPathComponent) || sidecarExtensions.contains(ext))
+            if isParlorApp && isMotionCover(f.lastPathComponent) {
+                // beside the songs it came with, wherever they are now
+                let sibs = (try? st.fm.contentsOfDirectory(at: f.deletingLastPathComponent(), includingPropertiesForKeys: nil)) ?? []
+                if let home = sibs.lazy.filter({ audioExtensions.contains($0.pathExtension.lowercased()) })
+                    .compactMap({ known["\($0.lastPathComponent)|\(fileSize($0))"] }).first {
+                    target = home.appendingPathComponent(f.lastPathComponent)
+                }
+            }
             try? st.fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if st.fm.fileExists(atPath: target.path) { continue } // already imported
-            if (try? st.fm.copyItem(at: f, to: target)) != nil, isMedia(f) { n += 1 }
+            if st.fm.fileExists(atPath: target.path) {
+                // a song that's already here is skipped; a cover that changed (a new moving cover) replaces the old one
+                guard isCover, fileSize(target) != fileSize(f) else { continue }
+                if isMotionCover(f.lastPathComponent) { removeMotionCovers(in: target.deletingLastPathComponent()) }
+                else { try? st.fm.removeItem(at: target) }
+            } else if isParlorApp && isMotionCover(f.lastPathComponent) {
+                removeMotionCovers(in: target.deletingLastPathComponent()) // one moving cover per album
+            }
+            if (try? st.fm.copyItem(at: f, to: target)) != nil, isMedia(f) || isCover { n += 1 }
         }
         return n
     }
@@ -160,6 +195,53 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
         group.notify(queue: .main) { done(total) }
     }
 
+    // ---- an album's moving cover ------------------------------------------------------------------------------
+    /// Pick a short video (from Photos or Files) and make it the album's moving cover: it's copied into the album's
+    /// folder as cover.mp4 / cover.mov, in place of any moving cover that was there. Returns the new file.
+    @MainActor
+    func pickMotion(from host: UIViewController, source: String, into dir: URL) async -> URL? {
+        let picked: URL? = await withCheckedContinuation { cont in
+            motionDone = { u in cont.resume(returning: u) }
+            if source == "files" {
+                let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie], asCopy: true)
+                picker.allowsMultipleSelection = false
+                picker.delegate = self
+                host.present(picker, animated: true)
+            } else {
+                var cfg = PHPickerConfiguration()
+                cfg.filter = .videos
+                cfg.selectionLimit = 1
+                cfg.preferredAssetRepresentationMode = .current
+                let picker = PHPickerViewController(configuration: cfg)
+                picker.delegate = self
+                host.present(picker, animated: true)
+            }
+        }
+        guard let tmp = picked else { return nil }
+        defer { try? st.fm.removeItem(at: tmp) }
+        var ext = tmp.pathExtension.lowercased()
+        if !["mp4", "m4v", "mov"].contains(ext) { ext = "mov" }
+        let dest = dir.appendingPathComponent("cover.\(ext)")
+        removeMotionCovers(in: dir)
+        do { try st.fm.copyItem(at: tmp, to: dest) } catch { NSLog("Parlor: couldn't keep the moving cover: \(error)"); return nil }
+        return dest
+    }
+
+    /// Takes away an album's moving cover(s) in a folder.
+    func removeMotionCovers(in dir: URL) {
+        for name in (try? st.fm.contentsOfDirectory(atPath: dir.path)) ?? [] where isMotionCover(name) {
+            try? st.fm.removeItem(at: dir.appendingPathComponent(name))
+        }
+    }
+
+    /// A picked file copied somewhere of our own, before the picker throws its copy away.
+    private func keepPicked(_ url: URL) -> URL? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("motion-\(randomHex(4)).\(url.pathExtension.isEmpty ? "mov" : url.pathExtension)")
+        do { try st.fm.copyItem(at: url, to: tmp); return tmp } catch { NSLog("Parlor: couldn't read the picked video: \(error)"); return nil }
+    }
+
     // ---- pictures (profile photos, album covers) -----------------------------------------------------------------
     @MainActor
     func pickPhoto(from host: UIViewController) async -> UIImage? {
@@ -176,6 +258,19 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
 
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
+        if let done = motionDone {
+            motionDone = nil
+            guard let p = results.first?.itemProvider,
+                  let type = p.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .movie) == true }) ?? (p.hasItemConformingToTypeIdentifier(UTType.movie.identifier) ? UTType.movie.identifier : nil)
+            else { done(nil); return }
+            p.loadFileRepresentation(forTypeIdentifier: type) { url, err in
+                // the file only lasts until this returns, so it's copied here
+                let out = url.flatMap { self.keepPicked($0) }
+                if out == nil { NSLog("Parlor: couldn't load the video from Photos: \(String(describing: err))") }
+                DispatchQueue.main.async { done(out) }
+            }
+            return
+        }
         guard let p = results.first?.itemProvider, p.canLoadObject(ofClass: UIImage.self) else {
             photoDone?(nil); photoDone = nil
             return
@@ -187,4 +282,8 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
             }
         }
     }
+}
+
+private func fileSize(_ u: URL) -> Int64 {
+    ((try? FileManager.default.attributesOfItem(atPath: u.path))?[.size] as? NSNumber)?.int64Value ?? -1
 }
