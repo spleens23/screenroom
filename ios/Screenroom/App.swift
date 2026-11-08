@@ -48,11 +48,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillEnterForeground(_ scene: UIScene) {
         // Finder, the Files app or AirDrop may have added something while Screenroom was away. Parlor looks again
         // only when something actually changed (otherwise it waits for Settings › Rescan music).
+        // Screenroom does the same for films: opening the app doesn't read the library again (Settings › Rescan does).
         let n = screen.importer.tidyInbox()
-        if !isParlorApp || n > 0 { screen.filesChanged(); return }
-        // (and when a quick look shows the music folder changed: a moving cover added, an album taken out …)
+        if n > 0 { screen.filesChanged(); return }
+        // (and when a quick look shows the folder changed: a film or song added, a moving cover, an album taken out …)
         Task.detached(priority: .utility) {
-            if Scanner.shared.musicChanged() { await MainActor.run { self.screen.filesChanged() } }
+            if isParlorApp ? Scanner.shared.musicChanged() : Scanner.shared.videosChanged() { await MainActor.run { self.screen.filesChanged() } }
         }
     }
 }

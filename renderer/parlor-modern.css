@@ -600,3 +600,11 @@ html body:not(#_) #npfull .npf-prog { grid-template-columns: minmax(max-content,
 html body:not(#_) #npfull .npf-q { min-width: 0; max-width: 100%; overflow: hidden; }
 html body:not(#_) #npfull .npf-q b, html body:not(#_) #npfull .npf-q-ico { flex: none; }
 html body:not(#_) #npfull .npf-q small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* the moving cover choices fit the box on a phone: they wrap into rows instead of running off the side */
+html body .motion-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+html body .motion-btns .btn { white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+@media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
+  html body:not(#_) .motion-btns { display: grid; grid-template-columns: 1fr 1fr; }
+  html body:not(#_) .motion-btns .btn { width: 100%; margin: 0; padding-left: 10px; padding-right: 10px; }
+}

@@ -70,13 +70,39 @@ final class Scanner {
         (st.readJson("scan-music-sig") as? [String: String])?["sig"] != musicSignature()
     }
 
+    /// Screenroom's version: the videos in its folder (name, size, date). Opening the app compares this with the
+    /// last scan and reads nothing when they match.
+    func videoSignature() -> String {
+        var parts: [String] = []
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
+        if let e = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+            for case let u as URL in e where videoExtensions.contains(u.pathExtension.lowercased()) {
+                let v = try? u.resourceValues(forKeys: Set(keys))
+                if v?.isDirectory == true { continue }
+                parts.append("\(st.relativeToDocs(u))|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
+            }
+        }
+        parts.sort()
+        return sha1Hex(parts.joined(separator: "\n"))
+    }
+
+    func videosChanged() -> Bool {
+        (st.readJson("scan-video-sig") as? [String: String])?["sig"] != videoSignature()
+    }
+
+    /// The same file as when it was read: same size, and the same date (to within a moment: the saved date can
+    /// round a little).
+    private func unchanged(_ hit: [String: Any], _ s: (mtime: Double, size: Int64)) -> Bool {
+        abs(((hit["mtime"] as? NSNumber)?.doubleValue ?? -1) - s.mtime) < 1.5 && (hit["size"] as? NSNumber)?.int64Value == s.size
+    }
+
     private func stat(_ url: URL) -> (mtime: Double, size: Int64) {
         let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         return ((v?.contentModificationDate?.timeIntervalSince1970 ?? 0) * 1000, Int64(v?.fileSize ?? 0))
     }
 
     // ---- films --------------------------------------------------------------------------------------------
-    func scanVideos(cacheOnly: Bool, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
+    func scanVideos(cacheOnly: Bool, deep: Bool = false, progress: @escaping (Int, Int) -> Void) async -> [[String: Any]] {
         if isParlorApp { return [] } // Parlor is music only
         let cache = readCache(videoCacheName)
         let list = files(withExtensions: videoExtensions)
@@ -86,20 +112,29 @@ final class Scanner {
         videoBusy = true
         defer { videoBusy = false }
         var next: [String: [String: Any]] = [:]
+        // only the films that are new or changed are read (Settings › Rescan reads them all); the progress shown
+        // counts just those, so an unchanged library shows nothing
+        let fresh = { (url: URL) -> Bool in
+            guard !deep, let hit = cache[url.path] else { return false }
+            return self.unchanged(hit, self.stat(url)) && self.artOK(hit)
+        }
+        let toRead = list.filter { !fresh($0) }
+        let reading = Set(toRead.map(\.path))
         var done = 0
         for url in list {
             let s = stat(url)
-            if let hit = cache[url.path], (hit["mtime"] as? Double) == s.mtime, (hit["size"] as? NSNumber)?.int64Value == s.size, artOK(hit) {
+            if !reading.contains(url.path), let hit = cache[url.path] {
                 next[url.path] = hit
-            } else {
-                next[url.path] = avVideoExtensions.contains(url.pathExtension.lowercased())
-                    ? await probeVideo(url, mtime: s.mtime, size: s.size)
-                    : await probeWithFF(url, mtime: s.mtime, size: s.size)
+                continue
             }
+            next[url.path] = avVideoExtensions.contains(url.pathExtension.lowercased())
+                ? await probeVideo(url, mtime: s.mtime, size: s.size)
+                : await probeWithFF(url, mtime: s.mtime, size: s.size)
             done += 1
-            if done % 3 == 0 || done == list.count { progress(done, list.count) }
+            if done % 3 == 0 || done == toRead.count { progress(done, toRead.count) }
         }
         try? st.writeJson(videoCacheName, next)
+        try? st.writeJson("scan-video-sig", ["sig": videoSignature()])
         return list.compactMap { next[$0.path] }
     }
 
@@ -342,11 +377,21 @@ final class Scanner {
         var dirMotion: [String: String?] = [:] // a folder's moving cover (cover.mp4 …)
         var motionNotes: [[String: Any]] = []  // what happened to each one, for Settings
         var done = 0
+        // a file already read and unchanged isn't opened again (songs read before Parlor noted channels are read
+        // once more, so surround ones are known; files that aren't songs are remembered as such)
+        let fresh = { (url: URL) -> [String: Any]? in
+            guard let hit = cache[url.path], self.unchanged(hit, self.stat(url)) else { return nil }
+            if let why = hit["notSong"] as? String { return why == "timeout" ? nil : hit }
+            return hit["channels"] != nil ? hit : nil
+        }
+        let hits = Dictionary(list.compactMap { u in fresh(u).map { (u.path, $0) } }, uniquingKeysWith: { a, _ in a })
+        let toRead = Set(list.map(\.path)).count - hits.count // (the progress shown counts only these: an unchanged library shows nothing)
+        let motionCache = (st.readJson("motion-cache") as? [String: [String: Any]]) ?? [:]
+        var motionNext: [String: [String: Any]] = [:]
         for url in list {
             let s = stat(url)
             var entry: [String: Any]
-            // (songs read before Parlor noted channels are read once more, so surround ones are known)
-            if let hit = cache[url.path], abs(((hit["mtime"] as? NSNumber)?.doubleValue ?? -1) - s.mtime) < 1.5, (hit["size"] as? NSNumber)?.int64Value == s.size, hit["channels"] != nil {
+            if let hit = hits[url.path] {
                 entry = hit
             } else {
                 probed += 1
@@ -360,7 +405,7 @@ final class Scanner {
                 // (remembered, so it isn't opened again until it changes; a file that timed out is tried again next time)
                 if why != "timeout" { next[url.path] = entry }
                 skipped.append(["file": url.lastPathComponent, "folder": url.deletingLastPathComponent().lastPathComponent, "why": why])
-                done += 1
+                if hits[url.path] == nil { done += 1 }
                 continue
             }
             if (entry["playable"] as? Bool) == false {
@@ -376,9 +421,23 @@ final class Scanner {
                 var m = folderMotion(here)
                 if m == nil, up.standardizedFileURL.path != st.music.standardizedFileURL.path, st.isInside(up.path, st.music) { m = folderMotion(up) }
                 if let p = m {
-                    let (use, how) = await withTimeout(40, fallback: (String?.none, "timeout")) { await self.playableMotion(p) }
-                    motionNotes.append(["album": here.lastPathComponent, "file": (p as NSString).lastPathComponent, "path": p, "status": how,
-                                        "detail": FFProbe.describeVideo(URL(fileURLWithPath: p))])
+                    // (checked once per cover: again only when the cover file changes, or on Rescan music)
+                    let ps = stat(URL(fileURLWithPath: p))
+                    let mkey = "\(st.relativeToDocs(URL(fileURLWithPath: p)))|\(ps.size)|\(Int(ps.mtime))"
+                    var use: String?, how: String, detail: String
+                    if !deep, let c = motionCache[mkey], let h = c["status"] as? String,
+                       c["use"] == nil || st.fm.fileExists(atPath: (c["use"] as? String) ?? "") {
+                        use = c["use"] as? String; how = h; detail = c["detail"] as? String ?? ""
+                    } else {
+                        (use, how) = await withTimeout(40, fallback: (String?.none, "timeout")) { await self.playableMotion(p) }
+                        detail = FFProbe.describeVideo(URL(fileURLWithPath: p))
+                    }
+                    if how != "timeout" {
+                        var note: [String: Any] = ["status": how, "detail": detail]
+                        if let u = use { note["use"] = u }
+                        motionNext[mkey] = note
+                    }
+                    motionNotes.append(["album": here.lastPathComponent, "file": (p as NSString).lastPathComponent, "path": p, "status": how, "detail": detail])
                     m = use
                 }
                 dirMotion[dir] = m
@@ -390,8 +449,10 @@ final class Scanner {
             }
             if entry["art"] == nil, let a = dirArt[dir] { entry["art"] = a }
             next[url.path] = entry
-            done += 1
-            if done % 5 == 0 || done == list.count { progress(done, list.count) }
+            if hits[url.path] == nil {
+                done += 1
+                if done % 5 == 0 || done == toRead { progress(done, toRead) }
+            }
         }
         // songs read before their folder's cover was found
         for (p, var e) in next where e["art"] == nil {
@@ -408,6 +469,7 @@ final class Scanner {
             }
         }
         try? st.writeJson("motion-report", motionNotes)
+        try? st.writeJson("motion-cache", motionNext)
         try? st.writeJson("scan-music-sig", ["sig": musicSignature()])
         let songs = list.compactMap { next[$0.path] }.filter { $0["notSong"] == nil }
         try? st.writeJson("scan-report", ["at": Date().timeIntervalSince1970 * 1000, "seconds": Date().timeIntervalSince(began), "deep": deep,

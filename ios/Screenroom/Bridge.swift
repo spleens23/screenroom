@@ -81,7 +81,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return true
         case "scanVideos":
             let cacheOnly = ((arg(a, 0) as [String: Any]?)?["cacheOnly"] as? Bool) ?? false
-            return await Scanner.shared.scanVideos(cacheOnly: cacheOnly) { done, total in
+            let deep = ((arg(a, 0) as [String: Any]?)?["deep"] as? Bool) ?? false // Settings › Rescan: every film read afresh
+            return await Scanner.shared.scanVideos(cacheOnly: cacheOnly, deep: deep) { done, total in
                 self.emit("scan-progress", ["done": done, "total": total])
             }
         case "scanAudio":
@@ -91,6 +92,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return await Scanner.shared.scanAudio(cacheOnly: cacheOnly, deep: deep) { done, total in
                 self.emit("scan-progress", ["done": done, "total": total, "music": true])
             }
+        case "videosChanged":
+            return await Task.detached(priority: .utility) { Scanner.shared.videosChanged() }.value
         case "musicChanged":
             return await Task.detached(priority: .utility) { Scanner.shared.musicChanged() }.value
         case "sha256":

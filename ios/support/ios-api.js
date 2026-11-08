@@ -147,10 +147,11 @@
     return dups.length;
   }
 
-  async function scanFilms() {
+  async function scanFilms(deep) {
+    if (deep && scanning) { try { await scanning; } catch {} } // (a full rescan waits for one that's running, then reads everything)
     if (!scanning) {
       scanning = (async () => {
-        try { rawFilms = await native('scanVideos'); } finally { scanning = null; }
+        try { rawFilms = await native('scanVideos', deep ? { deep: true } : {}); } finally { scanning = null; }
       })();
     }
     return scanning;
@@ -486,8 +487,11 @@
         // then a real look, in the background
         // (Parlor uses what it found last time; it reads the files again only when the folder has changed, from Settings › Rescan music,
         // after an import, or the very first time)
-        (EDITION === 'music' && rawTracks.length ? native('musicChanged').catch(() => true) : Promise.resolve(true))
-          .then((changed) => Promise.all([scanFilms(), changed ? scanMusic() : null])).then(async () => emit('library-updated', await snapshot())).catch(() => {});
+        // (Screenroom the same: films are read again only when its folder changed, or from Settings › Rescan)
+        const filmsChanged = EDITION !== 'music' && rawFilms.length ? native('videosChanged').catch(() => true) : Promise.resolve(EDITION !== 'music');
+        const songsChanged = EDITION === 'music' && rawTracks.length ? native('musicChanged').catch(() => true) : Promise.resolve(EDITION === 'music');
+        Promise.all([filmsChanged, songsChanged])
+          .then(async ([fc, mc]) => { if (!fc && !mc) return; await Promise.all([fc ? scanFilms() : null, mc ? scanMusic() : null]); emit('library-updated', await snapshot()); }).catch(() => {});
         // Parlor also keeps half an eye on its folder while it's open (the Files app beside it on an iPad, Finder
         // over USB …): a quick look every 20 seconds, and whenever it comes back on screen; nothing is read
         // unless something there changed.
@@ -520,7 +524,7 @@
     edition: EDITION,
     platform: 'ios',
     state: async () => { await boot(); return snapshot(); },
-    scan: async () => { await boot(); emit('scan-progress', { done: 0, total: 1 }); await scanFilms(); return snapshot(); },
+    scan: async () => { await boot(); emit('scan-progress', { done: 0, total: 1 }); await scanFilms(true); return snapshot(); },
     addDir: async () => { await boot(); await native('importFiles', 'films'); await scanFilms(); return snapshot(); },
     removeDir: async () => snapshot(),
     importFiles: async (kind) => { await boot(); const r = await native('importFiles', kind || 'any'); await Promise.all([scanFilms(), scanMusic()]); return { ...r, state: await snapshot() }; },
