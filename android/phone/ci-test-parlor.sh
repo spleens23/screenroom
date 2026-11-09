@@ -8,7 +8,8 @@ APK="$1"
 PKG=com.screenroom.parlor
 mkdir -p shots
 # (every adb call has a time limit: if the emulated phone stops answering, the test ends instead of waiting forever)
-adb() { timeout 90 command adb "$@"; }
+ADB="$(command -v adb)"
+adb() { timeout 90 "$ADB" "$@"; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 adb install -r -g "$APK" || exit 1
