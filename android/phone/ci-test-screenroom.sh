@@ -30,6 +30,9 @@ adb push "$V/." /sdcard/Movies/ >/dev/null
 shot() { sleep "$2"; adb exec-out screencap -p > "shots/screenroom-android-$1.png"; }
 run() { adb shell am force-stop $PKG; adb shell am start -n $PKG/com.screenroom.phone.MainActivity --es script64 "$(printf '%s' "$1" | base64 -w0)" >/dev/null; }
 adb logcat -c
+# (the phone's log, kept as it's written: if the emulated phone dies, its last words are here)
+"$ADB" logcat -v time > shots/screenroom-android-live-log.txt 2>&1 &
+LOGCAT=$!
 
 adb shell am start -n $PKG/com.screenroom.phone.MainActivity >/dev/null; shot home 30
 run "api.state().then(s => console.error('library: ' + JSON.stringify(s.library.map(i => [i.title, i.tv ? i.tv.series + ' ' + i.tv.season + 'x' + i.tv.episode : '', Math.round(i.duration), !!i.art])))).catch(e => console.error('library: failed ' + e))"; shot library 14
@@ -43,5 +46,7 @@ ffmpeg -v error -y -f lavfi -i "color=c=purple:s=640x360:r=24" -f lavfi -i "sine
 adb push "$V/New Arrival.mp4" /sdcard/Movies/ >/dev/null
 run "setTimeout(() => api.state().then(s => console.error('added: ' + s.library.map(i => i.title).sort().join(','))), 6000)"; shot added 18
 
+kill $LOGCAT 2>/dev/null
+echo "--- the phone's last words:"; grep -vE " [VD]/" shots/screenroom-android-live-log.txt | tail -60 | cut -c1-300
 echo "--- what the page logged:"
 adb logcat -d -s Parlor:* AndroidRuntime:E ExoPlayerImpl:E | tee shots/screenroom-android-log.txt | grep -E "page: |FATAL|Exception|ExoPlayer" | cut -c1-400 | head -60
