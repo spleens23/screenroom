@@ -7,6 +7,8 @@ set -uo pipefail
 APK="$1"
 PKG=com.screenroom.parlor
 mkdir -p shots
+# (every adb call has a time limit: if the emulated phone stops answering, the test ends instead of waiting forever)
+adb() { timeout 90 command adb "$@"; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 adb install -r -g "$APK" || exit 1
@@ -31,8 +33,8 @@ adb push "$M/." /sdcard/Music/ >/dev/null
 
 shot() { sleep "$2"; adb exec-out screencap -p > "shots/parlor-android-$1.png"; }
 # (the script goes in base64, so no shell on the way mangles its quotes)
-run() { adb shell am force-stop $PKG; adb shell am start -n $PKG/.MainActivity --es script64 "$(printf '%s' "$1" | base64 -w0)" >/dev/null; }
-open() { adb shell am force-stop $PKG; adb shell am start -n $PKG/.MainActivity >/dev/null; }
+run() { adb shell am force-stop $PKG; adb shell am start -n $PKG/com.screenroom.phone.MainActivity --es script64 "$(printf '%s' "$1" | base64 -w0)" >/dev/null; }
+open() { adb shell am force-stop $PKG; adb shell am start -n $PKG/com.screenroom.phone.MainActivity >/dev/null; }
 adb logcat -c
 
 open; shot home 25

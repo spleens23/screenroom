@@ -7,6 +7,8 @@ set -uo pipefail
 APK="$1"
 PKG=com.screenroom.phone
 mkdir -p shots
+# (every adb call has a time limit: if the emulated phone stops answering, the test ends instead of waiting forever)
+adb() { timeout 90 command adb "$@"; }
 
 adb install -r -g "$APK" || exit 1
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
@@ -25,16 +27,16 @@ adb shell mkdir -p /sdcard/Movies
 adb push "$V/." /sdcard/Movies/ >/dev/null
 
 shot() { sleep "$2"; adb exec-out screencap -p > "shots/screenroom-android-$1.png"; }
-run() { adb shell am force-stop $PKG; adb shell am start -n $PKG/.MainActivity --es script64 "$(printf '%s' "$1" | base64 -w0)" >/dev/null; }
+run() { adb shell am force-stop $PKG; adb shell am start -n $PKG/com.screenroom.phone.MainActivity --es script64 "$(printf '%s' "$1" | base64 -w0)" >/dev/null; }
 adb logcat -c
 
-adb shell am start -n $PKG/.MainActivity >/dev/null; shot home 30
+adb shell am start -n $PKG/com.screenroom.phone.MainActivity >/dev/null; shot home 30
 run "api.state().then(s => console.error('library: ' + JSON.stringify(s.library.map(i => [i.title, i.tv ? i.tv.series + ' ' + i.tv.season + 'x' + i.tv.episode : '', Math.round(i.duration), !!i.art])))).catch(e => console.error('library: failed ' + e))"; shot library 14
 # a film plays, then is closed after a while: the page is told where it stopped
 run "api.state().then(s => { const f = s.library.find(i => i.title === 'Dolby Night') || s.library[0]; return api.play({ id: f.id }); }).then(r => console.error('play: ' + JSON.stringify(r))).catch(e => console.error('play: failed ' + e))"; shot playing 16
 adb shell input tap 500 300; sleep 1; adb exec-out screencap -p > shots/screenroom-android-controls.png
 adb shell input keyevent KEYCODE_BACK; sleep 3
-adb shell am start -n $PKG/.MainActivity --es script64 "$(printf '%s' "setTimeout(() => api.state().then(s => console.error('progress: ' + JSON.stringify(s.progress))), 500)" | base64 -w0)" >/dev/null; sleep 10
+adb shell am start -n $PKG/com.screenroom.phone.MainActivity --es script64 "$(printf '%s' "setTimeout(() => api.state().then(s => console.error('progress: ' + JSON.stringify(s.progress))), 500)" | base64 -w0)" >/dev/null; sleep 10
 # a film added: it shows the next time Screenroom opens
 ffmpeg -v error -y -f lavfi -i "color=c=purple:s=640x360:r=24" -f lavfi -i "sine=frequency=500:sample_rate=48000" -t 30 -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata title="New Arrival" "$V/New Arrival.mp4"
 adb push "$V/New Arrival.mp4" /sdcard/Movies/ >/dev/null
