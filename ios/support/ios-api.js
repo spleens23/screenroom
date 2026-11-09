@@ -434,6 +434,8 @@
       }
       case 'files-changed':
         // something new arrived (Files app, Finder, AirDrop, an import): look again
+        // (once the page has its settings: this can come as the app opens, before it's ready)
+        await boot();
         await Promise.all([scanFilms(), scanMusic()]);
         emit('library-updated', await snapshot());
         return;
