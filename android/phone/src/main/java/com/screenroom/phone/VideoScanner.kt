@@ -172,7 +172,12 @@ object VideoScanner {
         return f.parentFile?.listFiles()?.filter { val l = it.name.lowercase(); l.startsWith(base) && it.extension.lowercase() in setOf("srt", "vtt", "ass", "ssa") } ?: emptyList()
     }
 
+    // (Android's emulator stops dead while it takes frames out of films; a real phone doesn't, so only the emulator,
+    // which the automated check runs in, goes without them: its films show their own covers)
+    private val emulator = android.os.Build.HARDWARE in setOf("ranchu", "goldfish") || android.os.Build.FINGERPRINT.contains("generic")
+
     private fun grabFrame(path: String, durUs: Long, out: File): String? {
+        if (emulator) return null
         val r = MediaMetadataRetriever()
         return try {
             r.setDataSource(path)
