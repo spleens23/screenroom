@@ -44,7 +44,13 @@
     }
     return el;
   }
-  const fileUrl = (p) => p ? (window.S_FILE_BASE || (window.S_IOS ? 'srfile://f' : 'file://')) + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
+  // (a Windows path, C:\Users\…, becomes file:///C:/Users/…)
+  const fileUrl = (p) => {
+    if (!p) return '';
+    const win = /^[A-Za-z]:[\\/]/.test(p);
+    const q = win ? '/' + p.replace(/\\/g, '/') : p;
+    return (window.S_FILE_BASE || (window.S_IOS ? 'srfile://f' : 'file://')) + encodeURI(q).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  };
   // The iPad app keeps films and music in its own Documents folder ("On My iPad › Screenroom" in the Files app).
   const isIOS = () => !!(window.S_IOS || (typeof S !== 'undefined' && S && S.platform === 'ios'));
   // the same app runs on iPad and iPhone: name the one in your hand

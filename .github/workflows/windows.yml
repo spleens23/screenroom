@@ -89,7 +89,7 @@ jobs:
           "$FF" -v error -y -f lavfi -i "sine=frequency=300:sample_rate=48000" -t 21 -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:a eac3 -b:a 384k \
             -metadata title="Alpha" -metadata artist="Twin Band" -metadata album="Twin Album (Dolby Atmos)" -metadata track=1 -f mp4 "$M/Twin Band/Twin Album (Dolby Atmos)/01 Alpha.m4a"
           mkdir -p shots
-          export SCREENROOM_TEST_LOG="$PWD/shots/parlor-windows-log.txt" SCREENROOM_TEST_SHOTS="$PWD/shots" SCREENROOM_TEST_SECONDS=75 SCREENROOM_TEST_DELAY=20 SCREENROOM_TEST_EVERY=12
+          export SCREENROOM_TEST_AO=null SCREENROOM_TEST_LOG="$PWD/shots/parlor-windows-log.txt" SCREENROOM_TEST_SHOTS="$PWD/shots" SCREENROOM_TEST_SECONDS=75 SCREENROOM_TEST_DELAY=20 SCREENROOM_TEST_EVERY=12
           export SCREENROOM_TEST_SCRIPT="(async () => {
             const log = (m) => console.log(m);
             let p = await api.parlorState();
@@ -108,6 +108,7 @@ jobs:
           })().catch((e) => console.log('test failed: ' + e))"
           timeout 120 "$APP" || true
           echo "--- what the page logged:"; cat shots/parlor-windows-log.txt || true
+          echo "--- the music player's log:"; tail -25 "$TEMP/screenroom-music.log" 2>/dev/null || tail -25 /tmp/screenroom-music.log 2>/dev/null || true
 
       - name: Share the screenshots
         if: always()
