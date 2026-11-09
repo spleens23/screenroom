@@ -50,20 +50,34 @@ final class Scanner {
     /// covers saved earlier went missing until everything had been read again.)
     private func readCache(_ name: String) -> [String: [String: Any]] {
         guard let raw = st.readJson(name) as? [String: [String: Any]] else { return [:] }
-        let root = st.docs.deletingLastPathComponent().path // the app's folder: …/Application/<id>
-        guard let any = raw.keys.first, let r = any.range(of: "/Documents/") else { return raw }
-        let oldRoot = String(any[..<r.lowerBound])
-        if oldRoot == root { return raw }
+        // On a real iPhone the app's folder is spelled two ways, /var/mobile/… and /private/var/… (one links to the
+        // other). Files are found under one spelling and the app's folder is named with the other, so a cache saved
+        // under one never matched and every file was read again on each open. Everything is compared as /var/….
+        let root = Scanner.pathKey(st.docs.deletingLastPathComponent().path) // the app's folder: …/Application/<id>
+        var oldRoot = root
+        if let any = raw.keys.first.map({ Scanner.pathKey($0) }), let r = any.range(of: "/Documents/") { oldRoot = String(any[..<r.lowerBound]) }
         func move(_ v: Any) -> Any {
-            if let str = v as? String, str.hasPrefix(oldRoot + "/") { return root + str.dropFirst(oldRoot.count) }
+            if let str = v as? String {
+                let c = Scanner.pathKey(str)
+                if c.hasPrefix(oldRoot + "/") { return oldRoot == root ? str : root + c.dropFirst(oldRoot.count) }
+                return str
+            }
             if let d = v as? [String: Any] { return d.mapValues(move) }
             if let a = v as? [Any] { return a.map(move) }
             return v
         }
         var out: [String: [String: Any]] = [:]
-        for (k, e) in raw { out[(move(k) as? String) ?? k] = e.mapValues(move) }
+        for (k, e) in raw {
+            let c = Scanner.pathKey(k)
+            let nk = c.hasPrefix(oldRoot + "/") ? root + c.dropFirst(oldRoot.count) : c
+            out[nk] = oldRoot == root ? e : e.mapValues(move)
+        }
         return out
     }
+
+    /// One spelling of a path for looking things up in a cache (/private/var/… → /var/…).
+    static func pathKey(_ p: String) -> String { p.hasPrefix("/private/var/") ? String(p.dropFirst("/private".count)) : p }
+    private func key(_ u: URL) -> String { Scanner.pathKey(u.path) }
 
     /// True when the music folder isn't how the last scan left it.
     func musicChanged() -> Bool {
@@ -107,15 +121,16 @@ final class Scanner {
         let cache = readCache(videoCacheName)
         let list = files(withExtensions: videoExtensions)
         if cacheOnly || videoBusy {
-            return list.compactMap { cache[$0.path] }
+            return list.compactMap { cache[self.key($0)] }
         }
         videoBusy = true
         defer { videoBusy = false }
+        let time = BackgroundTime(); time.begin(); defer { time.end() }
         var next: [String: [String: Any]] = [:]
         // only the films that are new or changed are read (Settings › Rescan reads them all); the progress shown
         // counts just those, so an unchanged library shows nothing
         let fresh = { (url: URL) -> Bool in
-            guard !deep, let hit = cache[url.path] else { return false }
+            guard !deep, let hit = cache[self.key(url)] else { return false }
             return self.unchanged(hit, self.stat(url)) && self.artOK(hit)
         }
         let toRead = list.filter { !fresh($0) }
@@ -123,7 +138,7 @@ final class Scanner {
         var done = 0
         for url in list {
             let s = stat(url)
-            if !reading.contains(url.path), let hit = cache[url.path] {
+            if !reading.contains(url.path), let hit = cache[key(url)] {
                 next[url.path] = hit
                 continue
             }
@@ -132,6 +147,11 @@ final class Scanner {
                 : await probeWithFF(url, mtime: s.mtime, size: s.size)
             done += 1
             if done % 3 == 0 || done == toRead.count { progress(done, toRead.count) }
+            if done % 10 == 0 { // (saved as it goes, as with songs)
+                var partial = cache
+                for (k, v) in next { partial[Scanner.pathKey(k)] = v }
+                try? st.writeJson(videoCacheName, partial)
+            }
         }
         try? st.writeJson(videoCacheName, next)
         try? st.writeJson("scan-video-sig", ["sig": videoSignature()])
@@ -363,11 +383,16 @@ final class Scanner {
         let busy = audioBusy && Date().timeIntervalSince(audioStarted) < 240
         if cacheOnly || busy {
             let old = readCache(audioCacheName)
-            return list.compactMap { old[$0.path] }.filter { $0["notSong"] == nil }
+            return list.compactMap { old[self.key($0)] }.filter { $0["notSong"] == nil }
         }
         audioBusy = true
         audioStarted = Date()
         let began = Date()
+        // (a long first read goes on for a while if Parlor is put away, and what's been read so far is saved
+        // every few songs, so a scan cut short starts where it stopped next time rather than from the beginning)
+        let time = BackgroundTime(); time.begin(); defer { time.end() }
+        let saved = readCache(audioCacheName)
+        var savedAt = 0
         var skipped: [[String: Any]] = [] // files that aren't songs, or couldn't be read, for Settings
         var probed = 0
         defer { audioBusy = false }
@@ -380,7 +405,7 @@ final class Scanner {
         // a file already read and unchanged isn't opened again (songs read before Parlor noted channels are read
         // once more, so surround ones are known; files that aren't songs are remembered as such)
         let fresh = { (url: URL) -> [String: Any]? in
-            guard let hit = cache[url.path], self.unchanged(hit, self.stat(url)) else { return nil }
+            guard let hit = cache[self.key(url)], self.unchanged(hit, self.stat(url)) else { return nil }
             if let why = hit["notSong"] as? String { return why == "timeout" ? nil : hit }
             return hit["channels"] != nil ? hit : nil
         }
@@ -389,6 +414,12 @@ final class Scanner {
         let motionCache = (st.readJson("motion-cache") as? [String: [String: Any]]) ?? [:]
         var motionNext: [String: [String: Any]] = [:]
         for url in list {
+            if probed - savedAt >= 15 {
+                savedAt = probed
+                var partial = saved
+                for (k, v) in next { partial[Scanner.pathKey(k)] = v }
+                try? st.writeJson(audioCacheName, partial)
+            }
             let s = stat(url)
             var entry: [String: Any]
             if let hit = hits[url.path] {
@@ -700,5 +731,22 @@ func withTimeout<T>(_ seconds: Double, fallback: T, _ op: @escaping () async -> 
         }
         Task.detached(priority: .utility) { finish(await op()) }
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { finish(fallback) }
+    }
+}
+
+/// Asks iOS for a few more minutes when the app is put away in the middle of reading the library, so the scan can
+/// finish (or at least save what it has read) instead of being frozen half-way and started again next time.
+final class BackgroundTime: @unchecked Sendable {
+    private var id = UIBackgroundTaskIdentifier.invalid
+    func begin() {
+        DispatchQueue.main.async {
+            self.id = UIApplication.shared.beginBackgroundTask(withName: "Reading the library") { self.endNow() }
+        }
+    }
+    func end() { DispatchQueue.main.async { self.endNow() } }
+    private func endNow() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }
