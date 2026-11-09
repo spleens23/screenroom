@@ -46,11 +46,14 @@ jobs:
           TAG=$(gh release list -R shinchiro/mpv-winbuild-cmake -L 1 --json tagName -q '.[0].tagName')
           gh release download "$TAG" -R shinchiro/mpv-winbuild-cmake -p 'mpv-x86_64-2*.7z' -D /tmp/dl
           "$SZ" x -y -o"$(cygpath -w /tmp/dl/mpv)" "$(cygpath -w "$(ls /tmp/dl/mpv-x86_64-2*.7z | head -1)")" > /dev/null
-          cp /tmp/dl/mpv/mpv.exe vendor/win/bin/
-          [ -f /tmp/dl/mpv/mpv.com ] && cp /tmp/dl/mpv/mpv.com vendor/win/bin/ || true
+          ls -la /tmp/dl/mpv
+          # (mpv with the libraries that come beside it; its docs and installer scripts aren't needed)
+          for f in /tmp/dl/mpv/*; do case "$(basename "$f")" in doc|installer|updater.bat|mpv.com|*.md|*.txt) ;; *) cp -r "$f" vendor/win/bin/ ;; esac; done
           ls -la vendor/win/bin
-          vendor/win/bin/mpv.exe --version | head -2
           vendor/win/bin/ffprobe.exe -version | head -1
+          set +e
+          vendor/win/bin/mpv.exe --version > /tmp/mpvv.txt 2>&1; echo "mpv says ($?):"; head -3 /tmp/mpvv.txt
+          "$(cygpath -u "$(cmd //c where cmd)")" //c "vendor\\win\\bin\\mpv.exe --version" | head -2 || true
 
       - name: Build the installer
         env:
