@@ -29,6 +29,14 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=400:sample_rate=48000" -t 20 -af 
 song "Round Band/Atmos Room/02 Stereo Song.m4a" "Stereo Song" "Round Band" "Atmos Room" 2 700
 # (untagged songs in Artist › Album folders take their names from the folders)
 ffmpeg -v error -y -f lavfi -i "sine=frequency=500:sample_rate=44100" -t 20 -c:a flac "$M/Folder Band/Folder Album/01 First.flac" 2>/dev/null || { mkdir -p "$M/Folder Band/Folder Album"; ffmpeg -v error -y -f lavfi -i "sine=frequency=500:sample_rate=44100" -t 20 -c:a flac "$M/Folder Band/Folder Album/01 First.flac"; }
+# the same album twice, in stereo and in Dolby Digital Plus 5.1 (tagged "(Dolby Atmos)", songs a second longer): one album, two versions
+song "Twin Band/Twin Album/01 Alpha.m4a" "Alpha" "Twin Band" "Twin Album" 1 300
+song "Twin Band/Twin Album/02 Beta.m4a" "Beta" "Twin Band" "Twin Album" 2 350
+mkdir -p "$M/Twin Band/Twin Album (Dolby Atmos)"
+for n in "1 Alpha 300" "2 Beta 350"; do set -- $n
+  ffmpeg -v error -y -f lavfi -i "sine=frequency=$3:sample_rate=48000" -t 21 -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:a eac3 -b:a 384k \
+    -metadata title="$2" -metadata artist="Twin Band" -metadata album="Twin Album (Dolby Atmos)" -metadata track=$1 -f mp4 "$M/Twin Band/Twin Album (Dolby Atmos)/0$1 $2.m4a"
+done
 adb shell mkdir -p /sdcard/Music
 adb push "$M/." /sdcard/Music/ >/dev/null
 
@@ -42,6 +50,10 @@ open; shot home 25
 run "api.parlorState().then(p => console.error('library: ' + JSON.stringify(p.albums.map(a => [a.title, a.artist, a.tracks.length, !!a.art, !!a.motion])))).then(() => api.parlorScanReport()).then(r => console.error('report: files=' + r.files + ' songs=' + r.songs + ' skipped=' + JSON.stringify(r.skipped))).catch(e => console.error('library: failed ' + e))"; shot library 14
 run "api.parlorState().then(p => { const a = p.albums.find(x => x.title === 'Atmos Room'); console.error('atmos room: ' + JSON.stringify(a ? a.tracks.map(id => [p.tracks[id].title, p.tracks[id].codec, p.tracks[id].channels, p.tracks[id].atmos]) : 'none')); return api.musicPlay({ trackIds: a.tracks, start: 0 }); }).then(() => new Promise(r => setTimeout(r, 4000))).then(() => api.parlorState()).then(p => { console.error('playing: ' + JSON.stringify({ pos: p.player && p.player.pos, paused: p.player && p.player.paused, track: p.player && p.player.track && p.player.track.title })); const b = document.querySelector('.npb-art'); b && b.click(); }).catch(e => console.error('play: failed ' + e))"; shot nowplaying 16
 adb shell dumpsys media_session | grep -E "state=|description=" | head -6 || true
+
+# the twin album: shown once, spatial first, then switched to stereo (and the choice kept)
+run "api.parlorState().then(p => { const t = p.albums.filter(x => /twin/i.test(x.title)); console.error('twin: ' + JSON.stringify(t.map(a => [a.title, a.version, a.tracks.map(id => p.tracks[id].codec + '/' + p.tracks[id].channels)]))); const a = t[0]; return a && api.parlorSetVersion(a.key, 'stereo'); }).then(r => { const a = r.state.albums.find(x => /twin/i.test(x.title)); console.error('twin stereo: ' + JSON.stringify([a.version, a.tracks.map(id => r.state.tracks[id].codec + '/' + r.state.tracks[id].channels)])); document.querySelector('.pcard') && [...document.querySelectorAll('.pcard')].find(c => /Twin/.test(c.textContent))?.click(); }).catch(e => console.error('twin: failed ' + e))"; shot twin 16
+run "api.parlorState().then(p => { const a = p.albums.find(x => /twin/i.test(x.title)); console.error('twin kept: ' + a.version); return api.parlorSetVersion(a.key, 'spatial'); }).catch(e => console.error('twin kept: failed ' + e))"; shot twin2 12
 
 # an album added and one taken away: Parlor shows the change the next time it opens
 mkdir -p "$M/New Band/New Album"; song "New Band/New Album/01 New.m4a" "New" "New Band" "New Album" 1 600

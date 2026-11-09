@@ -269,6 +269,7 @@ window.createParlor = function createParlor(ctx) {
           h('button', { class: 'linkish partist', onclick: () => { ctx.closeModal(); go('artist:' + a.artist); } }, a.artist),
           h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless ? 'Lossless' : fmt.codec,
             ids.some((id) => (P.tracks[id] || {}).atmos) ? 'Dolby Atmos' : ids.some((id) => (P.tracks[id] || {}).channels > 2) ? 'Surround' : ''].filter(Boolean).join(' · ')),
+          versionPicker(a),
           h('div', { class: 'btns' },
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
@@ -296,6 +297,22 @@ window.createParlor = function createParlor(ctx) {
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
     if (focusSel) { const f = $('#modal-body').querySelector(focusSel); f && f.focus(); }
+  }
+
+  // An album there in stereo and in spatial audio shows once, with the version to play picked here (kept for the album).
+  function versionPicker(a) {
+    if (!a.version || !api.parlorSetVersion) return null;
+    const sel = h('select', { class: 'pversion-sel', 'aria-label': 'Version', onchange: async () => {
+      const r = await api.parlorSetVersion(a.key, sel.value);
+      if (!r.ok) { ctx.flash(r.error || "Couldn't change the version."); return; }
+      P = r.state;
+      drawAlbum('.pversion-sel');
+      ctx.flash(sel.value === 'stereo' ? `${a.title}: Stereo` : `${a.title}: Spatial Audio`);
+    } },
+      h('option', { value: 'spatial' }, 'Spatial Audio (Dolby Atmos / surround)'),
+      h('option', { value: 'stereo' }, 'Stereo'));
+    sel.value = a.version;
+    return h('label', { class: 'pversion' }, h('span', {}, 'Version'), sel);
   }
 
   // Recommend an album: grown-ups also share it with whoever they send it to; kids can send it to people who can already hear it.

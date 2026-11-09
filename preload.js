@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('api', {
   // Parlor (music)
   parlorState: () => ipcRenderer.invoke('parlor-state'),
   parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),
+  parlorSetVersion: (key, version) => ipcRenderer.invoke('parlor-set-version', key, version),
   parlorAddDir: (dir) => ipcRenderer.invoke('parlor-add-dir', dir || null),
   parlorRemoveDir: (dir) => ipcRenderer.invoke('parlor-remove-dir', dir),
   parlorShare: (albumKey, pid, on) => ipcRenderer.invoke('parlor-share', albumKey, pid, on),

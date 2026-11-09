@@ -248,7 +248,8 @@
     const tracks = rawTracks.map(buildTrack);
     const byKey = new Map();
     for (const t of tracks) {
-      const k = albumKeyOf(t.compilation ? 'Various Artists' : t.albumArtist, t.album);
+      // (an album's stereo and spatial releases are one album: "Album (Dolby Atmos)" goes with "Album")
+      const k = albumKeyOf(t.compilation ? 'Various Artists' : t.albumArtist, MediaCore.versionlessTitle(t.album));
       t.albumKey = k;
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k).push(t);
@@ -256,23 +257,17 @@
     const albums = [];
     const byId = {};
     for (const [key, all] of byKey) {
-      const seen = new Map();
-      for (const t of all) {
-        const k = `${t.disc || 1}|${t.track || ''}|${String(t.title || '').toLowerCase()}|${Math.round(t.duration || 0)}`;
-        // (the same song twice, e.g. a stereo copy and an upmixed 5.1 one: the one with more channels is kept, then the newer)
-        const had = seen.get(k);
-        if (!had || (t.channels || 0) > (had.channels || 0) || ((t.channels || 0) === (had.channels || 0) && (t.mtime || 0) > (had.mtime || 0))) seen.set(k, t);
-      }
-      const list = [...seen.values()];
-      list.sort((a, b) => (a.disc - b.disc) || ((a.track || 999) - (b.track || 999)) || a.path.localeCompare(b.path));
+      // one song per place in the album; an album there in stereo and in spatial audio plays the version picked for it
+      const v = MediaCore.albumVersions(all, ((pstore && pstore.versions) || {})[key]);
+      const list = v.tracks;
       const first = list[0];
       const artists = new Set(list.map((t) => t.artist));
       const years = list.map((t) => t.year).filter(Boolean);
       const chosen = (pstore.covers || {})[key];
       const art = chosen || list.map((t) => t.folderArt).find(Boolean) || list.map((t) => t.art).find(Boolean) || null;
-      for (const t of list) byId[t.id] = t;
+      for (const t of v.kept) byId[t.id] = t;
       albums.push({
-        key, title: first.album, artist: first.compilation ? 'Various Artists' : first.albumArtist,
+        key, title: v.versions ? MediaCore.versionlessTitle(first.album) : first.album, versions: v.versions, artist: first.compilation ? 'Various Artists' : first.albumArtist,
         various: first.compilation || artists.size > 2, year: years.length ? Math.min(...years) : null, genre: first.genre,
         art, motion: list.map((t) => t.folderMotion).find(Boolean) || null,
         added: Math.max(...list.map((t) => t.mtime || 0)), tracks: list.map((t) => t.id),
@@ -361,6 +356,8 @@
       albums: albums.map((a) => ({
         key: a.key, title: a.title, artist: a.artist, year: a.year, genre: a.genre, art: a.art, motion: a.motion || null, added: a.added,
         tracks: a.tracks, duration: a.duration, lossless: a.lossless, various: a.various, mine: owned.has(a.key),
+        // there in stereo and in spatial audio: which one plays
+        version: a.versions ? a.versions.current : null,
         audience: canManage() ? audience(a) : [],
       })),
       tracks,
@@ -390,9 +387,11 @@
   function musicStop() { if (player && player.playing) native('musicCmd', 'stop').catch(() => {}); }
 
   // ---- deleting (Settings → Free up space) -----------------------------------------------------------------
+  // (an album there in stereo and in spatial audio: both versions' songs)
+  const everyTrack = (a) => (a.versions ? [...new Set([...a.versions.stereo, ...a.versions.spatial])] : a.tracks);
   function deletableAlbums() {
     return music.albums.map((a) => {
-      const files = a.tracks.map((id) => music.tracks[id]).filter(Boolean);
+      const files = everyTrack(a).map((id) => music.tracks[id]).filter(Boolean);
       return { key: a.key, title: a.title, artist: a.artist, year: a.year, count: files.length, size: files.reduce((n, t) => n + (t.size || 0), 0) };
     });
   }
@@ -742,7 +741,7 @@
         }
       }
       const albums = new Set((what && what.albums) || []);
-      for (const a of music.albums) if (albums.has(a.key)) for (const id of a.tracks) { const t = music.tracks[id]; if (t) files.push(t.path); }
+      for (const a of music.albums) if (albums.has(a.key)) for (const id of everyTrack(a)) { const t = music.tracks[id]; if (t) files.push(t.path); }
       if (player && player.queue && player.queue.some((id) => files.includes((music.tracks[id] || {}).path))) await native('musicCmd', 'stop').catch(() => {});
       const r = files.length ? await native('deleteFiles', files) : { removed: 0, freed: 0 };
       await Promise.all([scanFilms(), scanMusic()]);
@@ -844,6 +843,16 @@
       } catch (e) {
         return ok({ results: [], local, offline: true, error: 'No internet connection: covers can only be looked up online.' });
       }
+    },
+    // An album there in stereo and in spatial audio: which version plays (kept for the album, on this device).
+    parlorSetVersion: async (key, version) => {
+      await boot();
+      pstore.versions = pstore.versions || {};
+      pstore.versions[key] = version === 'stereo' ? 'stereo' : 'spatial';
+      savePar();
+      groupAlbums();
+      emit('parlor-updated', null);
+      return ok({ state: parlorState() });
     },
     parlorCoverSet: async (key, choice) => {
       if (!canManage()) return fail('Kids profiles can\'t change covers.');
