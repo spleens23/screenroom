@@ -1,17 +1,17 @@
-name: Parlor for Android
+name: Parlor and Screenroom for Android phones
 
 on:
   push:
     branches: [main]
-    paths: ['android/parlor/**', 'android/shared/**', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'renderer/**',
-            'ios/support/**', 'ios/scripts/prepare-web.sh', 'ios/scripts/fake-sonos.py', 'lib/media-core.js', '.github/workflows/parlor-android.yml']
+    paths: ['android/phone/**', 'android/shared/**', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'renderer/**',
+            'ios/support/**', 'ios/scripts/prepare-web.sh', 'ios/scripts/fake-sonos.py', 'lib/media-core.js', '.github/workflows/phone-android.yml']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: parlor-android
+  group: phone-android
   cancel-in-progress: true
 
 jobs:
@@ -35,21 +35,22 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Parlor
+      - name: Build Parlor and Screenroom
         working-directory: android
         run: |
           set -o pipefail
-          if ! ./gradlew --no-daemon :parlor:assembleRelease :parlor:assembleDebug 2>&1 | tee build.log; then
+          if ! ./gradlew --no-daemon :phone:assembleRelease :phone:assembleDebug 2>&1 | tee build.log; then
             grep -E "^e: |error:|What went wrong|> .*(failed|Could not|not found)|Unresolved reference|Execution failed" build.log \
               | head -60 | while IFS= read -r line; do echo "::error::${line//%/%25}"; done
             exit 1
           fi
           mkdir -p ../out
-          cp parlor/build/outputs/apk/release/parlor-release.apk "../out/Parlor-${{ github.run_number }}.apk"
+          cp phone/build/outputs/apk/parlor/release/phone-parlor-release.apk "../out/Parlor-${{ github.run_number }}.apk"
+          cp phone/build/outputs/apk/screenroom/release/phone-screenroom-release.apk "../out/Screenroom-phone-${{ github.run_number }}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Parlor-android-${{ github.run_number }}
+          name: phone-apps-${{ github.run_number }}
           path: out/*.apk
 
       # Parlor in an Android emulator: the library, playing, albums added and taken away, and a stand-in Sonos speaker
@@ -59,7 +60,7 @@ jobs:
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
 
-      - name: Try Parlor in an emulated phone
+      - name: Try both apps in an emulated phone
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -69,7 +70,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash android/parlor/ci-test.sh android/parlor/build/outputs/apk/debug/parlor-debug.apk 2>&1 | tee shots-log.txt
+          script: bash android/phone/ci-test.sh 2>&1 | tee shots-log.txt
 
       - name: Share the screenshots
         if: always()
@@ -77,17 +78,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view parlor-android-ci-screens >/dev/null 2>&1 || gh release create parlor-android-ci-screens --prerelease --latest=false \
-            --title "Parlor for Android: test screenshots (not for installing)" --notes "From the latest automated check in an emulated phone."
+            --title "Phone apps for Android: test screenshots (not for installing)" --notes "From the latest automated check in an emulated phone."
           [ -f shots-log.txt ] && mkdir -p shots && cp shots-log.txt shots/parlor-android-run.txt
           for f in shots/*; do [ -s "$f" ] && gh release upload parlor-android-ci-screens "$f" --clobber || echo "couldn't upload $f"; done
 
       - name: Publish a release you can download
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: parlor-android-${{ github.run_number }}
-          name: Parlor for Android (build ${{ github.run_number }})
+          tag_name: phone-android-${{ github.run_number }}
+          name: Parlor and Screenroom for Android phones (build ${{ github.run_number }})
           body: |
-            Parlor for Android phones. Download the APK on your phone, open it, and allow installing it when Android asks.
-            The first time Parlor opens, allow it to manage all files: it plays the music in your phone's Music folder where it is.
+            Parlor-<number>.apk is Parlor (music); Screenroom-phone-<number>.apk is Screenroom (films) for phones.
+            Download one on your phone, open it, and allow installing it when Android asks. The first time each app
+            opens, allow it to manage all files: Parlor plays the music in your phone's Music folder where it is,
+            Screenroom the films in its Movies folder.
           files: out/*.apk
           make_latest: false

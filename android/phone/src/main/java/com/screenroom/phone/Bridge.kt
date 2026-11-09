@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.content.Intent
 import android.net.Uri
@@ -19,13 +19,15 @@ import java.net.URL
  * they happen.
  */
 class Bridge(private val act: MainActivity) {
+    companion object { @Volatile var current: Bridge? = null }
+    init { current = this }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val importer = Importer(act)
 
     /** The page's side: window.SRAndroid. */
     val js = JS()
     inner class JS {
-        @JavascriptInterface fun kind(): String = "parlor"
+        @JavascriptInterface fun kind(): String = Storage.kind
         @JavascriptInterface fun log(line: String) = pageLog(line)
         @JavascriptInterface fun post(message: String) {
             val m = (try { parseJson(message) } catch (_: Exception) { null }).asMap() ?: return
@@ -52,9 +54,10 @@ class Bridge(private val act: MainActivity) {
         } catch (_: Exception) {}
     }
 
-    private fun reply(id: Int, value: Any?) = run("window.__iosReply($id, ${toJson(toJson(value))})")
+    private fun reply(id: Int, value: Any?) = run("window.__iosReply && window.__iosReply($id, ${toJson(toJson(value))})")
 
-    fun emit(name: String, payload: Any?) = run("window.__iosEvent(${toJson(name)}, ${toJson(toJson(payload))})")
+    // (an event before the page is ready, as the app opens, is dropped: the page asks for everything as it starts)
+    fun emit(name: String, payload: Any?) = run("window.__iosEvent && window.__iosEvent(${toJson(name)}, ${toJson(toJson(payload))})")
 
     private fun run(js: String) { act.runOnUiThread { act.web.evaluateJavascript(js, null) } }
 
@@ -65,18 +68,25 @@ class Bridge(private val act: MainActivity) {
     private suspend fun handle(m: String, a: List<Any?>): Any? {
         val st = Storage
         return when (m) {
-            "boot" -> mapOf("docs" to st.docs.path, "films" to File(st.docs, "Films").path, "music" to st.music.path, "data" to st.data.path,
+            "boot" -> mapOf("docs" to st.docs.path, "films" to st.films.path, "music" to st.music.path, "data" to st.data.path,
                 "art" to st.art.path, "avatars" to st.avatars.path, "device" to "Android")
             "exists" -> arg<String>(a, 0)?.let { File(it).exists() } ?: false
             "readJson" -> arg<String>(a, 0)?.let { io { st.readJson(it) } }
             "writeJson" -> { val n = arg<String>(a, 0) ?: return false; io { st.writeJson(n, a.getOrNull(1)) }; true }
-            "scanVideos", "videosChanged" -> if (m == "scanVideos") emptyList<Any>() else false
+            "scanVideos" -> {
+                if (st.isParlor) return emptyList<Any>() // (Parlor is music only)
+                val o = arg<Map<String, Any?>>(a, 0)
+                if (!act.hasFiles() && o?.get("cacheOnly") != true) emit("notice", "Screenroom can't see your films yet: allow it to manage all files (Settings › Apps › Screenroom)")
+                io { VideoScanner.scan(o?.get("cacheOnly") == true, o?.get("deep") == true) { done, total -> emit("scan-progress", mapOf("done" to done, "total" to total)) } }
+            }
+            "videosChanged" -> if (st.isParlor) false else io { VideoScanner.changed() }
             "scanAudio" -> {
+                if (!st.isParlor) return emptyList<Any>() // (Screenroom is films only: music is Parlor's)
                 val o = arg<Map<String, Any?>>(a, 0)
                 if (!act.hasFiles() && o?.get("cacheOnly") != true) emit("notice", "Parlor can't see your music yet: allow it to manage all files (Settings › Apps › Parlor)")
                 io { Scanner.scanAudio(o?.get("cacheOnly") == true, o?.get("deep") == true) { done, total -> emit("scan-progress", mapOf("done" to done, "total" to total, "music" to true)) } }
             }
-            "musicChanged" -> io { Scanner.musicChanged() }
+            "musicChanged" -> if (st.isParlor) io { Scanner.musicChanged() } else false
             "sha256" -> sha256Hex(arg<String>(a, 0) ?: "")
             "random" -> randomHex(arg<Number>(a, 0)?.toInt() ?: 8)
             "statusBar" -> { act.setStatusBar(arg<String>(a, 0) == "dark"); null }
@@ -90,7 +100,13 @@ class Bridge(private val act: MainActivity) {
             "linkedFolders" -> st.linked.map { it.path }
             "unlinkFolder" -> { st.unlink(arg<String>(a, 0) ?: ""); true }
             "showInFiles" -> { openFiles(); true }
-            "playVideo" -> throw ParlorError("Parlor plays music only.")
+            "playVideo" -> {
+                if (st.isParlor) throw ParlorError("Parlor plays music only.")
+                MusicPlayer.stop()
+                PlayerActivity.pending = arg<Map<String, Any?>>(a, 0) ?: throw ParlorError("Nothing to play.")
+                act.startActivity(Intent(act, PlayerActivity::class.java))
+                mapOf("ok" to true)
+            }
             "musicPlay" -> {
                 val o = arg<Map<String, Any?>>(a, 0) ?: throw ParlorError("Nothing to play.")
                 @Suppress("UNCHECKED_CAST") val tracks = (o["tracks"] as? List<Map<String, Any?>>) ?: throw ParlorError("Nothing to play.")

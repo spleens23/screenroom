@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.content.Context
 import android.media.AudioDeviceInfo

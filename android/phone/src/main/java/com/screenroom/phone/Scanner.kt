@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

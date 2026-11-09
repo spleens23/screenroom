@@ -5,7 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Parlor for Android phones runs the same screens as Parlor on the iPhone (the desktop app's screens, with the
+// The phone apps for Android, Parlor (music) and Screenroom (films), from the same code (as on the iPhone: one
+// project, two apps). Each runs the same screens as on the iPhone (the desktop app's screens, with the
 // iPhone's window.api in ios/support/ios-api.js); ios/scripts/prepare-web.sh puts them together, with the
 // Android bridge (android/shared/android-shim.js) in front.
 abstract class PrepareWeb : DefaultTask() {
@@ -26,15 +27,32 @@ abstract class PrepareWeb : DefaultTask() {
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
 android {
-    namespace = "com.screenroom.parlor"
+    namespace = "com.screenroom.phone"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.screenroom.parlor"
         minSdk = 29
         targetSdk = 34
         versionCode = buildNumber
         versionName = "0.5.$buildNumber"
+    }
+
+    flavorDimensions += "app"
+    productFlavors {
+        create("parlor") {
+            dimension = "app"
+            applicationId = "com.screenroom.parlor"
+            resValue("string", "app_kind", "parlor")
+            resValue("string", "app_name", "Parlor")
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_parlor"
+        }
+        create("screenroom") {
+            dimension = "app"
+            applicationId = "com.screenroom.phone"
+            resValue("string", "app_kind", "screenroom")
+            resValue("string", "app_name", "Screenroom")
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_screenroom"
+        }
     }
 
     // the same fixed key as the TV app, so each new build installs over the last one (keeping the library)
@@ -86,6 +104,7 @@ androidComponents {
 dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.0")
     implementation("androidx.media3:media3-session:1.5.0")
+    implementation("androidx.media3:media3-ui:1.5.0")
     // FFmpeg audio decoders (Dolby Digital Plus, TrueHD, DTS …) built for Media3, published by the Jellyfin project:
     // most phones (Pixels among them) have no Dolby decoder of their own
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")

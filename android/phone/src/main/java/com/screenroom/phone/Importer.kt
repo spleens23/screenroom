@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.content.ClipData
 import android.content.Intent
@@ -17,8 +17,9 @@ class Importer(private val act: MainActivity) {
 
     /** Songs picked in Android's file picker, copied into Parlor's Music folder. Returns how many came in. */
     suspend fun importFiles(): Int {
+        val films = !Storage.isParlor
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("audio/*", "video/mp4", "video/quicktime"))
+            .putExtra(Intent.EXTRA_MIME_TYPES, if (films) arrayOf("video/*") else arrayOf("audio/*", "video/mp4", "video/quicktime"))
             .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         val r = act.pick(i) ?: return 0
         val uris = uris(r)
@@ -27,9 +28,10 @@ class Importer(private val act: MainActivity) {
             for (u in uris) {
                 val name = nameOf(u) ?: continue
                 val ext = name.substringAfterLast('.', "").lowercase()
-                if (ext !in audioExtensions && ext !in boxExtensions) continue
+                if (films && ext !in VideoScanner.videoExtensions) continue
+                if (!films && ext !in audioExtensions && ext !in boxExtensions) continue
                 // a song brought in again under the same name replaces the one there rather than sitting beside it
-                val same = File(Storage.music, name)
+                val same = File(if (films) Storage.films else Storage.music, name)
                 if (same.exists()) same.delete()
                 try { cr.openInputStream(u)?.use { inp -> same.outputStream().use { inp.copyTo(it) } }; n++ } catch (_: Exception) { same.delete() }
             }

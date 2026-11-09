@@ -8,4 +8,7 @@
         <item name="android:colorAccent">#F6D58E</item>
         <item name="android:windowNoTitle">true</item>
     </style>
+    <style name="Theme.Parlor.Player" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

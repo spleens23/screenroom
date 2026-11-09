@@ -82,6 +82,9 @@ html body:not(#_) #npfull .npf-qcard .qrow b { font-weight: 600; font-variant-nu
 /* Play On: this device or a Sonos room */
 html body:not(#_) #npfull .npf-outs { max-height: calc(100% - 40px); overflow-y: auto; }
 html body:not(#_) #npfull .npf-outs .qhead .ico svg { width: 22px; height: 22px; }
+/* (the speaker is drawn in outline) */
+html body:not(#_) #npfull .npf-outs .qhead svg, html body:not(#_) #npfull .npt[data-b="output"] svg { fill: none; stroke: currentColor; }
+html body:not(#_) #npfull .npf-outs .qhead svg circle[r="1"], html body:not(#_) #npfull .npt[data-b="output"] svg circle[r="1"] { fill: currentColor; }
 html body:not(#_) #npfull .outrow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 4px; border: 0; border-top: 1px solid rgba(255,255,255,.1);
   background: transparent; color: #fff; text-align: left; font: inherit; box-shadow: none; border-radius: 0; }
 html body:not(#_) #npfull .outrow:active { background: rgba(255,255,255,.06); }

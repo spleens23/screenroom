@@ -764,7 +764,7 @@ window.createParlor = function createParlor(ctx) {
   // ---- where it plays: this device or a Sonos room -------------------------------------------------------------
   // The song carries on from where it was; on a Sonos speaker it's the file itself that plays (a Dolby Atmos song
   // stays Dolby Atmos on the speakers that play it).
-  const deviceName = /iPad/.test(navigator.userAgent) ? 'This iPad' : /iPhone/.test(navigator.userAgent) ? 'This iPhone' : 'This device';
+  const deviceName = /iPad/.test(navigator.userAgent) ? 'This iPad' : /iPhone/.test(navigator.userAgent) ? 'This iPhone' : window.S_ANDROID ? 'This phone' : 'This device';
   let outRooms = null;
   async function showOutputs() {
     const using = (P && P.player && P.player.output && P.player.output.id) || '';

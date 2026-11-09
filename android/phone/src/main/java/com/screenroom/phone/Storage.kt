@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.content.Context
 import android.os.Environment
@@ -12,8 +12,12 @@ import java.io.File
  *  - data: Parlor's small JSON files, cover art and profile pictures.
  */
 object Storage {
+    /** Which app this is: "parlor" (music) or "screenroom" (films). The same code builds both. */
+    var kind = "parlor"; private set
+    val isParlor get() = kind == "parlor"
     lateinit var docs: File; private set
     lateinit var music: File; private set
+    lateinit var films: File; private set
     lateinit var data: File; private set
     lateinit var art: File; private set
     lateinit var avatars: File; private set
@@ -22,33 +26,36 @@ object Storage {
 
     fun prepare(ctx: Context) {
         if (::docs.isInitialized) return
+        kind = ctx.getString(R.string.app_kind)
         docs = ctx.getExternalFilesDir(null) ?: File(ctx.filesDir, "Documents")
         music = File(docs, "Music")
-        data = File(ctx.filesDir, "Parlor")
+        films = File(docs, "Films")
+        data = File(ctx.filesDir, if (isParlor) "Parlor" else "Screenroom")
         art = File(data, "art")
         avatars = File(data, "avatars")
-        for (d in listOf(music, data, art, avatars)) d.mkdirs()
+        for (d in listOf(if (isParlor) music else films, data, art, avatars)) d.mkdirs()
         loadLinked()
     }
 
     // ---- music folders read where they are -------------------------------------------------------------------
     val linked: List<File> get() = synchronized(lock) { linkedNow }
 
-    /** The phone's own Music folder (shared storage). */
-    val phoneMusic: File get() = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+    /** The phone's own Music folder (Parlor) or Movies folder (Screenroom), in its shared storage. */
+    val phoneFolder: File get() = Environment.getExternalStoragePublicDirectory(if (isParlor) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES)
 
     private fun loadLinked() {
         val saved = readJson("linked-folders").asList()?.mapNotNull { it as? String }
         val list = if (saved == null) {
-            // the first time: the phone's Music folder is Parlor's (songs put there show up by themselves)
-            listOf(phoneMusic.absolutePath).also { writeJson("linked-folders", it) }
+            // the first time: the phone's Music folder is Parlor's, its Movies folder Screenroom's (what's put there
+            // shows up by itself)
+            listOf(phoneFolder.absolutePath).also { writeJson("linked-folders", it) }
         } else saved
         synchronized(lock) { linkedNow = list.map(::File) }
     }
 
     /** Keep a folder (picked in the system's folder picker). Returns its path. */
     fun link(dir: File): String {
-        if (!dir.isDirectory) throw ParlorError("Parlor can't open that folder. Is it allowed to use all files (Settings › Apps › Parlor › Permissions)?")
+        if (!dir.isDirectory) throw ParlorError("${if (isParlor) "Parlor" else "Screenroom"} can't open that folder. Is it allowed to use all files (Settings › Apps › Parlor › Permissions)?")
         if (isInside(dir.path + "/x", docs)) throw ParlorError("That's Parlor's own folder; it's read already.")
         synchronized(lock) {
             if (linkedNow.none { canonical(it) == canonical(dir) }) linkedNow = linkedNow + dir
@@ -108,11 +115,16 @@ object Storage {
             if (!(isMine(p) || isInside(p, avatars))) continue
             val f = File(p)
             val size = f.length()
-            if (f.isFile && f.delete()) { removed++; freed += size; f.parentFile?.let { dirs.add(it) } }
+            if (f.isFile && f.delete()) {
+                removed++; freed += size; f.parentFile?.let { dirs.add(it) }
+                // subtitles next to a film: Film.srt, Film.en.srt …
+                val base = f.nameWithoutExtension
+                f.parentFile?.listFiles()?.filter { it.name.startsWith("$base.") && it.extension.lowercase() in setOf("srt", "vtt", "ass", "ssa", "sub", "idx") }?.forEach { it.delete() }
+            }
         }
         for (start in dirs) {
             var d: File? = start
-            while (d != null && isMine(d.path + "/x") && linked.none { canonical(it) == canonical(d!!) } && canonical(d) != canonical(music) && canonical(d) != canonical(docs)) {
+            while (d != null && isMine(d.path + "/x") && linked.none { canonical(it) == canonical(d!!) } && canonical(d) != canonical(music) && canonical(d) != canonical(films) && canonical(d) != canonical(docs)) {
                 val keep = d.list()?.filter { !it.startsWith(".") && it.substringAfterLast('.', "").lowercase() !in setOf("jpg", "jpeg", "png", "webp", "txt", "nfo") } ?: emptyList()
                 if (keep.isNotEmpty()) break
                 d.deleteRecursively()

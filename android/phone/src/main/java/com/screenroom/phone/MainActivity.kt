@@ -1,4 +1,4 @@
-package com.screenroom.parlor
+package com.screenroom.phone
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -29,7 +29,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 
 /**
- * Parlor for Android phones: one full-screen page, the same screens as Parlor on the iPhone. The page's
+ * Parlor and Screenroom for Android phones: one full-screen page, the same screens as on the iPhone. The page's
  * files (its screens from the app, songs and covers from the phone) come from one made-up address
  * (https://appassets.androidplatform.net), answered here.
  */
@@ -94,14 +94,14 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         // the music service (playing with the screen off, the notification and lock screen controls)
-        if (controller == null) controller = MediaController.Builder(this, SessionToken(this, ComponentName(this, MusicService::class.java))).buildAsync()
+        if (controller == null && Storage.isParlor) controller = MediaController.Builder(this, SessionToken(this, ComponentName(this, MusicService::class.java))).buildAsync()
         askForFiles()
     }
 
     override fun onResume() {
         super.onResume()
         // something may have been added to the music folders while Parlor was away
-        Thread { if (hasFiles() && Scanner.musicChanged()) bridge.emit("files-changed", null) }.start()
+        Thread { if (hasFiles() && (if (Storage.isParlor) Scanner.musicChanged() else VideoScanner.changed())) bridge.emit("files-changed", null) }.start()
     }
 
     override fun onDestroy() {
@@ -131,9 +131,11 @@ class MainActivity : Activity() {
         if (hasFiles() || asked) return
         asked = true
         if (Build.VERSION.SDK_INT < 30) { requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 8); return }
+        val (t, m) = if (Storage.isParlor) "Let Parlor see your music" to "Parlor plays the music in your phone's Music folder (and any other folder you choose) right where it is. Android asks you to allow that once: turn on \"Allow access to manage all files\" for Parlor on the next screen, then come back."
+            else "Let Screenroom see your films" to "Screenroom plays the films and shows in your phone's Movies folder right where they are. Android asks you to allow that once: turn on \"Allow access to manage all files\" for Screenroom on the next screen, then come back."
         AlertDialog.Builder(this)
-            .setTitle("Let Parlor see your music")
-            .setMessage("Parlor plays the music in your phone's Music folder (and any other folder you choose) right where it is. Android asks you to allow that once: turn on \"Allow access to manage all files\" for Parlor on the next screen, then come back.")
+            .setTitle(t)
+            .setMessage(m)
             .setPositiveButton("Continue") { _, _ ->
                 try { startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))) }
                 catch (_: Exception) { startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
