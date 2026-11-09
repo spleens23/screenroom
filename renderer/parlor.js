@@ -928,6 +928,33 @@ window.createParlor = function createParlor(ctx) {
         box.append(h('p', { class: 'am-hint' }, `Found on ${ctx.here ? ctx.here() : 'this box'}:`), h('div', { class: 'btns' }, P.suggestions.map((d) =>
           h('button', { class: 'btn secondary', onclick: async (e) => { e.target.textContent = 'Adding…'; const r = await api.parlorAddDir(d); P = r.state; ctx.flash('Music added'); draw(); } }, '+ ' + pretty(d)))));
       }
+      // iPhone / iPad: your own music folder in the Files app, read where it is
+      if (api.parlorLinkFolder) {
+        box.append(h('p', { class: 'am-hint' }, 'Keep your music in a folder of your own in the Files app (Artist › Album › songs)? Pick it here and Parlor reads it where it is: songs you add to it or take out of it show up in Parlor by themselves. Import music… makes a copy instead, which doesn’t follow later changes.'));
+        box.append(h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: async (e) => {
+          const b = e.target; const was = b.textContent; b.textContent = 'Reading your folder…'; b.disabled = true;
+          const r = await api.parlorLinkFolder();
+          b.textContent = was; b.disabled = false;
+          if (r.cancelled) return;
+          if (!r.ok) { ctx.flash(r.error); return; }
+          P = r.state; ctx.flash('Parlor now reads that folder'); draw(); render(); drawBar(true);
+        } }, 'Use a music folder from Files…')));
+        // the copies an earlier Import music… made, now only in the way
+        const own = await api.parlorOwnCopies();
+        if (own && own.count && own.linked) {
+          const gb = (own.bytes / 1e9).toFixed(1);
+          box.append(h('p', { class: 'am-hint' }, `Parlor still has its own copies of ${plural(own.count, 'song')} (${gb} GB) from an earlier Import music…. Songs you take out of your folder stay in Parlor until these copies are gone. Your folder in Files isn’t touched.`));
+          let armed = false;
+          box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
+            const b = e.target;
+            if (!armed) { armed = true; b.textContent = `Tap again to delete ${(own.count === 1 ? '1 copy' : own.count + ' copies')}`; setTimeout(() => { if (armed) { armed = false; b.textContent = 'Delete Parlor’s copies…'; } }, 5000); return; }
+            armed = false; b.textContent = 'Deleting…'; b.disabled = true;
+            const r = await api.parlorDeleteOwnCopies();
+            if (!r.ok) { ctx.flash(r.error); draw(); return; }
+            P = r.state; ctx.flash(`Deleted ${(r.removed === 1 ? '1 copy' : r.removed + ' copies')}`); draw(); render(); drawBar(true);
+          } }, 'Delete Parlor’s copies…')));
+        }
+      }
       box.append(h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: async () => {
           let dir = null;

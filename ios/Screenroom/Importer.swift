@@ -11,6 +11,18 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     private var filesDone: ((Int) -> Void)?
     private var photoDone: ((UIImage?) -> Void)?
     private var motionDone: ((URL?) -> Void)?   // picking an album's moving cover (a video), from Photos or Files
+    private var folderDone: ((URL?) -> Void)?   // picking a music folder Parlor reads where it is
+
+    @MainActor
+    func pickFolder(from host: UIViewController) async -> URL? {
+        await withCheckedContinuation { cont in
+            folderDone = { u in cont.resume(returning: u) }
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
+            picker.allowsMultipleSelection = false
+            picker.delegate = self
+            host.present(picker, animated: true)
+        }
+    }
     private var kind = "any"
 
     @MainActor
@@ -31,6 +43,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     }
 
     func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        if let done = folderDone { folderDone = nil; done(urls.first); return }
         if let done = motionDone {
             motionDone = nil
             DispatchQueue.global(qos: .userInitiated).async {
@@ -46,6 +59,7 @@ final class Importer: NSObject, UIDocumentPickerDelegate, PHPickerViewController
     }
 
     func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) {
+        if let done = folderDone { folderDone = nil; done(nil); return }
         if let done = motionDone { motionDone = nil; done(nil); return }
         filesDone?(0)
         filesDone = nil

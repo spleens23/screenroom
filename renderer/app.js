@@ -50,7 +50,17 @@
   // the same app runs on iPad and iPhone: name the one in your hand
   const device = () => (typeof S !== 'undefined' && S && S.device === 'iPhone' ? 'iPhone' : 'iPad');
   const here = () => (isIOS() ? `this ${device()}` : 'this box');
-  const prettyPath = (p) => (isIOS() && S && S.docsDir && p && p.startsWith(S.docsDir) ? `On My ${device()} › ${APP}${p.slice(S.docsDir.length).replace(/\//g, ' › ')}` : p);
+  const prettyPath = (p) => {
+    if (!isIOS() || !p) return p;
+    const q = String(p).replace(/^\/private\/var\//, '/var/'), docs = S && S.docsDir ? String(S.docsDir).replace(/^\/private\/var\//, '/var/') : '';
+    const crumbs = (rest) => rest.split('/').filter(Boolean).join(' › ');
+    if (docs && (q === docs || q.startsWith(docs + '/'))) return `On My ${device()} › ${APP}${q.length > docs.length ? ' › ' + crumbs(q.slice(docs.length)) : ''}`;
+    // folders from the Files app that Parlor reads where they are
+    let m = q.match(/\/File Provider Storage\/(.*)$/); if (m) return `On My ${device()} › ${crumbs(m[1])}`;
+    m = q.match(/\/Mobile Documents\/com~apple~CloudDocs\/(.*)$/); if (m) return `iCloud Drive › ${crumbs(m[1])}`;
+    m = q.match(/\/Mobile Documents\/[^/]+\/Documents\/(.*)$/); if (m) return `iCloud Drive › … › ${crumbs(m[1])}`;
+    return q.split('/').filter(Boolean).slice(-2).join(' › ');
+  };
   const bg = (p) => (p ? `background-image:url("${fileUrl(p)}")` : '');
   const fmtDur = (s) => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
   const fmtTime = (s) => { s = Math.floor(s); const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;

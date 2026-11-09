@@ -17,13 +17,35 @@ final class Scanner {
     // ---- walking Documents -------------------------------------------------------------------------------
     private func files(withExtensions exts: Set<String>) -> [URL] {
         var out: [URL] = []
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey]
-        guard let e = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
-        for case let url as URL in e {
-            if url.lastPathComponent == ".Trash" { e.skipDescendants(); continue }
+        walk { url in
             if exts.contains(url.pathExtension.lowercased()), !(exts == videoExtensions && isMotionCover(url.lastPathComponent)) { out.append(url) }
         }
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    /// Every file in the app's folder, and (Parlor) in the music folders it reads where they are. A song in iCloud
+    /// Drive that isn't on the iPad yet (a hidden ".Song.flac.icloud" stand-in) is asked to download; it's read on
+    /// the next look once it's here.
+    private func walk(_ each: (URL) -> Void) {
+        let keys: [URLResourceKey] = [.isDirectoryKey]
+        var seen = Set<String>()
+        for root in [st.docs] + (isParlorApp ? st.linked : []) {
+            guard let e = st.fm.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]) else { continue }
+            for case let url as URL in e {
+                let name = url.lastPathComponent
+                if name == ".Trash" { e.skipDescendants(); continue }
+                if name.hasPrefix(".") {
+                    if name.hasSuffix(".icloud"), root != st.docs {
+                        let real = url.deletingLastPathComponent().appendingPathComponent(String(name.dropFirst().dropLast(7)))
+                        try? st.fm.startDownloadingUbiquitousItem(at: real)
+                    }
+                    if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { e.skipDescendants() }
+                    continue
+                }
+                guard seen.insert(Scanner.pathKey(url.path)).inserted else { continue } // (a folder inside another one read)
+                each(url)
+            }
+        }
     }
 
     /// A quick fingerprint of everything in the music folder (names, sizes and dates; nothing is opened), so
@@ -32,14 +54,12 @@ final class Scanner {
         var parts: [String] = []
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
         // (all of Parlor's folder, not just Music: songs dropped in from the Files app can land beside it)
-        if let e = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
-            for case let u as URL in e {
-                let v = try? u.resourceValues(forKeys: Set(keys))
-                if v?.isDirectory == true { continue }
-                let ext = u.pathExtension.lowercased()
-                if !audioExtensions.contains(ext) && !["mp4", "m4v", "mov", "jpg", "jpeg", "png", "webp"].contains(ext) { continue }
-                parts.append("\(st.relativeToDocs(u))|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
-            }
+        walk { u in
+            let ext = u.pathExtension.lowercased()
+            if !audioExtensions.contains(ext) && !["mp4", "m4v", "mov", "jpg", "jpeg", "png", "webp"].contains(ext) { return }
+            let v = try? u.resourceValues(forKeys: Set(keys))
+            if v?.isDirectory == true { return }
+            parts.append("\(st.relativeToDocs(u))|\(v?.fileSize ?? 0)|\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))")
         }
         parts.sort()
         return sha1Hex(parts.joined(separator: "\n"))
@@ -55,7 +75,10 @@ final class Scanner {
         // under one never matched and every file was read again on each open. Everything is compared as /var/….
         let root = Scanner.pathKey(st.docs.deletingLastPathComponent().path) // the app's folder: …/Application/<id>
         var oldRoot = root
-        if let any = raw.keys.first.map({ Scanner.pathKey($0) }), let r = any.range(of: "/Documents/") { oldRoot = String(any[..<r.lowerBound]) }
+        if let saved = st.readJson(name + "-root") as? String { oldRoot = Scanner.pathKey(saved) }
+        else if let any = raw.keys.map({ Scanner.pathKey($0) }).first(where: { k in k.contains("/Data/Application/") && !st.linked.contains { st.isInside(k, $0) } }),
+                let r = any.range(of: "/Documents/") { oldRoot = String(any[..<r.lowerBound]) }
+        // (paths in music folders read where they are, outside the app's folder, aren't moved)
         func move(_ v: Any) -> Any {
             if let str = v as? String {
                 let c = Scanner.pathKey(str)
@@ -73,6 +96,12 @@ final class Scanner {
             out[nk] = oldRoot == root ? e : e.mapValues(move)
         }
         return out
+    }
+
+    /// A scan cache, with the app's folder it was saved in (so it can be moved along when iOS moves the app).
+    private func writeCache(_ name: String, _ value: [String: [String: Any]]) {
+        try? st.writeJson(name, value)
+        try? st.writeJson(name + "-root", st.docs.deletingLastPathComponent().path)
     }
 
     /// One spelling of a path for looking things up in a cache (/private/var/… → /var/…).
@@ -150,10 +179,10 @@ final class Scanner {
             if done % 10 == 0 { // (saved as it goes, as with songs)
                 var partial = cache
                 for (k, v) in next { partial[Scanner.pathKey(k)] = v }
-                try? st.writeJson(videoCacheName, partial)
+                writeCache(videoCacheName, partial)
             }
         }
-        try? st.writeJson(videoCacheName, next)
+        writeCache(videoCacheName, next)
         try? st.writeJson("scan-video-sig", ["sig": videoSignature()])
         return list.compactMap { next[$0.path] }
     }
@@ -418,7 +447,7 @@ final class Scanner {
                 savedAt = probed
                 var partial = saved
                 for (k, v) in next { partial[Scanner.pathKey(k)] = v }
-                try? st.writeJson(audioCacheName, partial)
+                writeCache(audioCacheName, partial)
             }
             let s = stat(url)
             var entry: [String: Any]
@@ -450,7 +479,8 @@ final class Scanner {
                 // in the album's folder, or the one above it (an album with Disc 1 / Disc 2 folders)
                 let here = url.deletingLastPathComponent(), up = here.deletingLastPathComponent()
                 var m = folderMotion(here)
-                if m == nil, up.standardizedFileURL.path != st.music.standardizedFileURL.path, st.isInside(up.path, st.music) { m = folderMotion(up) }
+                let roots = [st.music] + st.linked
+                if m == nil, !roots.contains(where: { up.standardizedFileURL.path == $0.standardizedFileURL.path }), roots.contains(where: { st.isInside(up.path, $0) }) { m = folderMotion(up) }
                 if let p = m {
                     // (checked once per cover: again only when the cover file changes, or on Rescan music)
                     let ps = stat(URL(fileURLWithPath: p))
@@ -489,7 +519,7 @@ final class Scanner {
         for (p, var e) in next where e["art"] == nil {
             if let a = dirArt[(p as NSString).deletingLastPathComponent] { e["art"] = a; next[p] = e }
         }
-        try? st.writeJson(audioCacheName, next)
+        writeCache(audioCacheName, next)
         // videos in the music folder that aren't anyone's moving cover (misnamed, or not beside any songs)
         let used = Set(motionNotes.compactMap { n in (n["path"] as? String).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } })
         if let walk = st.fm.enumerator(at: st.music, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
@@ -702,7 +732,7 @@ final class Scanner {
     }
 
     func listImages(_ dir: String) -> [String] {
-        guard st.isInside(dir + "/x", st.docs), let names = try? st.fm.contentsOfDirectory(atPath: dir) else { return [] }
+        guard st.isMine(dir + "/x"), let names = try? st.fm.contentsOfDirectory(atPath: dir) else { return [] }
         return names.filter { ["jpg", "jpeg", "png", "webp"].contains(($0 as NSString).pathExtension.lowercased()) }.map { (dir as NSString).appendingPathComponent($0) }
     }
 }

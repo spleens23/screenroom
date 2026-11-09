@@ -63,7 +63,9 @@ final class LocalFiles: NSObject, WKURLSchemeHandler {
     private func plan(_ url: URL, range: String?) -> Reply? {
         let path = (url.path as NSString).standardizingPath
         // (the app's folder is also reachable as /private/var/…, a link to /var/…)
-        let homes = [NSHomeDirectory(), "/private" + NSHomeDirectory()].map { ($0 as NSString).standardizingPath }
+        // (and music folders Parlor reads where they are: their covers and moving covers)
+        let roots = [NSHomeDirectory()] + Storage.shared.linked.map(\.path)
+        let homes = roots.flatMap { [$0, "/private" + $0, $0.hasPrefix("/private/") ? String($0.dropFirst(8)) : $0] }.map { ($0 as NSString).standardizingPath }
         guard homes.contains(where: { path.hasPrefix($0 + "/") }),
               let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value else { return nil }
         let mime = UTType(filenameExtension: (path as NSString).pathExtension)?.preferredMIMEType ?? "application/octet-stream"

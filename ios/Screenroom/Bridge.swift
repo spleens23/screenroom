@@ -104,6 +104,22 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return nil
         case "random":
             return randomHex((arg(a, 0) as NSNumber?)?.intValue ?? 8)
+        case "linkMusicFolder":
+            // a folder from the Files app that Parlor reads where it is
+            guard let host, let url = await importer.pickFolder(from: host) else { return nil }
+            return try st.link(url)
+        case "linkPathForTest":
+            // (the automated check: a folder linked without the picker, which a test can't tap through)
+            #if DEBUG
+            return try st.link(URL(fileURLWithPath: arg(a, 0) ?? "", isDirectory: true))
+            #else
+            throw ScreenroomError("Not in this build.")
+            #endif
+        case "linkedFolders":
+            return st.linked.map(\.path)
+        case "unlinkFolder":
+            st.unlink(arg(a, 0) ?? "")
+            return true
         case "showInFiles":
             // the Files app, opened at this app's own folder (On My iPad › Parlor)
             let path = Storage.shared.docs.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? Storage.shared.docs.path
@@ -139,7 +155,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             guard let img = await importer.pickPhoto(from: host) else { return nil }
             if let base = destBase {
                 // a cover for an album: cover.jpg in the album's folder
-                guard st.isInside(base, st.docs) else { throw ScreenroomError("That folder isn't Screenroom's.") }
+                guard st.isMine(base) else { throw ScreenroomError("That folder isn't Screenroom's.") }
                 let dest = URL(fileURLWithPath: base + ".jpg")
                 guard let saved = saveJPEG(img, width: 1200, to: dest, quality: 0.9) else { throw ScreenroomError("Couldn't save the picture.") }
                 return ["path": saved]
@@ -149,7 +165,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return ["name": file, "path": saved]
         case "pickMotion":
             // an album's moving cover: arg 0 is the album's folder, arg 1 "photos" / "files" / "remove"
-            guard let dir: String = arg(a, 0), st.isInside(dir + "/x", st.music) else { throw ScreenroomError("That album isn't in Parlor's Music folder.") }
+            guard let dir: String = arg(a, 0), st.isInside(dir + "/x", st.music) || st.linked.contains(where: { st.isInside(dir + "/x", $0) }) else { throw ScreenroomError("That album isn't in Parlor's Music folder.") }
             let how: String = arg(a, 1) ?? "photos"
             let url = URL(fileURLWithPath: dir)
             if how == "remove" {
@@ -177,7 +193,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return try JSONSerialization.jsonObject(with: data)
         case "download":
             guard let s: String = arg(a, 0), let url = URL(string: s), url.scheme == "https", url.host?.hasSuffix(".mzstatic.com") == true,
-                  let dest: String = arg(a, 1), st.isInside(dest, st.docs) else { throw ScreenroomError("Bad address") }
+                  let dest: String = arg(a, 1), st.isMine(dest) else { throw ScreenroomError("Bad address") }
             let (data, _) = try await URLSession.shared.data(from: url)
             guard UIImage(data: data) != nil else { throw ScreenroomError("That isn't a picture.") }
             try data.write(to: URL(fileURLWithPath: dest), options: .atomic)

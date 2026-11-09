@@ -39,6 +39,64 @@ final class Storage {
         values.isExcludedFromBackup = true
         try? cacheURL.setResourceValues(values)
         installWeb()
+        if isParlorApp { loadLinked() }
+    }
+
+    // ---- music folders that stay where they are ------------------------------------------------------------
+    // A folder picked in the Files app (On My iPad › Music, iCloud Drive …) that Parlor reads where it is rather
+    // than copying in, so songs added to it or taken out of it show up in Parlor as they are. iOS lets the app
+    // back into the folder after a restart through a saved "bookmark".
+    private var linkedNow: [URL] = []
+    private let linkLock = NSLock()
+    var linked: [URL] { linkLock.lock(); defer { linkLock.unlock() }; return linkedNow }
+
+    private func loadLinked() {
+        var out: [URL] = []
+        var marks: [String] = []
+        for b64 in (readJson("linked-folders") as? [String]) ?? [] {
+            guard let d = Data(base64Encoded: b64) else { continue }
+            var stale = false
+            guard let u = try? URL(resolvingBookmarkData: d, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { continue }
+            _ = u.startAccessingSecurityScopedResource() // (kept open while the app runs)
+            if stale, let fresh = try? u.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+                marks.append(fresh.base64EncodedString())
+            } else { marks.append(b64) }
+            out.append(u)
+        }
+        try? writeJson("linked-folders", marks)
+        linkLock.lock(); linkedNow = out; linkLock.unlock()
+    }
+
+    /// Keep a folder picked in the Files app. Returns its path.
+    func link(_ url: URL) throws -> String {
+        guard url.startAccessingSecurityScopedResource() || fm.isReadableFile(atPath: url.path) else { throw ScreenroomError("Parlor wasn't allowed into that folder.") }
+        if isInside(url.path + "/x", docs) { throw ScreenroomError("That's Parlor's own folder; it's read already.") }
+        let mark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        var marks = (readJson("linked-folders") as? [String]) ?? []
+        linkLock.lock()
+        let had = linkedNow.firstIndex { canonical($0) == canonical(url) }
+        if let i = had { linkedNow[i] = url; if i < marks.count { marks[i] = mark.base64EncodedString() } }
+        else { linkedNow.append(url); marks.append(mark.base64EncodedString()) }
+        linkLock.unlock()
+        try writeJson("linked-folders", marks)
+        return url.path
+    }
+
+    func unlink(_ path: String) {
+        var marks = (readJson("linked-folders") as? [String]) ?? []
+        linkLock.lock()
+        if let i = linkedNow.firstIndex(where: { canonical($0) == canonical(URL(fileURLWithPath: path)) }) {
+            linkedNow[i].stopAccessingSecurityScopedResource()
+            linkedNow.remove(at: i)
+            if i < marks.count { marks.remove(at: i) }
+        }
+        linkLock.unlock()
+        try? writeJson("linked-folders", marks)
+    }
+
+    /// Inside Parlor's own folder or one of the folders it reads where they are.
+    func isMine(_ path: String) -> Bool {
+        isInside(path, docs) || linked.contains { isInside(path, $0) }
     }
 
     /// The screens ship inside the app; they're copied next to the data so the web view may show both them and
@@ -104,7 +162,7 @@ final class Storage {
 
     /// One spelling for a path: the app's folder shows up both as /var/… and /private/var/… (a link), and a
     /// file that doesn't exist yet (a new cover.jpg) can't have its links resolved, so its folder's are.
-    private func canonical(_ url: URL) -> String {
+    func canonical(_ url: URL) -> String {
         var u = url.standardizedFileURL
         var tail: [String] = []
         while !fm.fileExists(atPath: u.path), u.path != "/" { tail.insert(u.lastPathComponent, at: 0); u = u.deletingLastPathComponent() }
@@ -120,7 +178,7 @@ final class Storage {
         var freed: Int64 = 0
         var dirs = Set<URL>()
         for p in paths {
-            guard isInside(p, docs) || isInside(p, avatars) else { continue }
+            guard isMine(p) || isInside(p, avatars) else { continue }
             let url = URL(fileURLWithPath: p)
             let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
             if (try? fm.removeItem(at: url)) != nil {
@@ -138,7 +196,7 @@ final class Storage {
         }
         // folders left with nothing worth keeping (only covers or hidden files)
         for var d in dirs {
-            while isInside(d.path, docs), d.standardizedFileURL != films.standardizedFileURL, d.standardizedFileURL != music.standardizedFileURL {
+            while isMine(d.path), !linked.contains(where: { canonical($0) == canonical(d) }), d.standardizedFileURL != films.standardizedFileURL, d.standardizedFileURL != music.standardizedFileURL {
                 let kids = (try? fm.contentsOfDirectory(atPath: d.path)) ?? []
                 let keep = kids.filter { !$0.hasPrefix(".") && !["jpg", "jpeg", "png", "webp", "txt", "nfo"].contains(($0 as NSString).pathExtension.lowercased()) }
                 guard keep.isEmpty else { break }

@@ -311,7 +311,11 @@
   };
   const savePar = () => save('parlor', pstore);
   // Folders are stored relative to Documents ("Music", "Music/Jazz"), since the app's folder moves between installs.
-  const absDir = (rel) => (rel === '' ? env.docs : `${env.docs}/${rel}`);
+  const absDir = (rel) => (rel === '' ? env.docs : rel.startsWith('/') ? rel : `${env.docs}/${rel}`);
+  // music folders from the Files app that Parlor reads where they are (On My iPad › Music …): every grown-up has them
+  let linked = [];
+  const refreshLinked = async () => { try { linked = (await native('linkedFolders')) || []; } catch { linked = []; } };
+  const isLinked = (d) => linked.some((l) => np(l) === np(d));
   const relDir = (abs) => { const a = np(abs), d = np(env.docs); return a === d ? '' : a.startsWith(d + '/') ? a.slice(d.length + 1) : abs; };
   // Every grown-up profile has Screenroom's whole folder on the iPad unless it took it away, so songs added from
   // Files, AirDrop or the import button show up for whoever is using the iPad, wherever in the folder they landed.
@@ -319,8 +323,10 @@
     const p = (pstore.profiles || {})[pid];
     const own = p && Array.isArray(p.dirs) ? p.dirs : [];
     const pr = pget(pid);
-    if ((pr && pr.kids) || (p && p.musicSet)) return own;
-    return own.includes('') ? own : ['', ...own];
+    if (pr && pr.kids) return own;
+    const withLinked = [...own, ...linked.filter((l) => !own.some((d) => np(d) === np(l)))];
+    if (p && p.musicSet) return withLinked;
+    return own.includes('') ? withLinked : ['', ...withLinked];
   };
   const owners = (album) => pall().map((p) => p.id)
     .filter((id) => dirsOf(id).some((d) => album.dirs.some((ad) => np(ad) === np(absDir(d)) || under(ad, absDir(d)))));
@@ -482,6 +488,7 @@
           savePar();
         }
         rawFilms = await native('scanVideos', { cacheOnly: true }).catch(() => []);
+        if (EDITION === 'music') await refreshLinked();
         rawTracks = await native('scanAudio', { cacheOnly: true }).catch(() => []);
         groupAlbums();
         // then a real look, in the background
@@ -758,8 +765,42 @@
       await scanMusic();
       return ok({ state: parlorState() });
     },
+    // a folder from the Files app, read where it is (songs added to it or taken out show up as they are)
+    parlorLinkFolder: async () => {
+      await boot();
+      if (!canManage()) return fail('Kids profiles can\'t add music.');
+      let path;
+      try { path = await native('linkMusicFolder'); } catch (e) { return fail(String((e && e.message) || e)); }
+      if (!path) return { ok: false, cancelled: true };
+      await refreshLinked();
+      await scanMusic();
+      emit('library-updated', await snapshot());
+      return ok({ state: parlorState(), path });
+    },
+    parlorLinkTest: async (path) => { await boot(); await native('linkPathForTest', path); await refreshLinked(); await scanMusic(); return parlorState(); },
+    // the copies Import music… made in Parlor's own folder (once the folder they came from is read where it is,
+    // they're only in the way: songs taken out of that folder stayed in Parlor)
+    parlorOwnCopies: async () => { await boot(); const own = rawTracks.filter((t) => under(t.path, env.docs)); return { count: own.length, bytes: own.reduce((s, t) => s + (t.size || 0), 0), linked: linked.length }; },
+    parlorDeleteOwnCopies: async () => {
+      await boot();
+      if (!canManage()) return fail('Kids profiles can\'t delete music.');
+      if (!linked.length) return fail('Pick your music folder first.');
+      const files = rawTracks.filter((t) => under(t.path, env.docs)).map((t) => t.path);
+      const r = files.length ? await native('deleteFiles', files) : { removed: 0, freed: 0 };
+      await scanMusic();
+      emit('library-updated', await snapshot());
+      return ok({ state: parlorState(), removed: r.removed, freed: r.freed });
+    },
     parlorRemoveDir: async (dir) => {
       if (!canManage()) return fail('Kids profiles can\'t change music folders.');
+      if (isLinked(dir)) {
+        await native('unlinkFolder', dir).catch(() => {});
+        await refreshLinked();
+        const p = pOf(prof().id); p.dirs = p.dirs.filter((d) => np(d) !== np(dir)); savePar();
+        await scanMusic();
+        emit('library-updated', await snapshot());
+        return ok({ state: parlorState() });
+      }
       const p = pOf(prof().id);
       const rel = relDir(dir);
       p.dirs = dirsOf(prof().id).filter((d) => d !== rel);

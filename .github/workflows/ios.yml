@@ -187,6 +187,17 @@ jobs:
           ffmpeg -v error -y -i "$PD/Documents/Music/Late Band/Late Album/01 Late.m4a" -c copy -metadata title="Later" -metadata track=2/2 "$PD/Documents/Music/Late Band/Late Album/02 Later.m4a"
           run "api.parlorRescan().then(() => api.parlorScanReport()).then(r => console.error('rescan: ' + JSON.stringify(r))).then(() => api.parlorState()).then(p => { const a = p.albums.find(x => /Late Album/.test(x.title)); console.error('rescan late album: ' + (a ? a.tracks.length : 'none') + ' songs'); const l = p.albums.find(x => /Loose Atmos/.test(x.title)); console.error('loose atmos: ' + JSON.stringify(l ? l.tracks.map(id => [p.tracks[id].title, p.tracks[id].channels, p.tracks[id].codec, p.tracks[id].playable]) : 'none')); })"; shot rescan 20
           run "api.parlorState().then(p => { const a = p.albums.find(x => /Six Room/.test(x.title)); console.error('surround: ' + JSON.stringify(a ? a.tracks.map(id => [p.tracks[id].title, p.tracks[id].channels, p.tracks[id].codec]) : 'no album')); return a && api.musicPlay({ trackIds: a.tracks, start: 1 }); }).then(() => setTimeout(() => api.parlorState().then(p => console.error('surround playing: ' + JSON.stringify({ pos: p.player && p.player.pos, track: p.player && p.player.track && p.player.track.title, route: p.player && p.player.route }))), 5000))"; shot surround 12
+          # a music folder of the user's own (outside Parlor's folder), read where it is: albums added to it and taken out of it
+          # show up the next time Parlor opens, with no rescan
+          LM="$PD/Library/Linked Music"; mkdir -p "$LM/Linked Band/First Linked"
+          ffmpeg -v error -y -f lavfi -i "sine=frequency=500:sample_rate=44100" -t 20 -c:a aac -metadata title="Linked One" -metadata artist="Linked Band" -metadata album="First Linked" -metadata track=1 "$LM/Linked Band/First Linked/01 Linked One.m4a"
+          run "api.parlorLinkTest('$LM').then(p => console.error('linked: ' + p.albums.filter(a => /Linked/.test(a.title)).map(a => a.title).join(',') + ' dirs=' + p.dirs.length)).catch(e => console.error('linked: failed ' + e))"; shot linked 16
+          mkdir -p "$LM/Linked Band/Second Linked"
+          ffmpeg -v error -y -f lavfi -i "sine=frequency=600:sample_rate=44100" -t 20 -c:a aac -metadata title="Linked Two" -metadata artist="Linked Band" -metadata album="Second Linked" -metadata track=1 "$LM/Linked Band/Second Linked/01 Linked Two.m4a"
+          run "setTimeout(() => api.parlorState().then(p => console.error('linked added: ' + p.albums.filter(a => /Linked/.test(a.title)).map(a => a.title).sort().join(','))), 10000)"; shot linked-added 16
+          rm -rf "$LM/Linked Band/First Linked"
+          run "setTimeout(() => api.parlorState().then(p => console.error('linked removed: ' + p.albums.filter(a => /Linked/.test(a.title)).map(a => a.title).sort().join(','))).then(() => api.parlorScanReport()).then(r => console.error('linked report: files=' + r.files + ' read=' + r.read)), 10000)"; shot linked-removed 16
+          run "document.querySelector('#settings-btn') && document.querySelector('#settings-btn').click()"; shot linked-settings 14
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt
       - name: Share the screenshots
