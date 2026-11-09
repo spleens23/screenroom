@@ -37,6 +37,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
+          # (7-Zip is on the machine but not on Git Bash's path)
+          SZ="/c/Program Files/7-Zip/7z.exe"; [ -x "$SZ" ] || SZ="$(command -v 7z)"
+          7z() { "$SZ" "$@"; }
           mkdir -p vendor/win/bin /tmp/dl
           gh release download -R BtbN/FFmpeg-Builds latest -p 'ffmpeg-master-latest-win64-gpl.zip' -D /tmp/dl
           7z x -y -o/tmp/dl/ff /tmp/dl/ffmpeg-master-latest-win64-gpl.zip > /dev/null
