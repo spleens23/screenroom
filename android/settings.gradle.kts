@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Screenroom"
 include(":app")
+include(":parlor")

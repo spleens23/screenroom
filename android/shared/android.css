@@ -1,0 +1,3 @@
+/* The phone apps on Android: the iPhone screens, in Android's own font. (The status and navigation bars sit
+   outside the page, so nothing is hidden under them.) */
+html, body { font-family: 'Roboto', 'Google Sans', system-ui, sans-serif; }

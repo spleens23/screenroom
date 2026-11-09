@@ -3,17 +3,24 @@
 # of the desktop's. Every script and stylesheet sits next to index.html (renderer/): on a real iPad, files loaded
 # from a folder above the page didn't load, so the page started without its window.api.
 # Run from anywhere; the build workflow runs it before building.
+#
+# The Android apps (Parlor and Screenroom for phones) use the same screens and the same window.api:
+#   prepare-web.sh <out folder> --android
+# puts them in <out folder>, with android-shim.js (which hands the page's calls to the Android app) first.
 set -euo pipefail
 IOS="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$IOS/.." && pwd)"
-OUT="$IOS/Web"
+OUT="${1:-$IOS/Web}"
+ANDROID="${2:-}"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R "$ROOT/renderer" "$OUT/renderer"
 cp "$ROOT/lib/media-core.js" "$IOS/support/ios-api.js" "$IOS/support/ios.css" "$OUT/renderer/"
-python3 - "$OUT/renderer/index.html" <<'PY'
+if [ "$ANDROID" = "--android" ]; then cp "$ROOT/android/shared/android-shim.js" "$ROOT/android/shared/android.css" "$OUT/renderer/"; fi
+python3 - "$OUT/renderer/index.html" "$ANDROID" <<'PY'
 import sys
 p = sys.argv[1]
+android = len(sys.argv) > 2 and sys.argv[2] == '--android'
 s = open(p, encoding='utf-8').read()
 s = s.replace('<meta name="viewport" content="width=device-width, initial-scale=1">',
               '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">')
@@ -28,6 +35,11 @@ s = s.replace('<link rel="stylesheet" href="theme-heirloom.css">',
 s = s.replace('<script src="../lib/media-core.js"></script>',
               '<script src="media-core.js"></script>\n<script src="ios-api.js"></script>')
 assert 'ios-api.js' in s and 'ios.css' in s and '../' not in s.split('<body>')[1], 'index.html changed: update prepare-web.sh'
+if android:
+    # (the Android app's bridge first; its own touches to the look after the iPad's)
+    s = s.replace('<script src="media-core.js"></script>', '<script src="android-shim.js"></script>\n<script src="media-core.js"></script>')
+    s = s.replace('<link rel="stylesheet" href="ios.css">', '<link rel="stylesheet" href="ios.css">\n<link rel="stylesheet" href="android.css">')
+    assert 'android-shim.js' in s and 'android.css' in s
 open(p, 'w', encoding='utf-8').write(s)
 PY
 # Each script runs inside try/catch: a script loaded from a file only reports "Script error." to the page, so

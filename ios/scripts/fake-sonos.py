@@ -11,6 +11,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 1400
 LOG = sys.argv[2] if len(sys.argv) > 2 else "fake-sonos.log"
 ID = "RINCON_TEST0000001400"
+import os
+# (in an Android emulator the speaker is at 10.0.2.2, and the phone's songs are reached through a port that
+# adb forwards: SONOS_HOST is the address the phone uses for the speaker, FETCH_HOST the one the speaker uses
+# for the phone)
+SONOS_HOST = os.environ.get("SONOS_HOST", "127.0.0.1")
+FETCH_HOST = os.environ.get("FETCH_HOST", "")
 lock = threading.RLock()
 log_lock = threading.Lock()
 state = {"queue": [], "track": 0, "playing": False, "started": 0.0, "at": 0.0, "volume": 30, "mute": 0, "mode": "NORMAL"}
@@ -41,6 +47,9 @@ def secs(s):
 
 
 def fetch(title, uri, art):
+    if FETCH_HOST:
+        uri = re.sub(r"^http://[^/:]+", "http://" + FETCH_HOST, uri)
+        art = re.sub(r"^http://[^/:]+", "http://" + FETCH_HOST, art) if art else art
     try:
         with urllib.request.urlopen(urllib.request.Request(uri, headers={"Range": "bytes=0-"}), timeout=20) as r:
             data = r.read()
@@ -100,8 +109,8 @@ class H(BaseHTTPRequestHandler):
             s = state
             if action == "GetZoneGroupState":
                 zgs = ("<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator=\"%s\" ID=\"%s:1\"><ZoneGroupMember UUID=\"%s\" "
-                       "Location=\"http://127.0.0.1:%d/xml/device_description.xml\" ZoneName=\"Test Room\" Invisible=\"0\"/></ZoneGroup></ZoneGroups>"
-                       "<VanishedDevices></VanishedDevices></ZoneGroupState>") % (ID, ID, ID, PORT)
+                       "Location=\"http://%s:%d/xml/device_description.xml\" ZoneName=\"Test Room\" Invisible=\"0\"/></ZoneGroup></ZoneGroups>"
+                       "<VanishedDevices></VanishedDevices></ZoneGroupState>") % (ID, ID, ID, SONOS_HOST, PORT)
                 out = "<ZoneGroupState>%s</ZoneGroupState>" % html.escape(zgs)
             elif action == "RemoveAllTracksFromQueue":
                 s["queue"], s["track"], s["playing"] = [], 0, False

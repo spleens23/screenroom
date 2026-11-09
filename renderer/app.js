@@ -44,7 +44,7 @@
     }
     return el;
   }
-  const fileUrl = (p) => p ? (window.S_IOS ? 'srfile://f' : 'file://') + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
+  const fileUrl = (p) => p ? (window.S_FILE_BASE || (window.S_IOS ? 'srfile://f' : 'file://')) + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F') : '';
   // The iPad app keeps films and music in its own Documents folder ("On My iPad › Screenroom" in the Files app).
   const isIOS = () => !!(window.S_IOS || (typeof S !== 'undefined' && S && S.platform === 'ios'));
   // the same app runs on iPad and iPhone: name the one in your hand
@@ -2402,10 +2402,16 @@
       return true;
     }
     if (query) { query = ''; $('#search').value = ''; render(); return true; }
-    if (mode === 'parlor') { if (!parlorUI.back()) toggleMode(); return true; }
+    if (mode === 'parlor') {
+      if (parlorUI.back()) return true;
+      if (EDITION !== 'all') return false; // (Parlor on its own: nothing left to close, so the phone's Back leaves the app)
+      toggleMode(); return true;
+    }
     if (view !== 'home') { setView('home'); return true; }
     return false;
   }
+  // (a phone's own Back button: the Android apps ask this, and leave the app when it has nothing to close)
+  window.__srBack = () => goBack();
 
   // ---- on-screen keyboard ----------------------------------------------------------------------------
   // TV box: pressing OK on a text box (search, Wi-Fi password, profile name...) opens a keyboard you work with

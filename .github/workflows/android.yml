@@ -40,7 +40,7 @@ jobs:
         working-directory: android
         run: |
           set -o pipefail
-          if ! ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log; then
+          if ! ./gradlew --no-daemon :app:assembleRelease 2>&1 | tee build.log; then
             # Surface the real errors as annotations (readable without downloading logs).
             grep -E "^e: |error:|What went wrong|> .*(failed|Could not|not found)|Unresolved reference|Execution failed" build.log \
               | head -40 | while IFS= read -r line; do echo "::error::${line//%/%25}"; done

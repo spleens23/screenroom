@@ -211,7 +211,8 @@
     const dir = dirOf(r.path);
     const folderAlbum = baseOf(dir);
     const folderArtist = baseOf(dirOf(dir));
-    const insideMusic = (d) => d && under(d, env.music);
+    // (folder names stand in for missing tags in the Music folder and in music folders read where they are)
+    const insideMusic = (d) => d && (under(d, env.music) || linked.some((l) => under(d, l)));
     const artist = tagOf(tags, 'artist', 'album_artist', 'albumartist') || (insideMusic(dirOf(dir)) ? folderArtist : '') || 'Unknown Artist';
     const albumArtist = tagOf(tags, 'album_artist', 'albumartist', 'album artist') || artist;
     const album = tagOf(tags, 'album') || (insideMusic(dir) ? folderAlbum : '') || 'Unknown Album';
