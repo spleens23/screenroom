@@ -54,6 +54,18 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Playing on Sonos speakers: finding them on the Wi-Fi, and handing them the songs. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Parlor looks for Sonos speakers on your Wi-Fi and plays your music on them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_sonos._tcp</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UILaunchScreen</key>

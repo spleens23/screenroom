@@ -144,6 +144,20 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         case "musicCmd":
             MusicPlayer.shared.bridge = self
             return MusicPlayer.shared.command(arg(a, 0) ?? "", a.count > 1 ? a[1] : nil)
+        case "sonosRooms":
+            // the Sonos rooms on the Wi-Fi (Parlor can play on them)
+            let rooms = await Sonos.shared.findRooms()
+            return ["rooms": rooms.map(\.json), "using": MusicPlayer.shared.sonosId ?? ""]
+        case "sonosUse":
+            // "" = back on this phone
+            MusicPlayer.shared.bridge = self
+            let id: String = arg(a, 0) ?? ""
+            if id.isEmpty { MusicPlayer.shared.use(sonos: nil); return MusicPlayer.shared.snapshot() }
+            var room = Sonos.shared.room(id)
+            if room == nil { room = await Sonos.shared.findRooms().first { $0.id == id } }
+            guard let room else { throw ScreenroomError("That speaker isn't on the Wi-Fi now.") }
+            MusicPlayer.shared.use(sonos: room)
+            return MusicPlayer.shared.snapshot()
         case "importFiles":
             guard let host else { return ["count": 0] }
             let n = await importer.pick(kind: arg(a, 0) ?? "any", from: host)

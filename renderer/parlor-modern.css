@@ -78,6 +78,23 @@ html body:not(#_) #npfull .npf-qcard p { margin: 0 0 16px; color: rgba(255,255,2
 html body:not(#_) #npfull .npf-qcard .qrow { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(255,255,255,.1); font-size: 15px; }
 html body:not(#_) #npfull .npf-qcard .qrow span { color: rgba(255,255,255,.6); }
 html body:not(#_) #npfull .npf-qcard .qrow b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Play On: this device or a Sonos room */
+html body:not(#_) #npfull .npf-outs { max-height: calc(100% - 40px); overflow-y: auto; }
+html body:not(#_) #npfull .npf-outs .qhead .ico svg { width: 22px; height: 22px; }
+html body:not(#_) #npfull .outrow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 4px; border: 0; border-top: 1px solid rgba(255,255,255,.1);
+  background: transparent; color: #fff; text-align: left; font: inherit; box-shadow: none; border-radius: 0; }
+html body:not(#_) #npfull .outrow:active { background: rgba(255,255,255,.06); }
+html body:not(#_) #npfull .outrow .out-n { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+html body:not(#_) #npfull .outrow .out-n b { font-size: 16px; font-weight: 600; }
+html body:not(#_) #npfull .outrow .out-n small { font-size: 13px; color: rgba(255,255,255,.55); }
+html body:not(#_) #npfull .outrow .out-badge { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 4px 8px; border-radius: 8px;
+  color: #f6d58e; background: rgba(246,213,142,.16); white-space: nowrap; }
+html body:not(#_) #npfull .outrow .out-tick { width: 18px; text-align: right; font-weight: 700; color: #f6d58e; }
+html body:not(#_) #npfull .npf-outs .out-note { margin: 14px 0 0; font-size: 14px; }
+body.navmode #npfull .outrow:focus { outline: 3px solid #fff; outline-offset: -3px; }
+html body:not(#_) #npfull .npf-where { margin-top: 6px; text-align: center; font-size: 13px; font-weight: 600; letter-spacing: .3px; color: #f6d58e; }
+html body:not(#_) #npfull .npf-where[hidden] { display: none; }
 html body:not(#_) #npfull .npf-qcard .btn { width: 100%; margin-top: 16px; justify-content: center; padding: 13px; border-radius: 14px; border: 0;
   background: rgba(255,255,255,.14); color: #fff; box-shadow: none; text-shadow: none; font-weight: 600; }
 

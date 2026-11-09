@@ -384,7 +384,7 @@
     const queue = (s.queue || []).map((id, i) => strip(id, i) || { id, title: '', artist: '', album: '', duration: 0, missing: true });
     return { playing: !!s.playing, paused: !!s.paused, index: s.index, pos: s.pos || 0, dur: s.dur || 0, volume: s.volume == null ? 100 : s.volume,
       muted: !!s.muted, track: queue[s.index] && !queue[s.index].missing ? queue[s.index] : null, queue, context: s.context || null,
-      shuffle: !!s.shuffle, repeat: s.repeat || 'off', route: s.route || null };
+      shuffle: !!s.shuffle, repeat: s.repeat || 'off', route: s.route || null, output: s.output || null };
   }
   function musicStop() { if (player && player.playing) native('musicCmd', 'stop').catch(() => {}); }
 
@@ -923,6 +923,12 @@
       if (!list.length) return fail('Nothing to play.');
       await native('musicPlay', { tracks: list, start: start || 0, context: context || null });
       return ok();
+    },
+    // Sonos: the rooms on the Wi-Fi, and playing on one (id) or back on this device ('')
+    sonosRooms: async () => { try { return ok(await native('sonosRooms')); } catch (e) { return fail(e.message || String(e)); } },
+    sonosUse: async (id) => {
+      try { const s = await native('sonosUse', id || ''); if (s) handleEvent('music-state', s); return ok({ player: s ? publicPlayer(s) : null }); }
+      catch (e) { return fail(e.message || String(e)); }
     },
     setStatusBar: (style) => native('statusBar', style).catch(() => {}),
     musicCmd: async (cmd, arg) => {

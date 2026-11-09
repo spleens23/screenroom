@@ -30,6 +30,8 @@ window.createParlor = function createParlor(ctx) {
     repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>',
     repeat1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/><text x="12" y="15.3" text-anchor="middle" font-size="8" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">1</text></svg>',
     queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7"/><path d="M17 15v6l4-3z" fill="currentColor" stroke="none"/></svg>',
+    // a speaker (where the music plays: this device or a Sonos room)
+    speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2.5" width="14" height="19" rx="3"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="7" r="1" fill="currentColor" stroke="none"/></svg>',
   };
 
   // A colour of its own for an album without a picture (the same album always gets the same one).
@@ -601,11 +603,14 @@ window.createParlor = function createParlor(ctx) {
   F.shuf = h('button', { class: 'npt', 'data-b': 'shuffle', title: 'Shuffle', 'aria-pressed': 'false', onclick: () => api.musicCmd('shuffle') }, svg(ICON.shuffle));
   F.rep = h('button', { class: 'npt', 'data-b': 'repeat', title: 'Repeat', 'aria-pressed': 'false', onclick: () => api.musicCmd('repeat') }, svg(ICON.repeat));
   F.qbtn = h('button', { class: 'npt', 'data-b': 'queue', title: 'Queue', 'aria-pressed': 'false', onclick: () => toggleQueue() }, svg(ICON.queue));
-  F.tools = h('div', { class: 'npf-tools', 'data-navrow': '1' }, F.shuf, F.qbtn, F.rep);
+  // Where the music plays: this device, or a Sonos room on the Wi-Fi (Parlor on an iPhone or iPad)
+  F.out = api.sonosRooms ? h('button', { class: 'npt', 'data-b': 'output', title: 'Play on a speaker', 'aria-pressed': 'false', onclick: () => showOutputs() }, svg(ICON.speaker)) : null;
+  F.where = h('div', { class: 'npf-where', hidden: true });
+  F.tools = h('div', { class: 'npf-tools', 'data-navrow': '1' }, F.shuf, F.qbtn, F.out, F.rep);
   F.queue = h('div', { class: 'npf-queue', hidden: true });
   F.body = h('div', { class: 'npf' }, F.stage, F.queue,
       h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
-        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.tools));
+        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.tools, F.where));
   // (the big-cover button is for a TV or computer; on an iPhone or iPad it's just the close button)
   F.melt = h('div', { class: 'npf-melt', 'aria-hidden': 'true' });
   full.append(F.bg, F.melt, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, window.S_IOS ? null : F.bigBtn, F.close), F.body, F.caption, F.qsheet);
@@ -687,6 +692,15 @@ window.createParlor = function createParlor(ctx) {
     // a surround mix (5.1, 7.1): AirPods and Beats play it as Spatial Audio, everything else gets it in stereo
     const route = (P && P.player && P.player.route) || null;
     const spatial = !!(route && route.spatial);
+    if (route && route.sonos && t.atmos) {
+      return {
+        t, kind: 'surround atmos',
+        name: 'Dolby Atmos', spec: route.atmos ? 'Sonos' : '',
+        about: route.atmos
+          ? `Dolby Atmos, sent to ${route.name} exactly as it is on this device: the speaker plays it in Dolby Atmos itself (the Sonos app shows Dolby Atmos while it does).`
+          : `Dolby Atmos, sent to ${route.name} as it is. ${route.model || 'This speaker'} isn't one of the Sonos speakers that play Dolby Atmos music (Arc, Arc Ultra, Beam (Gen 2), Era 300), so it may play a stereo version, or not play it at all.`,
+      };
+    }
     if (t.atmos) {
       return {
         t, kind: 'surround atmos' + (spatial ? ' spatial' : ''),
@@ -735,16 +749,55 @@ window.createParlor = function createParlor(ctx) {
       h('p', {}, q.about),
       row('Format', q.t.codec),
       row('Channels', q.t.channels ? `${chLabel(q.t.channels)}${q.t.channels > 2 ? ' surround' : ''}` : ''),
-      row('Spatial Audio', P.player && P.player.route ? (P.player.route.spatial ? `On (${P.player.route.name || 'headphones'})`
+      P.player && P.player.route && P.player.route.sonos ? row('Playing on', P.player.route.name) : null,
+      row('Spatial Audio', P.player && P.player.route && !P.player.route.sonos ? (P.player.route.spatial ? `On (${P.player.route.name || 'headphones'})`
         : q.t.channels > 2 ? 'Off: needs AirPods or Beats that support it' : '') : ''),
       row('Bit depth', q.t.bitDepth ? `${q.t.bitDepth}-bit` : ''),
       row('Sample rate', q.t.sampleRate ? khz(q.t.sampleRate) : ''),
       row('Bit rate', q.t.bitrate ? `${q.t.bitrate.toLocaleString()} kbps` : ''),
       h('button', { class: 'btn secondary', 'data-b': 'qdone', onclick: () => hideQuality() }, 'Done')));
-    F.qsheet.hidden = false;
+    F.qsheet.hidden = false; F.qsheet.back = F.quality;
     const d = F.qsheet.querySelector('button'); d && d.focus({ preventScroll: true });
   }
-  function hideQuality() { if (F.qsheet.hidden) return false; F.qsheet.hidden = true; F.quality.focus({ preventScroll: true }); return true; }
+  function hideQuality() { if (F.qsheet.hidden) return false; F.qsheet.hidden = true; (F.qsheet.back || F.quality).focus({ preventScroll: true }); return true; }
+
+  // ---- where it plays: this device or a Sonos room -------------------------------------------------------------
+  // The song carries on from where it was; on a Sonos speaker it's the file itself that plays (a Dolby Atmos song
+  // stays Dolby Atmos on the speakers that play it).
+  const deviceName = /iPad/.test(navigator.userAgent) ? 'This iPad' : /iPhone/.test(navigator.userAgent) ? 'This iPhone' : 'This device';
+  let outRooms = null;
+  async function showOutputs() {
+    const using = (P && P.player && P.player.output && P.player.output.id) || '';
+    const card = h('div', { class: 'npf-qcard npf-outs' });
+    const draw = (rooms, looking, error) => {
+      const row = (id, name, sub, badge) => h('button', { class: 'outrow' + (id === using ? ' on' : ''), 'data-b': 'out-' + (id || 'here'), onclick: () => pick(id, name) },
+        h('span', { class: 'out-n' }, h('b', {}, name), sub ? h('small', {}, sub) : null),
+        badge ? h('span', { class: 'out-badge' }, badge) : null,
+        h('span', { class: 'out-tick' }, id === using ? '✓' : ''));
+      card.replaceChildren(
+        h('div', { class: 'qhead' }, svg(ICON.speaker), h('h2', {}, 'Play On')),
+        row('', deviceName, using ? '' : 'Playing here'),
+        ...(rooms || []).map((r) => row(r.id, r.name, r.model ? `Sonos ${r.model}` : 'Sonos', r.atmos ? 'Dolby Atmos' : '')),
+        looking ? h('p', { class: 'out-note' }, 'Looking for Sonos speakers on your Wi-Fi…') : null,
+        !looking && rooms && !rooms.length ? h('p', { class: 'out-note' }, error || `No Sonos speakers found. ${deviceName} needs to be on the same Wi-Fi as them, and Parlor needs to be allowed on the local network (Settings › Privacy & Security › Local Network).`) : null,
+        h('button', { class: 'btn secondary', 'data-b': 'qdone', onclick: () => hideQuality() }, 'Done'));
+    };
+    const pick = async (id, name) => {
+      hideQuality();
+      if (id === using) return;
+      const r = await api.sonosUse(id);
+      if (!r.ok) { ctx.flash(r.error || 'That speaker didn\'t answer.'); return; }
+      if (r.player && P) { P.player = r.player; drawFull(false); }
+      ctx.flash(id ? `Playing on ${name}` : `Playing on ${deviceName.replace('This', 'this')}`);
+    };
+    draw(outRooms, true);
+    F.qsheet.replaceChildren(card); F.qsheet.hidden = false; F.qsheet.back = F.out;
+    const first = card.querySelector('.outrow'); first && first.focus({ preventScroll: true });
+    const r = await api.sonosRooms();
+    if (F.qsheet.hidden || !card.isConnected) return;
+    outRooms = r.ok ? r.rooms : [];
+    draw(outRooms, false, r.ok ? '' : r.error);
+  }
 
   // ---- swipe down to close (phones and tablets) ------------------------------------------------------------
   // Pull the screen down from anywhere (once Up Next is scrolled to the top): it follows your finger and closes
@@ -840,6 +893,9 @@ window.createParlor = function createParlor(ctx) {
     drawQueue();
     if (F.play.dataset.p !== String(!!s.paused)) { F.play.dataset.p = String(!!s.paused); F.play.replaceChildren(svg(s.paused ? ICON.play : ICON.pause)); }
     F.shuf.classList.toggle('on', !!s.shuffle); F.shuf.setAttribute('aria-pressed', String(!!s.shuffle));
+    const out = s.output && s.output.name;
+    if (F.out) { F.out.classList.toggle('on', !!out); F.out.setAttribute('aria-pressed', String(!!out)); F.out.title = out ? `Playing on ${out}` : 'Play on a speaker'; }
+    F.where.hidden = !out; if (out && F.where.textContent !== `Playing on ${out}`) F.where.textContent = `Playing on ${out}`;
     const r = s.repeat || 'off';
     F.rep.classList.toggle('on', r !== 'off'); F.rep.setAttribute('aria-pressed', String(r !== 'off'));
     F.rep.title = r === 'one' ? 'Repeating this song' : r === 'all' ? 'Repeating the queue' : 'Repeat';

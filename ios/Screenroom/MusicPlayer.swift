@@ -23,6 +23,7 @@ final class MusicPlayer {
     private var shuffle = false
     private var unshuffled: [[String: Any]]?   // the queue's own order while shuffled
     private var repeatMode = "off"             // off, all (the whole queue), one (this song)
+    private var link: SonosLink?               // playing on a Sonos room instead of the phone
 
     private init() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 2), queue: .main) { [weak self] _ in
@@ -79,20 +80,32 @@ final class MusicPlayer {
 
     // ---- what the page sees ----------------------------------------------------------------------------------
     func snapshot() -> [String: Any] {
-        let pos = player.currentTime().seconds
+        var pos = player.currentTime().seconds
         var dur = player.currentItem?.duration.seconds ?? 0
+        var playing = index >= 0 && player.currentItem != nil
+        var paused = playing && player.timeControlStatus == .paused
+        var vol = Int((volume * 100).rounded()), mute = muted
+        var route = routeNow
+        if let l = link {
+            // on a Sonos room: where the speaker is, its volume
+            playing = index >= 0; paused = playing && l.paused
+            pos = l.now; dur = l.dur; vol = l.volume; mute = l.muted
+            route = ["kind": "sonos", "name": l.room.name, "spatial": false, "channels": 0, "sonos": true, "atmos": l.room.atmos, "model": l.room.model]
+        }
         if !dur.isFinite || dur <= 0 { dur = (current?["duration"] as? NSNumber)?.doubleValue ?? 0 }
-        let playing = index >= 0 && player.currentItem != nil
+        var output: Any = NSNull()
+        if let l = link { output = ["id": l.room.id, "name": l.room.name, "atmos": l.room.atmos] as [String: Any] }
         return [
             "playing": playing,
-            "paused": playing && player.timeControlStatus == .paused,
+            "paused": paused,
             "index": index, "pos": pos.isFinite ? pos : 0, "dur": dur,
-            "volume": Int((volume * 100).rounded()), "muted": muted,
+            "volume": vol, "muted": mute,
             "queue": queue.compactMap { $0["id"] as? String },
             "queued": queue.map { ($0["queued"] as? Bool) == true },
             "shuffle": shuffle, "repeat": repeatMode,
             "context": context ?? NSNull(),
-            "route": routeNow,
+            "route": route,
+            "output": output,
         ]
     }
 
@@ -111,11 +124,26 @@ final class MusicPlayer {
         queue = tracks
         shuffle = false; unshuffled = nil
         self.context = context
+        if let l = link {
+            // a new queue on the speaker
+            index = max(0, min(start, tracks.count - 1))
+            l.load(from: index, at: 0, play: true)
+            KeepAwake.shared.start()
+            emit(); updateNowPlaying(newTrack: true)
+            return
+        }
         go(to: max(0, min(start, tracks.count - 1)))
     }
 
     private func go(to i: Int) {
         guard i >= 0, i < queue.count, let path = queue[i]["path"] as? String else { stop(); return }
+        if let l = link {
+            index = i
+            l.jump(i)
+            KeepAwake.shared.start()
+            emit(); updateNowPlaying(newTrack: true)
+            return
+        }
         prepareSession()
         index = i
         let item = AVPlayerItem(url: URL(fileURLWithPath: path))
@@ -147,6 +175,7 @@ final class MusicPlayer {
     }
 
     func command(_ cmd: String, _ arg: Any?) -> [String: Any]? {
+        if let l = link { sonosCommand(l, cmd, arg); emit(); updateNowPlaying(); return snapshot() }
         switch cmd {
         case "toggle": if player.timeControlStatus == .paused { player.play() } else { player.pause() }
         case "pause": player.pause()
@@ -207,10 +236,12 @@ final class MusicPlayer {
     }
 
     private func prev() {
+        if let l = link { if l.now > 3 || index == 0 { l.seek(0) } else { go(to: index - 1) }; return }
         if player.currentTime().seconds > 3 || index == 0 { player.seek(to: .zero) } else { go(to: index - 1) }
     }
 
     func stop() {
+        if let l = link { l.pause(); l.forget(); KeepAwake.shared.stop() }
         player.pause()
         player.replaceCurrentItem(with: nil)
         queue = []
@@ -220,7 +251,98 @@ final class MusicPlayer {
         emit()
     }
 
-    func pauseForVideo() { if index >= 0 { player.pause(); emit() } }
+    func pauseForVideo() { if index >= 0 { link?.pause(); player.pause(); emit() } }
+
+    // ---- Sonos -------------------------------------------------------------------------------------------------
+    var sonosId: String? { link?.room.id }
+
+    /// Play on a Sonos room (or back on the phone, with nil): the song carries on there from where it was.
+    func use(sonos room: SonosRoom?) {
+        let wasPlaying: Bool, pos: Double
+        if let l = link { wasPlaying = index >= 0 && !l.paused; pos = l.now }
+        else { wasPlaying = player.currentItem != nil && player.timeControlStatus != .paused; pos = player.currentTime().seconds }
+        link?.release(pause: true)
+        link = nil
+        if let room {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            let l = SonosLink(room: room, tracks: { [weak self] in self?.queue ?? [] })
+            l.onUpdate = { [weak self] i, ended in self?.sonosMoved(i, ended) }
+            l.onProblem = { [weak self] m in self?.bridge?.emit("notice", m) }
+            link = l
+            l.start()
+            if repeatMode == "one" { l.repeatOne(true) }
+            if index >= 0 {
+                l.load(from: index, at: pos.isFinite ? pos : 0, play: wasPlaying)
+                if wasPlaying { KeepAwake.shared.start() }
+            }
+        } else {
+            KeepAwake.shared.stop()
+            if index >= 0 {
+                go(to: index)
+                if pos.isFinite, pos > 1 { player.seek(to: CMTime(seconds: pos, preferredTimescale: 600)) }
+                if !wasPlaying { player.pause() }
+            }
+        }
+        emit()
+        updateNowPlaying(newTrack: true)
+    }
+
+    /// The speaker moved on (the next song), or ran out of songs.
+    private func sonosMoved(_ i: Int?, _ ended: Bool) {
+        guard let l = link else { return }
+        if ended {
+            if repeatMode == "all" && !queue.isEmpty { index = 0; l.load(from: 0, at: 0, play: true) } else { stop(); return }
+        } else if let i, i != index, i >= 0, i < queue.count {
+            index = i
+            emit(); updateNowPlaying(newTrack: true)
+        }
+        if l.paused { KeepAwake.shared.stop(after: 600) } else { KeepAwake.shared.start() }
+        emit(throttled: true)
+        updateNowPlaying()
+    }
+
+    private func sonosCommand(_ l: SonosLink, _ cmd: String, _ arg: Any?) {
+        switch cmd {
+        case "toggle": if l.paused { l.play(); KeepAwake.shared.start() } else { l.pause() }
+        case "pause": l.pause()
+        case "play": l.play(); KeepAwake.shared.start()
+        case "next":
+            if index + 1 < queue.count { go(to: index + 1) }
+            else if repeatMode == "all" && !queue.isEmpty { go(to: 0) }
+            else { l.seek(0); l.pause() }
+        case "prev": prev()
+        case "seek": if let s = (arg as? NSNumber)?.doubleValue { l.seek(s) }
+        case "volume": if let v = (arg as? NSNumber)?.doubleValue { l.setVolume(Int(v.rounded())) }
+        case "volup": l.setVolume(l.volume + 5)
+        case "voldown": l.setVolume(l.volume - 5)
+        case "mute": l.setMuted(!l.muted)
+        case "jump": if let i = (arg as? NSNumber)?.intValue { go(to: i) }
+        case "stop": stop()
+        case "clear":
+            if let cur = current { let was = index; queue = [cur]; index = 0; unshuffled = nil; l.rebuild(was: was, now: 0) }
+        case "shuffle":
+            let was = index
+            toggleShuffle()
+            if was >= 0 { l.rebuild(was: was, now: index) }
+        case "repeat":
+            repeatMode = ["off": "all", "all": "one"][repeatMode] ?? "off"
+            l.repeatOne(repeatMode == "one")
+        case "enqueue":
+            if let o = arg as? [String: Any], var tracks = o["tracks"] as? [[String: Any]] {
+                for i in tracks.indices { tracks[i]["queued"] = true }
+                if (o["next"] as? Bool) == true, index >= 0 {
+                    queue.insert(contentsOf: tracks, at: index + 1)
+                    l.rebuild(was: index, now: index)
+                } else {
+                    queue.append(contentsOf: tracks)
+                    if index >= 0 { l.grew() }
+                }
+                if index < 0, !queue.isEmpty { l.forget(); go(to: 0) }
+            }
+        default: break
+        }
+    }
 
     // ---- lock screen and Control Center ------------------------------------------------------------------------
     private var artwork: MPMediaItemArtwork?
@@ -236,16 +358,17 @@ final class MusicPlayer {
                 artwork = nil
             }
         }
+        let onSpeaker = link
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: t["title"] as? String ?? "",
-            MPMediaItemPropertyArtist: t["artist"] as? String ?? "",
+            MPMediaItemPropertyArtist: onSpeaker.map { (t["artist"] as? String ?? "") + " — " + $0.room.name } ?? (t["artist"] as? String ?? ""),
             MPMediaItemPropertyAlbumTitle: t["album"] as? String ?? "",
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: player.currentTime().seconds,
-            MPNowPlayingInfoPropertyPlaybackRate: player.timeControlStatus == .paused ? 0.0 : 1.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: onSpeaker?.now ?? player.currentTime().seconds,
+            MPNowPlayingInfoPropertyPlaybackRate: (onSpeaker.map { $0.paused } ?? (player.timeControlStatus == .paused)) ? 0.0 : 1.0,
             MPNowPlayingInfoPropertyPlaybackQueueIndex: index,
             MPNowPlayingInfoPropertyPlaybackQueueCount: queue.count,
         ]
-        let dur = player.currentItem?.duration.seconds ?? 0
+        let dur = onSpeaker?.dur ?? player.currentItem?.duration.seconds ?? 0
         info[MPMediaItemPropertyPlaybackDuration] = dur.isFinite && dur > 0 ? dur : ((t["duration"] as? NSNumber)?.doubleValue ?? 0)
         if let a = artwork { info[MPMediaItemPropertyArtwork] = a }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -253,14 +376,15 @@ final class MusicPlayer {
 
     private func setUpRemote() {
         let c = MPRemoteCommandCenter.shared()
-        c.playCommand.addTarget { [weak self] _ in self?.player.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in self?.player.pause(); return .success }
+        // (each goes to the speaker instead while Parlor is playing on one)
+        c.playCommand.addTarget { [weak self] _ in _ = self?.command("play", nil); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in _ = self?.command("pause", nil); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in _ = self?.command("toggle", nil); return .success }
-        c.nextTrackCommand.addTarget { [weak self] _ in self?.next(auto: false); return .success }
-        c.previousTrackCommand.addTarget { [weak self] _ in self?.prev(); return .success }
+        c.nextTrackCommand.addTarget { [weak self] _ in _ = self?.command("next", nil); return .success }
+        c.previousTrackCommand.addTarget { [weak self] _ in _ = self?.command("prev", nil); return .success }
         c.changePlaybackPositionCommand.addTarget { [weak self] e in
             guard let e = e as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            self?.player.seek(to: CMTime(seconds: e.positionTime, preferredTimescale: 600))
+            _ = self?.command("seek", NSNumber(value: e.positionTime))
             return .success
         }
     }

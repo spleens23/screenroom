@@ -198,6 +198,20 @@ jobs:
           rm -rf "$LM/Linked Band/First Linked"
           run "setTimeout(() => api.parlorState().then(p => console.error('linked removed: ' + p.albums.filter(a => /Linked/.test(a.title)).map(a => a.title).sort().join(','))).then(() => api.parlorScanReport()).then(r => console.error('linked report: files=' + r.files + ' read=' + r.read)), 10000)"; shot linked-removed 16
           run "document.querySelector('#settings-btn') && document.querySelector('#settings-btn').click()"; shot linked-settings 14
+          # playing on a Sonos speaker: a stand-in speaker on this machine (announced on the network the way a real one is)
+          # is handed a Dolby Digital Plus .m4a and fetches it from Parlor; what it gets must be the file, byte for byte
+          SA="$PD/Documents/Music/Round Band/Sonos Test"; mkdir -p "$SA"
+          ffmpeg -v error -y -i "$PD/Documents/Music/Round Band/Six Room/03 Dolby Around.mp4" -map 0:a -c copy -metadata title="Atmos Song" -metadata album="Sonos Test" -metadata track=1 -f mp4 "$SA/01 Atmos Song.m4a" || echo "no E-AC-3 m4a"
+          ffmpeg -v error -y -f lavfi -i "sine=frequency=700:sample_rate=44100" -t 20 -c:a aac -metadata title="Stereo Song" -metadata artist="Round Band" -metadata album="Sonos Test" -metadata track=2 "$SA/02 Stereo Song.m4a"
+          cp "$PD/Documents/Music/Slow Band/Long Album/cover.jpg" "$SA/cover.jpg" 2>/dev/null || ffmpeg -v error -y -f lavfi -i "color=c=purple:s=600x600" -frames:v 1 "$SA/cover.jpg"
+          python3 ios/scripts/fake-sonos.py 1400 shots/fake-sonos.txt > /dev/null 2>&1 & FAKE=$!
+          dns-sd -R "Test Room" _sonos._tcp local 1400 "location=http://127.0.0.1:1400/xml/device_description.xml" > /dev/null 2>&1 & DNSSD=$!
+          sleep 2
+          run "api.sonosRooms().then(r => console.error('sonos rooms: ' + JSON.stringify(r))).catch(e => console.error('sonos rooms: failed ' + e))"; shot sonos-rooms 24
+          run "api.sonosRooms().then(r => { const room = r.rooms && r.rooms[0]; if (!room) throw new Error('no speaker: ' + JSON.stringify(r)); return api.parlorState().then(p => { const a = p.albums.find(x => x.title === 'Sonos Test'); if (!a) throw new Error('no Sonos Test album'); return api.musicPlay({ trackIds: a.tracks, start: 0 }); }).then(() => api.sonosUse(room.id)); }).then(r => console.error('sonos use: ' + JSON.stringify(r.ok ? { output: r.player.output, track: r.player.track && r.player.track.title } : r))).then(() => new Promise(res => setTimeout(res, 5000))).then(() => api.parlorState()).then(p => console.error('sonos playing: ' + JSON.stringify({ pos: p.player.pos, paused: p.player.paused, track: p.player.track && p.player.track.title, route: p.player.route }))).then(() => api.musicCmd('next')).then(() => new Promise(res => setTimeout(res, 3000))).then(() => api.parlorState()).then(p => { console.error('sonos next: ' + (p.player.track && p.player.track.title) + ' paused=' + p.player.paused); document.querySelector('.npb-art') && document.querySelector('.npb-art').click(); setTimeout(() => { const b = document.querySelector('[data-b=output]'); b && b.click(); }, 1500); }).catch(e => console.error('sonos: failed ' + e))"; shot sonos 34
+          kill $FAKE $DNSSD 2>/dev/null || true
+          echo "--- the stand-in speaker:"; cat shots/fake-sonos.txt || true
+          echo "the file on the phone: $(shasum -a 256 "$SA/01 Atmos Song.m4a" | cut -d' ' -f1) $(stat -f%z "$SA/01 Atmos Song.m4a") bytes"
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt
       - name: Share the screenshots
