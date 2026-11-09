@@ -36,17 +36,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
+          set -ex
           # (7-Zip is on the machine but not on Git Bash's path)
           SZ="/c/Program Files/7-Zip/7z.exe"; [ -x "$SZ" ] || SZ="$(command -v 7z)"
-          7z() { "$SZ" "$@"; }
           mkdir -p vendor/win/bin /tmp/dl
           gh release download -R BtbN/FFmpeg-Builds latest -p 'ffmpeg-master-latest-win64-gpl.zip' -D /tmp/dl
-          7z x -y -o/tmp/dl/ff /tmp/dl/ffmpeg-master-latest-win64-gpl.zip > /dev/null
+          "$SZ" x -y -o"$(cygpath -w /tmp/dl/ff)" "$(cygpath -w /tmp/dl/ffmpeg-master-latest-win64-gpl.zip)" > /dev/null
           cp /tmp/dl/ff/*/bin/ffmpeg.exe /tmp/dl/ff/*/bin/ffprobe.exe vendor/win/bin/
           TAG=$(gh release list -R shinchiro/mpv-winbuild-cmake -L 1 --json tagName -q '.[0].tagName')
           gh release download "$TAG" -R shinchiro/mpv-winbuild-cmake -p 'mpv-x86_64-2*.7z' -D /tmp/dl
-          7z x -y -o/tmp/dl/mpv /tmp/dl/mpv-x86_64-2*.7z > /dev/null
+          "$SZ" x -y -o"$(cygpath -w /tmp/dl/mpv)" "$(cygpath -w "$(ls /tmp/dl/mpv-x86_64-2*.7z | head -1)")" > /dev/null
           cp /tmp/dl/mpv/mpv.exe vendor/win/bin/
           [ -f /tmp/dl/mpv/mpv.com ] && cp /tmp/dl/mpv/mpv.com vendor/win/bin/ || true
           ls -la vendor/win/bin
