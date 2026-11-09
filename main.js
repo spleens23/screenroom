@@ -31,9 +31,12 @@ if (process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance')) 
 // Editions: the TV box runs everything in one app ("all"). On Heirloom (the tablet) films and music are two
 // apps of their own: `--edition=films` (Screenroom) and `--edition=music` (Parlor), each with its own settings,
 // profiles and library, and its own window class so the home screen shows them as two apps.
+// An installer made for one of them (Parlor for Windows) says which in resources/edition.txt.
 const EDITION = (() => {
   const a = process.argv.find((x) => x.startsWith('--edition='));
-  const e = (a ? a.split('=')[1] : process.env.SCREENROOM_EDITION) || 'all';
+  let bundled = '';
+  try { bundled = fs.readFileSync(path.join(process.resourcesPath || '', 'edition.txt'), 'utf8').trim(); } catch {}
+  const e = (a ? a.split('=')[1] : process.env.SCREENROOM_EDITION || bundled) || 'all';
   return ['all', 'films', 'music'].includes(e) ? e : 'all';
 })();
 const WM_CLASS = EDITION === 'music' ? 'dev.screenroom.Parlor' : EDITION === 'films' ? 'dev.screenroom.Screenroom' : null;
@@ -503,6 +506,30 @@ const PLAYER_CMDS = {
   mute: ['cycle', 'mute'], audio: ['cycle', 'audio'], subs: ['cycle', 'sub'], fullscreen: ['cycle', 'fullscreen'],
 };
 
+// The automated check (Parlor for Windows): SCREENROOM_TEST_SCRIPT runs in the page once it's up, what the page logs
+// goes to SCREENROOM_TEST_LOG, screenshots to SCREENROOM_TEST_SHOTS (one every SCREENROOM_TEST_EVERY seconds), and
+// the app quits after SCREENROOM_TEST_SECONDS. Nothing happens without these set.
+function selfTest(w) {
+  const env = process.env;
+  const logFile = env.SCREENROOM_TEST_LOG || path.join(os.tmpdir(), 'screenroom-test.log');
+  const log = (line) => { try { fs.appendFileSync(logFile, line + '\n'); } catch {} };
+  w.webContents.on('console-message', (_e, _level, message) => log('page: ' + message));
+  w.webContents.on('render-process-gone', (_e, d) => log('page crashed: ' + JSON.stringify(d)));
+  w.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      w.webContents.executeJavaScript(env.SCREENROOM_TEST_SCRIPT).catch((e) => log('script failed: ' + e.message));
+    }, Number(env.SCREENROOM_TEST_DELAY || 8) * 1000);
+    if (env.SCREENROOM_TEST_SHOTS) {
+      let n = 0;
+      setInterval(() => {
+        n++;
+        w.webContents.capturePage().then((img) => fs.writeFileSync(path.join(env.SCREENROOM_TEST_SHOTS, `shot-${String(n).padStart(2, '0')}.png`), img.toPNG())).catch(() => {});
+      }, Number(env.SCREENROOM_TEST_EVERY || 10) * 1000);
+    }
+    setTimeout(() => { log('test over'); app.exit(0); }, Number(env.SCREENROOM_TEST_SECONDS || 60) * 1000);
+  });
+}
+
 function remoteLibrary() {
   const movies = [];
   const series = new Map();
@@ -649,7 +676,10 @@ app.whenReady().then(async () => {
     soundDevice: async () => (await soundFor()).audioDevice || '', sound: async () => ({ ...(await soundFor()), truehdPassthrough: config.truehdPassthrough, dtsPassthrough: config.dtsPassthrough }), mediaRoot: () => mediaRoot, drives: () => drives,
     exclusiveAudio: isAppliance,
   });
+  // Parlor on its own (Windows, Heirloom): start with the Music folder, if there is one.
+  if (firstRun && EDITION === 'music') parlorApi.addFolder(path.join(os.homedir(), 'Music'));
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
+  if (process.env.SCREENROOM_TEST_SCRIPT) selfTest(win);
   setInterval(backgroundScan, 30 * 60 * 1000);
   setInterval(pollDrives, 5000);
   if (isAppliance()) setInterval(() => { btWatch().catch(() => {}); }, 4000);

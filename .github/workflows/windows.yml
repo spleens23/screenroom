@@ -1,0 +1,126 @@
+name: Parlor for Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['main.js', 'preload.js', 'lib/**', 'renderer/**', 'mpv/**', 'build/parlor-win.json', 'build/parlor.ico', 'package.json', 'package-lock.json', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the app's packages
+        run: npm ci
+
+      # Windows has no mpv or ffmpeg of its own: the installer brings them (mpv plays the music, ffprobe reads songs,
+      # ffmpeg makes covers). Both from their projects' own automated Windows builds.
+      - name: Get mpv and FFmpeg for Windows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p vendor/win/bin /tmp/dl
+          gh release download -R BtbN/FFmpeg-Builds latest -p 'ffmpeg-master-latest-win64-gpl.zip' -D /tmp/dl
+          7z x -y -o/tmp/dl/ff /tmp/dl/ffmpeg-master-latest-win64-gpl.zip > /dev/null
+          cp /tmp/dl/ff/*/bin/ffmpeg.exe /tmp/dl/ff/*/bin/ffprobe.exe vendor/win/bin/
+          TAG=$(gh release list -R shinchiro/mpv-winbuild-cmake -L 1 --json tagName -q '.[0].tagName')
+          gh release download "$TAG" -R shinchiro/mpv-winbuild-cmake -p 'mpv-x86_64-2*.7z' -D /tmp/dl
+          7z x -y -o/tmp/dl/mpv /tmp/dl/mpv-x86_64-2*.7z > /dev/null
+          cp /tmp/dl/mpv/mpv.exe vendor/win/bin/
+          [ -f /tmp/dl/mpv/mpv.com ] && cp /tmp/dl/mpv/mpv.com vendor/win/bin/ || true
+          ls -la vendor/win/bin
+          vendor/win/bin/mpv.exe --version | head -2
+          vendor/win/bin/ffprobe.exe -version | head -1
+
+      - name: Build the installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --win nsis --x64 --config build/parlor-win.json -c.extraMetadata.version=0.6.${{ github.run_number }} -p never
+          ls -la dist-win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Parlor-Windows-${{ github.run_number }}
+          path: dist-win/*.exe
+
+      # Installed the way you'd install it, then opened with songs in the Music folder: the library, playing a song,
+      # and the Stereo / Spatial Audio choice on an album that's there in both
+      - name: Try it
+        continue-on-error: true
+        run: |
+          set -x
+          SETUP=$(ls dist-win/Parlor-Setup-*.exe | head -1)
+          "$SETUP" //S
+          sleep 20
+          APP="$LOCALAPPDATA/Programs/Parlor/Parlor.exe"
+          ls -la "$LOCALAPPDATA/Programs/Parlor" || true
+          FF="$LOCALAPPDATA/Programs/Parlor/resources/bin/ffmpeg.exe"
+          M="$USERPROFILE/Music"
+          song() { mkdir -p "$(dirname "$M/$1")"; "$FF" -v error -y -f lavfi -i "sine=frequency=$6:sample_rate=44100" -t 20 -c:a aac -b:a 128k -metadata title="$2" -metadata artist="$3" -metadata album="$4" -metadata track="$5" -metadata date=2021 "$M/$1"; }
+          song "Slow Band/Long Album/01 Long Song.m4a" "Long Song" "Slow Band" "Long Album" 1 220
+          song "Slow Band/Long Album/02 Middle.m4a" "Middle" "Slow Band" "Long Album" 2 262
+          "$FF" -v error -y -f lavfi -i "color=c=seagreen:s=600x600" -frames:v 1 "$M/Slow Band/Long Album/cover.jpg"
+          song "Twin Band/Twin Album/01 Alpha.m4a" "Alpha" "Twin Band" "Twin Album" 1 300
+          mkdir -p "$M/Twin Band/Twin Album (Dolby Atmos)"
+          "$FF" -v error -y -f lavfi -i "sine=frequency=300:sample_rate=48000" -t 21 -af "pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0" -c:a eac3 -b:a 384k \
+            -metadata title="Alpha" -metadata artist="Twin Band" -metadata album="Twin Album (Dolby Atmos)" -metadata track=1 -f mp4 "$M/Twin Band/Twin Album (Dolby Atmos)/01 Alpha.m4a"
+          mkdir -p shots
+          export SCREENROOM_TEST_LOG="$PWD/shots/parlor-windows-log.txt" SCREENROOM_TEST_SHOTS="$PWD/shots" SCREENROOM_TEST_SECONDS=75 SCREENROOM_TEST_DELAY=20 SCREENROOM_TEST_EVERY=12
+          export SCREENROOM_TEST_SCRIPT="(async () => {
+            const log = (m) => console.log(m);
+            let p = await api.parlorState();
+            for (let i = 0; i < 20 && !p.albums.length; i++) { await new Promise((r) => setTimeout(r, 1500)); p = await api.parlorState(); }
+            log('library: ' + JSON.stringify(p.albums.map((a) => [a.title, a.artist, a.tracks.length, !!a.art, a.version])));
+            log('folders: ' + JSON.stringify(p.dirs));
+            const a = p.albums.find((x) => x.title === 'Long Album');
+            const r = await api.musicPlay({ trackIds: a.tracks, start: 0 });
+            log('play: ' + JSON.stringify(r));
+            await new Promise((res) => setTimeout(res, 5000));
+            p = await api.parlorState();
+            log('playing: ' + JSON.stringify(p.player && { pos: p.player.pos, paused: p.player.paused, track: p.player.track && p.player.track.title }));
+            const t = p.albums.find((x) => /Twin/.test(x.title));
+            if (t) { const s = await api.parlorSetVersion(t.key, 'stereo'); const b = s.state.albums.find((x) => x.key === t.key); log('twin: ' + JSON.stringify([t.version, b.version, b.tracks.map((id) => s.state.tracks[id].codec)])); }
+            document.querySelector('.npb-art') && document.querySelector('.npb-art').click();
+          })().catch((e) => console.log('test failed: ' + e))"
+          timeout 120 "$APP" || true
+          echo "--- what the page logged:"; cat shots/parlor-windows-log.txt || true
+
+      - name: Share the screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view windows-ci-screens >/dev/null 2>&1 || gh release create windows-ci-screens --prerelease --latest=false \
+            --title "Parlor for Windows: test screenshots (not for installing)" --notes "From the latest automated check on a Windows machine."
+          for f in shots/*; do [ -s "$f" ] && gh release upload windows-ci-screens "$f" --clobber || echo "couldn't upload $f"; done
+
+      - name: Publish a release you can download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: parlor-windows-${{ github.run_number }}
+          name: Parlor for Windows (build ${{ github.run_number }})
+          body: |
+            Parlor for Windows 10 and 11 (64-bit). Download Parlor-Setup-….exe and open it.
+            Windows may say it's from an unknown publisher (the installer isn't signed with a paid certificate): choose
+            "More info", then "Run anyway". Parlor starts with your Music folder; add others in its Settings.
+          files: dist-win/*.exe
+          make_latest: false

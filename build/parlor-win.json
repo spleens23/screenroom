@@ -1,0 +1,55 @@
+{
+  "appId": "dev.screenroom.parlor",
+  "productName": "Parlor",
+  "copyright": "Screenroom",
+  "directories": {
+    "output": "dist-win"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "lib/**/*",
+    "tools/**/*",
+    "renderer/**/*",
+    "remote/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "mpv",
+      "to": "mpv"
+    },
+    {
+      "from": "vendor/win/bin",
+      "to": "bin"
+    },
+    {
+      "from": "build/edition-music.txt",
+      "to": "edition.txt"
+    }
+  ],
+  "win": {
+    "icon": "build/parlor.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "Parlor-Setup-${version}.${ext}",
+    "executableName": "Parlor"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Parlor",
+    "installerIcon": "build/parlor.ico",
+    "uninstallerIcon": "build/parlor.ico",
+    "artifactName": "Parlor-Setup-${version}.${ext}"
+  }
+}
