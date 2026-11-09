@@ -300,9 +300,9 @@
 
   const pOf = (pid) => {
     pstore.profiles = pstore.profiles || {};
-    if (!pstore.profiles[pid]) pstore.profiles[pid] = { dirs: [], shared: [], playlists: [], recent: [] };
+    if (!pstore.profiles[pid]) pstore.profiles[pid] = { dirs: [], shared: [], playlists: [], recent: [], pinned: [] };
     const p = pstore.profiles[pid];
-    for (const k of ['dirs', 'shared', 'playlists', 'recent']) if (!Array.isArray(p[k])) p[k] = [];
+    for (const k of ['dirs', 'shared', 'playlists', 'recent', 'pinned']) if (!Array.isArray(p[k])) p[k] = [];
     return p;
   };
   const savePar = () => save('parlor', pstore);
@@ -363,6 +363,7 @@
       tracks,
       playlists: mine.playlists.map((pl) => ({ ...pl, tracks: pl.tracks.filter((id) => tracks[id]) })),
       recent: mine.recent.filter((k) => albums.some((a) => a.key === k)),
+      pinned: mine.pinned.filter((k) => albums.some((a) => a.key === k)),
       profiles: profilesList().map((p) => ({ id: p.id, name: p.name, color: p.color === '#e50914' ? '#b5523a' : p.color, kids: p.kids })),
       player: player ? publicPlayer(player) : null,
     };
@@ -843,6 +844,15 @@
       } catch (e) {
         return ok({ results: [], local, offline: true, error: 'No internet connection: covers can only be looked up online.' });
       }
+    },
+    // Pinned albums: favourites at the top of Home, each profile its own (in the order they were pinned).
+    parlorPin: async (key, on) => {
+      await boot();
+      const p = pOf(prof().id);
+      p.pinned = p.pinned.filter((k) => k !== key);
+      if (on) p.pinned.push(key);
+      savePar();
+      return ok({ state: parlorState() });
     },
     // An album there in stereo and in spatial audio: which version plays (kept for the album, on this device).
     parlorSetVersion: async (key, version) => {

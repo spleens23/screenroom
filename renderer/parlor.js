@@ -36,6 +36,8 @@ window.createParlor = function createParlor(ctx) {
     repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>',
     repeat1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/><text x="12" y="15.3" text-anchor="middle" font-size="8" font-weight="800" font-family="sans-serif" fill="currentColor" stroke="none">1</text></svg>',
     queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7"/><path d="M17 15v6l4-3z" fill="currentColor" stroke="none"/></svg>',
+    // a pin (an album pinned to the top of Home)
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></svg>',
     // a speaker (where the music plays: this device or a Sonos room)
     speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2.5" width="14" height="19" rx="3"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="7" r="1" fill="currentColor" stroke="none"/></svg>',
   };
@@ -124,12 +126,15 @@ window.createParlor = function createParlor(ctx) {
   }
 
   function renderHome() {
+    const pinned = (P.pinned || []).map(album).filter(Boolean);
     const recent = P.recent.map(album).filter(Boolean);
     const added = P.albums.slice().sort((a, b) => b.added - a.added).slice(0, 20);
     page(null,
       h('div', { class: 'phead' }, h('h1', {}, 'Parlor'), h('div', { class: 'pstats' },
         `${plural(P.albums.length, 'album')} · ${plural(Object.keys(P.tracks).length, 'song')}`)),
       h('div', { class: 'rows' },
+        // favourites, pinned from their album pages
+        pinned.length ? row('Pinned', pinned.map(albumCard)) : null,
         ctx.albumRecs ? row('Recommended for You', (() => {
           const seen = new Set();
           return ctx.albumRecs().map((x) => ({ ...x, a: album(x.rec.key) })).filter((x) => x.a && !seen.has(x.a.key) && seen.add(x.a.key)).map((x) => {
@@ -280,6 +285,8 @@ window.createParlor = function createParlor(ctx) {
             h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxa) }, svg(ICON.play), 'Play'),
             h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxa) }, svg(ICON.shuffle), 'Shuffle'),
             h('button', { class: 'btn secondary', onclick: () => pickPlaylist(ids) }, '+ Playlist'),
+            api.parlorPin ? h('button', { class: 'btn secondary pin-btn' + (isPinned(a) ? ' on' : ''), 'aria-pressed': String(isPinned(a)), onclick: () => togglePin(a) },
+              svg(ICON.pin), isPinned(a) ? 'Pinned' : 'Pin') : null,
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, true, a.title) }, svg(ICON.queue), 'Play Next') : null,
             P.player && P.player.playing ? h('button', { class: 'btn secondary', onclick: () => queueUp(ids, false, a.title) }, 'Play Last') : null,
             P.canManage && api.parlorCoverSearch ? h('button', { class: 'btn secondary', onclick: () => findCover(a) }, a.art ? 'Change Cover' : 'Find Cover') : null,
@@ -307,6 +314,18 @@ window.createParlor = function createParlor(ctx) {
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
     if (focusSel) { const f = $('#modal-body').querySelector(focusSel); f && f.focus(); }
+  }
+
+  // Pin an album to the top of Home (or take it off), for the profile that's listening.
+  const isPinned = (a) => (P.pinned || []).includes(a.key);
+  async function togglePin(a) {
+    const on = !isPinned(a);
+    const r = await api.parlorPin(a.key, on);
+    if (!r.ok) { ctx.flash(r.error || "Couldn't pin that album."); return; }
+    P = r.state;
+    drawAlbum('.pin-btn');
+    ctx.flash(on ? `${a.title} is pinned to the top of Home` : `${a.title} is no longer pinned`);
+    if (view === 'home') render();
   }
 
   // An album there in stereo and in spatial audio shows once, with the version to play picked here (kept for the album).
@@ -387,7 +406,7 @@ window.createParlor = function createParlor(ctx) {
       h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
   }
   function nameDialog(title, value, okLabel, onOk) {
-    const input = h('input', { type: 'text', class: 'pin-input', maxlength: '60', value: value || '', placeholder: window.S_IOS ? 'Type a name here' : 'Playlist name (or type it on your phone)' });
+    const input = h('input', { type: 'text', class: 'pname-input', maxlength: '60', autocapitalize: 'words', value: value || '', placeholder: window.S_IOS ? 'Type a name here' : 'Playlist name (or type it on your phone)' });
     const ok = async () => { const v = input.value.trim(); if (!v) { input.focus(); return; } await onOk(v); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim() && !ctx.wantsKeyboard()) { e.preventDefault(); e.stopPropagation(); ok(); } });
     overlay('name', h('h2', {}, title), input,

@@ -988,3 +988,13 @@ body.big .lic-text { font-size: 16px; }
 html.np-open, html.np-open body { overflow: hidden; }
 /* a hidden button stays hidden whatever a theme says about how it's shown */
 #profile-btn[hidden], #battery[hidden], #vote-btn[hidden] { display: none !important; }
+
+/* Parlor's name box (a playlist's name): the card's own text colour, so it reads on a light card or a dark one */
+body .poverlay .poverlay-card input.pname-input, body .poverlay input.pname-input {
+  width: 100%; margin: 8px 0 14px; padding: 12px 14px; border-radius: 10px; font: inherit; font-size: 18px; letter-spacing: normal;
+  color: inherit; -webkit-text-fill-color: currentColor; caret-color: currentColor;
+  background: rgba(127, 127, 127, .14); border: 1px solid rgba(127, 127, 127, .45); }
+body .poverlay input.pname-input::placeholder { color: inherit; opacity: .5; -webkit-text-fill-color: currentColor; }
+/* a pinned album's button */
+.palbum .pin-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; }
+.palbum .pin-btn.on svg { fill: currentColor; }
