@@ -628,3 +628,6 @@ html body .motion-btns .btn { white-space: nowrap; flex: 1 1 auto; min-width: 0;
   html body:not(#_) .motion-btns { display: grid; grid-template-columns: 1fr 1fr; }
   html body:not(#_) .motion-btns .btn { width: 100%; margin: 0; padding-left: 10px; padding-right: 10px; }
 }
+
+/* an album with discs: the invisible first row that sets the song table's column widths */
+html body.parlor.parlor.parlor table.songs tr.sizer td, table.songs tr.sizer td { height: 0; padding-top: 0 !important; padding-bottom: 0 !important; border: 0 !important; line-height: 0; font-size: 0; background: transparent; }

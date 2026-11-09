@@ -287,7 +287,11 @@ window.createParlor = function createParlor(ctx) {
             ctx.recommend && ctx.canRecommend() && !window.S_IOS ? h('button', { class: 'btn secondary rec-btn', onclick: () => recommendAlbum(a) }, '→ Recommend') : null),
           albumRecBanner(a),
           P.canManage && !window.S_IOS ? sharePanel(a) : null)),
-      h('table', { class: 'songs tracks' + (P.player && P.player.playing ? ' two-btns' : '') }, h('tbody', {}, albumTracks(a).map((t, i) => {
+      h('table', { class: 'songs tracks' + (P.player && P.player.playing ? ' two-btns' : '') }, h('tbody', {},
+        // (the table's columns take their widths from its first row: with discs, that would be the "Disc 1" row,
+        // one cell across, which splits them evenly and pushes the titles right; an invisible row of normal cells goes first)
+        multiDisc ? h('tr', { class: 'sizer', 'aria-hidden': 'true' }, h('td', { class: 'n' }), h('td', {}), h('td', { class: 't' }), h('td', { class: 'x' })) : null,
+        albumTracks(a).map((t, i) => {
         const cur = P.player && P.player.track && P.player.track.id === t.id;
         return [
           multiDisc && (i === 0 || albumTracks(a)[i - 1].disc !== t.disc) ? h('tr', { class: 'disc' }, h('td', { colspan: '4' }, `Disc ${t.disc}`)) : null,
@@ -299,7 +303,7 @@ window.createParlor = function createParlor(ctx) {
             h('td', { class: 'x' },
               P.player && P.player.playing ? h('button', { class: 'rowbtn qadd', title: 'Play next', 'aria-label': `Play ${t.title} next`, onclick: () => queueUp([t.id], true, t.title) }, svg(ICON.queue, 'ico tiny')) : null,
               h('button', { class: 'rowbtn', title: 'Add to a playlist', onclick: () => pickPlaylist([t.id]) }, '+')))];
-      }).flat())));
+        }).flat())));
     $('#modal-body').replaceChildren(body);
     $('#modal .modal-card').classList.add('pmodal');
     if (focusSel) { const f = $('#modal-body').querySelector(focusSel); f && f.focus(); }
