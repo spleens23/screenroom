@@ -852,6 +852,7 @@
       p.pinned = p.pinned.filter((k) => k !== key);
       if (on) p.pinned.push(key);
       savePar();
+      emit('parlor-updated', null);
       return ok({ state: parlorState() });
     },
     // An album there in stereo and in spatial audio: which version plays (kept for the album, on this device).
