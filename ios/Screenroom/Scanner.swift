@@ -503,8 +503,18 @@ final class Scanner {
         try? st.writeJson("motion-cache", motionNext)
         try? st.writeJson("scan-music-sig", ["sig": musicSignature()])
         let songs = list.compactMap { next[$0.path] }.filter { $0["notSong"] == nil }
+        // which folders the songs were found in, and everything in Parlor's folder, so Settings shows exactly what
+        // Parlor sees (to compare with the Files app)
+        var perFolder: [String: Int] = [:]
+        for u in list { perFolder[st.relativeToDocs(u.deletingLastPathComponent()), default: 0] += 1 }
+        var everything = 0
+        if let all = st.fm.enumerator(at: st.docs, includingPropertiesForKeys: [.isDirectoryKey], options: []) {
+            for case let u as URL in all where (try? u.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true { everything += 1 }
+        }
+        let folders = perFolder.sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }.prefix(400).map { ["dir": $0.key, "n": $0.value] as [String: Any] }
         try? st.writeJson("scan-report", ["at": Date().timeIntervalSince1970 * 1000, "seconds": Date().timeIntervalSince(began), "deep": deep,
-                                          "files": list.count, "songs": songs.count, "read": probed, "skipped": skipped])
+                                          "files": list.count, "songs": songs.count, "read": probed, "skipped": skipped,
+                                          "folders": folders, "everything": everything, "where": st.docs.path])
         return songs
     }
 

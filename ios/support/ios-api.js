@@ -554,8 +554,11 @@
         const start = n === 0 && !fromStart && pr && !pr.done && pr.pos > 10 && (!pr.dur || pr.pos < pr.dur - 30) ? pr.pos : 0;
         return { id: i.id, path: i.path, duration: i.duration, start, art: i.art || i.backdrop || '', engine: i.engine || '', ...playerMeta(i), fmt: MediaCore.formatBadges(i) };
       });
+      // (the player's buttons and progress bar use the accent colour picked in Settings)
+      let accent = '';
+      try { accent = getComputedStyle(document.body).getPropertyValue('--m-amber').trim(); } catch {}
       return native('playVideo', {
-        queue, audioTrack: audioTrack || null,
+        queue, audioTrack: audioTrack || null, accent,
         audioLang: prof.preferredLang || config.preferredLang || 'eng', subLang: prof.subLang || config.subLang || '',
       });
     },
@@ -739,6 +742,7 @@
     // ---- Parlor ----
     parlorState: async () => { await boot(); return parlorState(); },
     parlorRescan: async () => { await boot(); await scanMusic(true); emit('library-updated', await snapshot()); return parlorState(); },
+    showInFiles: () => native('showInFiles').catch(() => false),
     parlorScanReport: async () => { try { return (await native('readJson', 'scan-report')) || null; } catch { return null; } },
     // what the last scan made of each moving cover (cover.mp4 …), shown in Settings
     parlorMotionReport: async () => { try { return (await native('readJson', 'motion-report')) || []; } catch { return []; } },

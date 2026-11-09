@@ -39,7 +39,16 @@ final class PlayerScreen: UIViewController {
     private let ink = UIColor(red: 0.086, green: 0.067, blue: 0.051, alpha: 1)
     private let cream = UIColor(red: 0.953, green: 0.914, blue: 0.863, alpha: 1)
     private let muted = UIColor(red: 0.804, green: 0.741, blue: 0.675, alpha: 1)
-    private let amber = UIColor(red: 0.941, green: 0.655, blue: 0.227, alpha: 1)
+    /// The accent colour picked in Settings (amber unless changed), for the progress bar and the play button.
+    static var accent: UIColor?
+    private let amber = PlayerScreen.accent ?? UIColor(red: 0.941, green: 0.655, blue: 0.227, alpha: 1)
+    static func color(hex: String) -> UIColor? {
+        var h = hex.trimmingCharacters(in: .whitespaces)
+        if h.hasPrefix("#") { h.removeFirst() }
+        if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
+        guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+        return UIColor(red: CGFloat((v >> 16) & 255) / 255, green: CGFloat((v >> 8) & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+    }
     private let edge = UIColor(red: 0.353, green: 0.275, blue: 0.212, alpha: 1)
 
     /// Lets taps through where there's no control, so they reach the catcher underneath.

@@ -104,8 +104,14 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return nil
         case "random":
             return randomHex((arg(a, 0) as NSNumber?)?.intValue ?? 8)
+        case "showInFiles":
+            // the Files app, opened at this app's own folder (On My iPad › Parlor)
+            let path = Storage.shared.docs.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? Storage.shared.docs.path
+            guard let url = URL(string: "shareddocuments://" + path) else { return false }
+            return await UIApplication.shared.open(url)
         case "playVideo":
             guard let opts: [String: Any] = arg(a, 0), let host else { throw ScreenroomError("Nothing to play.") }
+            PlayerScreen.accent = PlayerScreen.color(hex: opts["accent"] as? String ?? "")
             // Apple's engine when it can play the film (HDR, Dolby Vision); mpv's engine for DTS / TrueHD sound, MKV and
             // other files, and films with subtitles beside them. Both behind Screenroom's controls.
             if let q = opts["queue"] as? [[String: Any]], ["mpv", "vlc"].contains(q.first?["engine"] as? String ?? "") {

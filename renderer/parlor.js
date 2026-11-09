@@ -949,6 +949,15 @@ window.createParlor = function createParlor(ctx) {
             timeout: 'took too long to open (it will be tried again next scan)',
             unplayable: "can't be played on this phone" };
           box.append(h('p', { class: 'am-hint' }, `Last scan ${ago < 1 ? 'just now' : ago < 60 ? ago + ' min ago' : 'over an hour ago'}: ${plural(sr.songs, 'song')} in ${plural(sr.files, 'file')}, ${sr.read} read afresh${sr.deep ? ' (full rescan)' : ''}.`));
+          // every folder the scan found songs in (to compare with the Files app: a new album that isn't listed here isn't
+          // in Parlor's folder)
+          if (sr.folders && sr.folders.length) {
+            const tidy = (d) => (d === '' ? '(Parlor’s folder itself)' : d.replace(/^\/.*?\/Documents\/?/, ''));
+            box.append(h('details', { class: 'scan-folders' },
+              h('summary', {}, `Folders Parlor looked in (${sr.folders.length}), ${plural(sr.everything || 0, 'file')} in all`),
+              h('ul', { class: 'motion-report' }, sr.folders.map((f) => h('li', {}, h('b', {}, tidy(f.dir)), ` · ${plural(f.n, 'file')}`)))));
+          }
+          if (api.showInFiles) box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: () => api.showInFiles() }, 'Show Parlor’s folder in Files')));
           if (sr.skipped && sr.skipped.length) box.append(h('ul', { class: 'motion-report' }, sr.skipped.slice(0, 30).map((x) =>
             h('li', {}, h('b', {}, `${x.folder} / ${x.file}`), ` ${why[x.why] || x.why}`, x.why === 'unplayable' && /truehd/i.test(x.codec || '') ? h('span', { class: 'mr-d' }, ' · Dolby TrueHD: save it as Dolby Digital Plus (E-AC-3) Atmos instead') : x.codec ? h('span', { class: 'mr-d' }, ` · ${x.codec}`) : null))));
         }
