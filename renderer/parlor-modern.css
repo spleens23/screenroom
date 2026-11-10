@@ -300,6 +300,7 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body.parlor.parlor.parlor .palbum-info h1 { font-size: 24px; margin: 0 0 4px; }
   html body.parlor.parlor.parlor .palbum-info .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
   html body.parlor.parlor.parlor .palbum-info .btns .btn { justify-content: center; padding: 13px 10px; min-height: 48px; white-space: nowrap; }
+  html body.parlor.parlor.parlor .palbum-info .pversion { justify-content: center; margin: 0 0 12px; }
   html body.parlor.parlor.parlor .palbum table, html body.parlor.parlor.parlor .palbum .songs { margin: 22px 0 0; width: 100%; border-left: 0; border-right: 0; border-radius: 0; }
   html body.parlor.parlor.parlor .palbum { padding: 0; margin: 0; }
   html body.parlor.parlor.parlor .palbum tr.srow td { padding-top: 13px; padding-bottom: 13px; }
@@ -631,3 +632,7 @@ html body .motion-btns .btn { white-space: nowrap; flex: 1 1 auto; min-width: 0;
 
 /* an album with discs: the invisible first row that sets the song table's column widths */
 html body.parlor.parlor.parlor table.songs tr.sizer td, table.songs tr.sizer td { height: 0; padding-top: 0 !important; padding-bottom: 0 !important; border: 0 !important; line-height: 0; font-size: 0; background: transparent; }
+
+/* track numbers: room for two digits (and three) after the left margin, never cut to "2…" */
+html body.parlor.parlor.parlor table.songs td.n, html body.parlor.parlor.parlor table.songs th.n,
+html body.parlor.parlor.parlor .palbum table.songs td.n { width: 60px; padding-left: 14px; padding-right: 10px; white-space: nowrap; overflow: visible; text-overflow: clip; text-align: right; font-variant-numeric: tabular-nums; }

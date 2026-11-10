@@ -338,7 +338,7 @@ window.createParlor = function createParlor(ctx) {
       drawAlbum('.pversion-sel');
       ctx.flash(sel.value === 'stereo' ? `${a.title}: Stereo` : `${a.title}: Spatial Audio`);
     } },
-      h('option', { value: 'spatial' }, 'Spatial Audio (Dolby Atmos / surround)'),
+      h('option', { value: 'spatial' }, 'Spatial Audio'),
       h('option', { value: 'stereo' }, 'Stereo'));
     sel.value = a.version;
     return h('label', { class: 'pversion' }, h('span', {}, 'Version'), sel);
