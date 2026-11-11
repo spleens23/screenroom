@@ -460,6 +460,13 @@
 
   // ---- start-up ----------------------------------------------------------------------------------------------
   let ready = null;
+  // The top bar (title, search box, tabs) is fixed: a finger dragged on it, typing a search or not, mustn't scroll the
+  // page under it (iOS would, making the bar seem to slide); taps there still work, and the page itself scrolls as before.
+  document.addEventListener('touchmove', (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('#nav')) e.preventDefault();
+  }, { passive: false });
+
   function boot() {
     if (!ready) {
       ready = (async () => {

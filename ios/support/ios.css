@@ -6,6 +6,8 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 ::-webkit-scrollbar { display: none; }
 /* room for the rounded corners and the home bar */
 #nav { padding-left: max(4%, env(safe-area-inset-left)); padding-right: max(4%, env(safe-area-inset-right)); }
+/* the top bar (title and search box) stays put: a drag on it doesn't scroll or bounce the page under it */
+#nav { touch-action: none; overscroll-behavior: none; }
 /* a little more room to tap */
 .btn, .chip, button { min-height: 40px; }
 .ios-ways { margin: 10px 0 4px; }
