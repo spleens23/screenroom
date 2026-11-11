@@ -45,8 +45,26 @@ final class VideoPlayback: NSObject {
         p.present(from: presenter)
     }
 
+    // the soundtrack playing (for the Spatial Audio badge)
+    private var soundAtmos = false
+    private var soundSurround = false
+    private func soundPicked(_ o: AVMediaSelectionOption, in g: AVMediaSelectionGroup) {
+        let fmt = (item["fmt"] as? [String: Any])?["audio"] as? [String: Any]
+        soundAtmos = (fmt?[String((g.options.firstIndex(of: o) ?? 0) + 1)] as? String) == "atmos"
+        soundSurround = surroundRank(o) >= 2
+        showSound()
+    }
+    @objc private func routeChanged() { DispatchQueue.main.async { [weak self] in self?.showSound() } }
+    private func showSound() {
+        guard !finished else { return }
+        controller?.setSound(atmos: soundAtmos, surround: soundSurround, appleEngine: true)
+    }
+
     private func present(from presenter: UIViewController) {
         prepareFilmAudio()
+        // headphones on or off, Spatial Audio switched on or off in Control Center: the badge follows
+        NotificationCenter.default.addObserver(self, selector: #selector(routeChanged), name: AVAudioSession.routeChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(routeChanged), name: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil)
         controller = PlayerScreen()
         controller.modalPresentationStyle = .fullScreen
         controller.loadViewIfNeeded()
@@ -151,6 +169,7 @@ final class VideoPlayback: NSObject {
             for o in g.options {
                 audio.append(UIAction(title: o.displayName, state: o == cur ? .on : .off) { [weak self] _ in
                     pi.select(o, in: g); self?.controller.poke()
+                    self?.soundPicked(o, in: g)
                 })
             }
         }
@@ -216,7 +235,15 @@ final class VideoPlayback: NSObject {
                     let mine = group.options.filter { matches($0, audioLang) }
                     pick = (mine.isEmpty ? group.options : mine).max { surroundRank($0) < surroundRank($1) }
                 }
-                if let p = pick { pi.select(p, in: group) }
+                if let p = pick {
+                    pi.select(p, in: group)
+                    // which soundtrack it is: Dolby Atmos (from the film's description), surround (Dolby Digital / Plus)
+                    let n = (group.options.firstIndex(of: p) ?? 0) + 1
+                    let fmt = (item["fmt"] as? [String: Any])?["audio"] as? [String: Any]
+                    soundAtmos = (fmt?[String(n)] as? String) == "atmos"
+                    soundSurround = surroundRank(p) >= 2
+                }
+                showSound()
             }
             if let group = try? await asset.loadMediaSelectionGroup(for: .legible) {
                 subGroup = group
@@ -284,6 +311,8 @@ final class VideoPlayback: NSObject {
         rateObserver = nil
         UIApplication.shared.isIdleTimerDisabled = false
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil)
         statusObserver = nil
         player.replaceCurrentItem(with: nil)
         bridge.emit("video-ended", [:])

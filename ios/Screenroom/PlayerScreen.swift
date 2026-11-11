@@ -1,3 +1,4 @@
+import AVFoundation
 import UIKit
 
 /// The player screen: the picture, and Screenroom's controls over it (they fade after a few seconds; a tap
@@ -59,6 +60,7 @@ final class PlayerScreen: UIViewController {
     private let panel = UIView()
     private let titleLabel = UILabel()
     private let subLabel = UILabel()
+    private let soundBadge = BadgeLabel()
     private let elapsed = UILabel()
     private let remaining = UILabel()
     private let slider = UISlider()
@@ -137,8 +139,13 @@ final class PlayerScreen: UIViewController {
         stylePill(nextButton, title: "Next episode")
         nextButton.addAction(UIAction { [weak self] _ in self?.onNext?() }, for: .touchUpInside)
 
-        let titles = UIStackView(arrangedSubviews: [titleLabel, subLabel])
-        titles.axis = .vertical; titles.spacing = 2
+        soundBadge.font = .systemFont(ofSize: 12, weight: .semibold)
+        soundBadge.layer.cornerRadius = 9
+        soundBadge.layer.masksToBounds = true
+        soundBadge.isHidden = true
+        let titles = UIStackView(arrangedSubviews: [titleLabel, subLabel, soundBadge])
+        titles.axis = .vertical; titles.spacing = 2; titles.alignment = .leading
+        titles.setCustomSpacing(8, after: subLabel)
         let bar = UIStackView(arrangedSubviews: [elapsed, slider, remaining])
         bar.spacing = 12; bar.alignment = .center
         let transport = UIStackView(arrangedSubviews: [back, playButton, fwd])
@@ -215,6 +222,30 @@ final class PlayerScreen: UIViewController {
     }
 
     func setHasNext(_ has: Bool) { nextButton.isHidden = !has }
+
+    /// What the soundtrack reaches your ears as: amber when it's Spatial Audio (AirPods, Beats), grey when not.
+    func setSound(atmos: Bool, surround: Bool, appleEngine: Bool) {
+        let (text, spatial) = PlayerScreen.soundText(atmos: atmos, surround: surround, appleEngine: appleEngine)
+        soundBadge.text = text
+        soundBadge.isHidden = text.isEmpty
+        soundBadge.textColor = spatial ? ink : cream
+        soundBadge.backgroundColor = spatial ? amber : edge.withAlphaComponent(0.9)
+        soundBadge.accessibilityLabel = text
+    }
+
+    /// iOS plays sound as Spatial Audio only on headphones that do it (AirPods, Beats) with it switched on; the film's
+    /// own Dolby Atmos reaches them only through Apple's engine (mpv's plays the surround channels under it).
+    static func soundText(atmos: Bool, surround: Bool, appleEngine: Bool) -> (String, Bool) {
+        let spatial = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.isSpatialAudioEnabled }
+        if spatial {
+            if atmos && appleEngine { return ("Spatial Audio · Dolby Atmos", true) }
+            if atmos || surround { return ("Spatial Audio · Surround", true) }
+            return ("Spatial Audio · from Stereo", true)
+        }
+        if atmos { return ("Dolby Atmos · Spatial Audio off", false) }
+        if surround { return ("Surround · Spatial Audio off", false) }
+        return ("Stereo", false)
+    }
 
     func setPlaying(_ playing: Bool) {
         trace("setPlaying(\(playing))")
@@ -306,5 +337,15 @@ final class MenuButton: UIButton {
                                          animator: UIContextMenuInteractionAnimating?) {
         super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
         onClose?()
+    }
+}
+
+/// A small rounded badge with room around its words.
+final class BadgeLabel: UILabel {
+    private let pad = UIEdgeInsets(top: 3, left: 9, bottom: 3, right: 9)
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.inset(by: pad)) }
+    override var intrinsicContentSize: CGSize {
+        let s = super.intrinsicContentSize
+        return CGSize(width: s.width + pad.left + pad.right, height: s.height + pad.top + pad.bottom)
     }
 }

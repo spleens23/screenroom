@@ -51,8 +51,27 @@ final class MPVPlayback: NSObject {
 
     private var item: [String: Any] { queue[index] }
 
+    // the soundtrack playing (for the Spatial Audio badge)
+    private var soundAtmos = false
+    private var soundSurround = false
+    @objc private func routeChanged() { DispatchQueue.main.async { [weak self] in self?.showSound() } }
+    private func showSound() {
+        guard !finished else { return }
+        controller?.setSound(atmos: soundAtmos, surround: soundSurround, appleEngine: false)
+    }
+    /// Which soundtrack is playing: Dolby Atmos (from the film's description), and how many channels it has.
+    private func readSound() {
+        let aid = Int(getString("aid") ?? "") ?? 0
+        let fmt = (item["fmt"] as? [String: Any])?["audio"] as? [String: Any]
+        soundAtmos = aid > 0 && (fmt?[String(aid)] as? String) == "atmos"
+        soundSurround = (Int(getString("current-tracks/audio/demux-channel-count") ?? "") ?? 0) > 2
+        showSound()
+    }
+
     private func present(from presenter: UIViewController) {
         prepareFilmAudio()
+        NotificationCenter.default.addObserver(self, selector: #selector(routeChanged), name: AVAudioSession.routeChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(routeChanged), name: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil)
         controller = PlayerScreen()
         controller.modalPresentationStyle = .fullScreen
         controller.loadViewIfNeeded()
@@ -190,6 +209,7 @@ final class MPVPlayback: NSObject {
                 guard let self, !self.finished else { return }
                 self.controller.setPlaying(!self.paused)
                 self.updateNowPlaying()
+                self.readSound()
             }
         case MPV_EVENT_END_FILE:
             guard let end = UnsafeMutablePointer<mpv_event_end_file>(OpaquePointer(e.data))?.pointee else { return }
@@ -308,6 +328,7 @@ final class MPVPlayback: NSObject {
         let audio: [UIAction] = all.filter { $0.type == "audio" }.map { t in
             UIAction(title: t.label, state: t.selected ? .on : .off) { [weak self] _ in
                 self?.setString("aid", String(t.id)); self?.controller.poke()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.readSound() }
             }
         }
         let texts = all.filter { $0.type == "sub" }
@@ -362,6 +383,8 @@ final class MPVPlayback: NSObject {
         finished = true
         reportProgress(done: false)
         progressTimer?.invalidate(); progressTimer = nil
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification, object: nil)
         UIApplication.shared.isIdleTimerDisabled = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         bridge.emit("video-ended", [:])
