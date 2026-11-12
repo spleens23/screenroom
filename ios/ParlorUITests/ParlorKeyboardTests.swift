@@ -20,8 +20,11 @@ final class ParlorKeyboardTests: XCTestCase {
         sleep(12) // the library
         let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         if sb.alerts.firstMatch.waitForExistence(timeout: 1) { sb.alerts.firstMatch.buttons.firstMatch.tap() }
-        // the page has the keyboard (a click on an empty bit of it, as on a Mac)
-        web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)).tap()
+        // give the page the keyboard: the simulator only sends keys to a web view that's taken focus, which a
+        // click on a text box does (a click on an empty bit of the page doesn't count there)
+        let box = web.searchFields.firstMatch.exists ? web.searchFields.firstMatch : web.textFields.firstMatch
+        if box.waitForExistence(timeout: 5) { box.tap() } else { web.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.06)).tap() }
+        sleep(1)
         save("1-home")
 
         app.typeKey("f", modifierFlags: .command)
