@@ -12,8 +12,16 @@ final class ParlorKeyboardTests: XCTestCase {
 
     func testKeyboard() {
         let app = XCUIApplication()
-        // (the page notes what's playing every second, for the build workflow to read afterwards)
-        app.launchArguments = ["--ui-script", "setInterval(() => api.parlorState().then(p => console.error('kb player: ' + JSON.stringify(p.player && p.player.track ? { title: p.player.track.title, paused: p.player.paused } : null) + ' focus=' + (document.activeElement && (document.activeElement.title || document.activeElement.className || document.activeElement.tagName)))), 1000)"]
+        // (the page shows, in a strip at the bottom, the last few keys it got, where the highlight is and what's
+        // playing, so the screenshots say what happened; it also notes them for the build workflow)
+        app.launchArguments = ["--ui-script", """
+            (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#000c;color:#fff;font:13px monospace;padding:6px 10px;border-radius:8px;white-space:pre;pointer-events:none';
+              document.body.appendChild(d); const keys = [];
+              const who = (el) => el ? (el.id ? '#' + el.id : '') + (el.tagName || '') + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ').slice(0, 2).join('.') : '') + (el.title ? ' "' + el.title + '"' : '') : '-';
+              addEventListener('keydown', (e) => { keys.push((e.metaKey ? '⌘' : '') + (e.ctrlKey ? '^' : '') + JSON.stringify(e.key) + '/' + e.keyCode + (e.isComposing ? ' composing' : '') + ' on ' + who(e.target)); keys.splice(0, keys.length - 6); }, true);
+              setInterval(() => api.parlorState().then((p) => { const line = 'player: ' + JSON.stringify(p.player && p.player.track ? { title: p.player.track.title, paused: p.player.paused } : null) + '  focus: ' + who(document.activeElement);
+                d.textContent = keys.join('\\n') + '\\n' + line; console.error('kb ' + line + ' | ' + keys.slice(-1)[0]); }), 500); })()
+            """]
         app.launch()
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 40), "Parlor's page didn't open")
@@ -35,6 +43,7 @@ final class ParlorKeyboardTests: XCTestCase {
 
         app.typeKey(.return, modifierFlags: [])   // from the search box: to the first result
         sleep(1)
+        save("2b-result")
         app.typeKey(.return, modifierFlags: [])   // open it
         sleep(2)
         save("3-album")
