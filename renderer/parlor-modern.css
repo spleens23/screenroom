@@ -690,10 +690,17 @@ html body.parlor .fr-setup .fr-name { max-width: 420px; margin: 14px 0 0; }
 html body.parlor .pnote.small { font-size: 13px; opacity: .8; }
 html body.parlor .fr-foot { padding: 30px var(--m-gut, 4%) 10px; }
 html body .poverlay.fr-edit .poverlay-card { width: min(620px, 94vw); max-height: 88vh; overflow-y: auto; }
-html body .poverlay .fr-pics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-html body .poverlay .fr-pics .pic { padding: 0; border: 2px solid transparent; border-radius: 50%; background: none; cursor: pointer; }
-html body .poverlay .fr-pics .pic.on { border-color: var(--m-amber, #3CC4C4); }
-html body .poverlay .fr-pics .avatar { width: 46px; height: 46px; border-radius: 50%; }
+/* the pictures to pick from: round, the ring an even circle around each (the button is exactly the picture's size) */
+html body .fr-pics { display: flex !important; flex-wrap: wrap; gap: 10px; margin: 6px 0 12px; }
+html body .fr-pics .pic { box-sizing: border-box; flex: 0 0 auto; width: 56px; height: 56px; padding: 3px; margin: 0; border: 3px solid transparent; border-radius: 50%;
+  background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 0; color: inherit; }
+html body .fr-pics .pic.on { border-color: var(--m-amber, #3CC4C4); }
+html body .fr-pics .pic:focus-visible { outline: none; border-color: var(--m-amber2, #0D7A7B); }
+html body .fr-pics .pic .avatar { width: 44px !important; height: 44px !important; aspect-ratio: auto; border-radius: 50%; font-size: 19px; line-height: 44px; }
+html body .fr-pics .pic .avatar.char, html body .fr-pics .pic .avatar.photo { line-height: 0; }
+html body .fr-pics .pic-add .pic-add-face { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border: 2px dashed currentColor; background: transparent;
+  color: var(--m-muted, #6a635b); line-height: 1; }
+html body .fr-pics .pic-add .pic-add-ico { font-size: 18px; } html body .fr-pics .pic-add small { font-size: 9.5px; font-weight: 600; }
 html body .poverlay .fr-h2 { margin-top: 18px !important; }
 html body .poverlay .fr-q { width: 100%; margin: 12px 0 8px; }
 html body .poverlay .fr-pick { max-height: 32vh; }
@@ -709,7 +716,10 @@ html body .poverlay .fr-why { width: 100%; min-height: 80px; resize: vertical; f
   html body.parlor.parlor.parlor #me-btn { width: 40px; height: 40px; order: 1; }
   html body.parlor .fr-head { padding: 10px 20px 4px; gap: 16px; }
   html body.parlor .fr-me-pic .avatar.big { width: 88px; height: 88px; font-size: 38px; }
-  html body.parlor .fr-sec, html body.parlor .fr-setup, html body.parlor .fr-foot { padding-left: 20px; padding-right: 20px; }
+  html body.parlor.parlor.parlor .fr-sec, html body.parlor.parlor.parlor section.row.fr-sec, html body.parlor .fr-setup, html body.parlor .fr-foot { padding-left: 20px; padding-right: 20px; }
+  html body.parlor.parlor.parlor section.row.fr-sec h2 { padding-left: 0; padding-right: 0; }
+  html body.parlor.parlor.parlor .fr-sec .pnote { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
+  html body.parlor.parlor.parlor .fr-addrow, html body.parlor.parlor.parlor .fr-show { max-width: none; }
   html body.parlor .fr-grid { grid-template-columns: 1fr; }
 }
 html body .ppage input.pname-input, html body .poverlay textarea.pname-input { box-sizing: border-box; background: #fff; color: #1e1a16; -webkit-text-fill-color: currentColor; border: 1px solid #c9c3bb;
@@ -719,3 +729,69 @@ html body .ppage input.pname-input:focus, html body .poverlay textarea.pname-inp
 html body.parlor .fr-setup .btns { margin-top: 14px; padding-left: 0; }
 html body.parlor .fr-sec { margin-top: 26px !important; }
 html body.parlor .fr-sec h2 { margin-bottom: 10px !important; }
+html body.parlor .fr-sec .pnote, html body.parlor .fr-setup .pnote { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
+
+/* ==== Encore, dark (Settings › Appearance: Dark, or Automatic with the device in dark mode) =====================
+   The same calm look in warm charcoal: cream text, the accent colour lifted a little so it reads on the dark. */
+body.mat.parlor.pdark {
+  --m-ink: #141210; --m-panel: #1E1B18; --m-panel2: #282420; --m-line: #37322C; --m-edge: #4A443D;
+  --m-cream: #F2ECE4; --m-text: #E6DFD6; --m-muted: #B3AA9F; --m-dim: #918980;
+  --m-amber: var(--acc, #169C9C); --m-amber2: color-mix(in srgb, var(--acc, #169C9C) 68%, #fff); --m-on-amber: #FFFFFF;
+  --p-bg: #141210; --p-panel: #1E1B18; --p-line: #37322C; --p-text: #F2ECE4; --p-muted: #A59C91; --p-stripe: #1A1815;
+  --bg: #141210; --bg2: #1E1B18; --fg: #F2ECE4; --muted: #A59C91;
+  background: #141210; color: #F2ECE4;
+}
+html:has(> body.mat.parlor.pdark) { background: #141210; }
+body.parlor.pdark[data-accent="graphite"] { --acc: #8E8A84; }
+body.mat.parlor.pdark #nav, body.mat.parlor.pdark #nav.solid { background: linear-gradient(#2a2622, #1d1a17); border-bottom: 1px solid #000; box-shadow: inset 0 -1px 0 rgba(255,255,255,.04); }
+body.mat.parlor.pdark #nav .brand { color: #F2ECE4; text-shadow: none; }
+body.mat.parlor.pdark #nav #pnav { background: rgba(0,0,0,.35); box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+body.mat.parlor.pdark #pnav a { color: #c9c1b7; }
+body.mat.parlor.pdark #pnav a.active { background: #3a352f; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+body.mat.parlor.pdark #search { background: #0f0d0b; color: #F2ECE4; border: 1px solid #45403a; box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+body.mat.parlor.pdark #search::placeholder { color: #8f877d; }
+body.mat.parlor.pdark #settings-btn, body.mat.parlor.pdark #parlor-btn { background: linear-gradient(#3a352f, #2a2622); color: #e6dfd6; border: 1px solid #4a443d; box-shadow: none; }
+body.mat.parlor.pdark .btn.secondary { color: #F2ECE4; background: linear-gradient(#34302b, #2a2622); box-shadow: inset 0 0 0 1px #4a443d; }
+body.mat.parlor.pdark .btn.primary { background: linear-gradient(color-mix(in srgb, var(--m-amber) 88%, #fff), var(--m-amber)); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+body.mat.parlor.pdark .row h2, body.mat.parlor.pdark .page-title, body.mat.parlor.pdark .phead h1 { color: #F2ECE4; }
+body.mat.parlor.pdark .pcard-t { color: #F2ECE4; } body.mat.parlor.pdark .pcard-s, body.mat.parlor.pdark .pmeta { color: #a59c91; }
+body.mat.parlor.pdark .pcard .cover { box-shadow: 0 6px 18px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4); }
+body.mat.parlor.pdark .cover-blank { background: linear-gradient(135deg, #3a352f, #24211d); color: #a59c91; }
+body.mat.parlor.pdark table.songs, body.mat.parlor.pdark .modal-card.pmodal table.songs { background: #1a1815; border-color: #37322c; color: #F2ECE4; }
+body.mat.parlor.pdark table.songs th { background: linear-gradient(#2c2824, #221f1b); color: #b3aa9f; border-color: #37322c; text-shadow: none; }
+body.mat.parlor.pdark table.songs td { border-color: #2c2824; }
+body.mat.parlor.pdark table.songs tbody tr:nth-child(even), body.mat.parlor.pdark .modal-card.pmodal table.songs tbody tr:nth-child(even) { background: #1f1c19; }
+body.mat.parlor.pdark table.songs .t, body.mat.parlor.pdark table.songs .n, body.mat.parlor.pdark table.songs .g, body.mat.parlor.pdark table.songs .nm-s { color: #9d948a; }
+body.mat.parlor.pdark .srow:hover td { background: color-mix(in srgb, var(--m-amber) 16%, transparent); }
+body.mat.parlor.pdark .modal-card.pmodal { background: #1c1916; color: #F2ECE4; border-color: #37322c; }
+body.mat.parlor.pdark .modal-card.pmodal .close { background: #34302b; color: #e6dfd6; }
+body.mat.parlor.pdark .modal-card.pmodal .palbum-info h1 { color: #F2ECE4; }
+body.mat.parlor.pdark .modal-card.pmodal .palbum-info, body.mat.parlor.pdark .modal-card.pmodal .pmeta { color: #b3aa9f; }
+body.mat.parlor.pdark #npbar { background: linear-gradient(#2a2622, #1f1c19); border-top: 1px solid #000; box-shadow: 0 -2px 10px rgba(0,0,0,.4); color: #F2ECE4; }
+body.mat.parlor.pdark .lcd { background: linear-gradient(#25221e, #1b1916); border: 1px solid #45403a; color: #F2ECE4; box-shadow: inset 0 1px 3px rgba(0,0,0,.5); }
+body.mat.parlor.pdark .npb { background: linear-gradient(#3a352f, #2a2622); border: 1px solid #4a443d; color: #F2ECE4; }
+body.mat.parlor.pdark .npb.big { background: linear-gradient(color-mix(in srgb, var(--m-amber) 88%, #fff), var(--m-amber)); border-color: var(--m-amber); color: #fff; }
+body.mat.parlor.pdark .poverlay-card, body.mat.parlor.pdark #settings .settings-card { background: #1e1b18; color: #F2ECE4; }
+body.mat.parlor.pdark .pempty, body.mat.parlor.pdark .pempty h1 { color: #F2ECE4; }
+body.mat.parlor.pdark .pempty p, body.mat.parlor.pdark .empty, body.mat.parlor.pdark .am-hint, body.mat.parlor.pdark .hint, body.mat.parlor.pdark .muted { color: #b3aa9f; }
+@media (max-width: 600px) {
+  html body.mat.parlor.pdark.parlor.parlor #nav { background: linear-gradient(#24211d, #1a1815); border-bottom: 1px solid #000; box-shadow: none; }
+  html body.mat.parlor.pdark.parlor.parlor > #pnav { background: rgba(26,24,21,.94); border-top: 1px solid #000; }
+  html body.mat.parlor.pdark.parlor.parlor > #pnav a { color: #9d948a; }
+  html body.mat.parlor.pdark.parlor.parlor > #pnav a.active { color: var(--m-amber2); }
+  html body.mat.parlor.pdark.parlor.parlor #npbar { background: rgba(44,40,35,.97); color: #F2ECE4; border: 1px solid #000; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  html body.mat.parlor.pdark.parlor.parlor #settings-btn { background: linear-gradient(#3a352f, #2a2622); }
+}
+html body.parlor.ios-app.mat.pdark #modal:not([hidden])::before { background: rgba(20,18,16,.86); }
+html body.pdark .pmenu-card { background: rgba(40,36,32,.97); color: #F2ECE4; box-shadow: 0 10px 34px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
+html body.pdark #me-btn .me-ico { color: #e6dfd6; }
+html body.pdark #me-btn .me-dot { box-shadow: 0 0 0 2px #1d1a17; }
+html body.parlor.pdark .fr-code { color: #b3aa9f; } html body.parlor.pdark .fr-code b { color: #F2ECE4; }
+html body.parlor.pdark .fr-row { border-bottom-color: rgba(255,255,255,.08); }
+html body.parlor.pdark .fr-card, html body.parlor.pdark .fr-show { background: #1e1b18; border-color: #37322c; }
+html body.pdark .ppage input.pname-input, html body.pdark .poverlay input.pname-input, html body.pdark .poverlay textarea.pname-input { background: #0f0d0b; color: #F2ECE4; border-color: #45403a; }
+html body.pdark .ppage input.pname-input::placeholder, html body.pdark .poverlay input.pname-input::placeholder, html body.pdark .poverlay textarea.pname-input::placeholder { color: #8f877d; -webkit-text-fill-color: #8f877d; }
+html body.pdark .accent-swatches .swatch { border-color: rgba(30,27,24,.9); box-shadow: 0 0 0 1px rgba(255,255,255,.2); }
+html body.parlor .fr-setup .btn, html body.parlor .fr-addrow .btn { white-space: nowrap; flex: 0 0 auto; }
+html body.parlor .fr-addrow input { min-width: 0; text-transform: none !important; letter-spacing: 0 !important; }
+html body.parlor .fr-addrow input:not(:placeholder-shown) { text-transform: uppercase !important; letter-spacing: 1px !important; }

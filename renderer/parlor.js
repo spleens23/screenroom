@@ -351,7 +351,45 @@ window.createParlor = function createParlor(ctx) {
     try { took(await fr('GET', '/v1/me')); } finally { FR.loading = false; }
     if (view === 'profile') render();
   }
-  const youAvatar = (p, big) => ctx.avatar({ name: (p && p.name) || '?', color: (p && p.color) || '#2f80ed', avatar: (p && p.avatar) || '' }, big);
+  const youAvatar = (p, big) => ctx.avatar({ name: (p && p.name) || '?', color: (p && p.color) || '#2f80ed', avatar: (p && p.avatar) || '', photo: (p && p.photo) || '' }, big);
+  /** A picture of your own: the phone's or computer's picture chooser, then a small square copy (a data: URL), or '' */
+  function choosePhoto() {
+    return new Promise((resolve) => {
+      const inp = h('input', { type: 'file', accept: 'image/*', style: 'position:fixed;left:-9999px;opacity:0' });
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; inp.remove(); resolve(v); };
+      inp.addEventListener('change', async () => {
+        const f = inp.files && inp.files[0];
+        if (!f) return finish('');
+        try {
+          // (read as a data: URL: the page's rules allow pictures from those, not from blob: addresses)
+          const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); });
+          const img = new Image(); img.src = url; await img.decode();
+          const c = document.createElement('canvas'); c.width = c.height = 256;
+          const s = Math.min(img.naturalWidth, img.naturalHeight);
+          c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 256, 256);
+          let q = 0.82, out = c.toDataURL('image/jpeg', q);
+          while (out.length > 85000 && q > 0.4) { q -= 0.12; out = c.toDataURL('image/jpeg', q); }
+          finish(out);
+        } catch { ctx.flash('That picture couldn’t be opened. Try another one.'); finish(''); }
+      });
+      inp.addEventListener('cancel', () => finish(''));
+      document.body.append(inp);
+      inp.click();
+    });
+  }
+  /** The pictures to pick from: your initial (when there's a name), your photo, the characters, and "+ Photo" */
+  function picChoices(d, name, redraw) {
+    const pic = (on, title, onclick, face) => h('button', { class: 'pic' + (on ? ' on' : ''), title, 'aria-label': title, 'aria-pressed': on ? 'true' : 'false', onclick }, face);
+    return [
+      name ? pic(!d.avatar, 'Initial', () => { d.avatar = ''; redraw(); }, ctx.avatar({ name, color: d.color })) : null,
+      d.photo ? pic(d.avatar === 'photo', 'Your photo', () => { d.avatar = 'photo'; redraw(); }, ctx.avatar({ name: '', color: d.color, avatar: 'photo', photo: d.photo })) : null,
+      ...(window.Avatars ? window.Avatars.list : []).map((c) => pic(d.avatar === 'char:' + c.id, c.name, () => { d.avatar = 'char:' + c.id; redraw(); },
+        ctx.avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))),
+      h('button', { class: 'pic pic-add', title: d.photo ? 'Choose a different photo' : 'Use a photo of your own', 'aria-label': d.photo ? 'Choose a different photo' : 'Use a photo of your own',
+        onclick: async () => { const ph = await choosePhoto(); if (ph) { d.photo = ph; d.avatar = 'photo'; redraw(); } } },
+        h('span', { class: 'avatar pic-add-face' }, h('span', { class: 'pic-add-ico', 'aria-hidden': 'true' }, '+'), h('small', {}, 'Photo')))];
+  }
 
   // the round button in the top bar: your picture (a dot when someone wants to be friends)
   let meBtn = null;
@@ -390,12 +428,9 @@ window.createParlor = function createParlor(ctx) {
 
   // Your picture (tap it): the picture and colour, and the song or album your friends see
   function editMe() {
-    const d = { avatar: FR.me.avatar || '', color: FR.me.color || '#2f80ed' };
+    const d = { avatar: FR.me.avatar || '', color: FR.me.color || '#2f80ed', photo: FR.me.photo || '' };
     const pics = h('div', { class: 'pics fr-pics' }), sw = h('div', { class: 'swatches' });
-    const drawPics = () => pics.replaceChildren(
-      h('button', { class: 'pic' + (!d.avatar ? ' on' : ''), title: 'Initial', onclick: () => { d.avatar = ''; drawPics(); } }, ctx.avatar({ name: FR.me.name, color: d.color })),
-      ...(window.Avatars ? window.Avatars.list : []).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => { d.avatar = 'char:' + c.id; drawPics(); } },
-        ctx.avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))));
+    const drawPics = () => pics.replaceChildren(...picChoices(d, FR.me.name, drawPics));
     const drawSw = () => sw.replaceChildren(...FRIEND_COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPics(); } })));
     drawPics(); drawSw();
     // what to show: search the library
@@ -424,7 +459,7 @@ window.createParlor = function createParlor(ctx) {
       h('div', { class: 'btns' },
         h('button', { class: 'btn primary', onclick: async () => {
           const sc = chosen ? { kind: chosen.kind, title: chosen.title, artist: chosen.artist, album: chosen.album || '', year: chosen.year || null, art: chosen.art || '' } : null;
-          const ok = took(await fr('PUT', '/v1/me', { avatar: d.avatar, color: d.color, showcase: sc }));
+          const ok = took(await fr('PUT', '/v1/me', { avatar: d.avatar, color: d.color, showcase: sc, ...(d.avatar === 'photo' ? { photo: d.photo } : {}) }));
           if (!ok) { ctx.flash(FR.error); return; }
           closeOverlay(); render();
         } }, 'Save'),
@@ -474,16 +509,15 @@ window.createParlor = function createParlor(ctx) {
     if (!friendsOn()) return page('Profile', h('p', { class: 'pnote' }, 'Friends aren’t switched on in this version of Parlor yet.'));
     if (!acct()) {
       // set up a friend profile
-      const d = { avatar: '', color: FRIEND_COLORS[hue(String(Date.now())) % FRIEND_COLORS.length] };
+      const d = { avatar: '', photo: '', color: FRIEND_COLORS[hue(String(Date.now())) % FRIEND_COLORS.length] };
       const name = h('input', { type: 'text', class: 'pname-input fr-name', maxlength: '40', placeholder: 'Your name (what friends see)', autocomplete: 'off' });
       const pics = h('div', { class: 'pics fr-pics' });
-      const drawPics = () => pics.replaceChildren(...(window.Avatars ? window.Avatars.list : []).slice(0, 12).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => { d.avatar = 'char:' + c.id; drawPics(); } },
-        ctx.avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))));
+      const drawPics = () => pics.replaceChildren(...picChoices(d, '', drawPics));
       drawPics();
       const go1 = h('button', { class: 'btn primary', onclick: async () => {
         if (!name.value.trim()) { name.focus(); ctx.flash('Give your profile a name.'); return; }
         go1.disabled = true;
-        const r = await fr('POST', '/v1/register', { name: name.value.trim(), avatar: d.avatar, color: d.color });
+        const r = await fr('POST', '/v1/register', { name: name.value.trim(), avatar: d.avatar, color: d.color, ...(d.avatar === 'photo' ? { photo: d.photo } : {}) });
         go1.disabled = false;
         if (!r.ok) { ctx.flash(r.error); return; }
         await saveAcct({ id: r.id, token: r.token });
@@ -499,7 +533,7 @@ window.createParlor = function createParlor(ctx) {
       return page('Profile', h('p', { class: 'pnote' }, FR.error || 'Loading your friends…'));
     }
     const me = FR.me;
-    const add = h('input', { type: 'text', class: 'pname-input fr-add', maxlength: '12', placeholder: 'Friend code, like 7KQ2-M9XD', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false' });
+    const add = h('input', { type: 'text', class: 'pname-input fr-add', maxlength: '12', placeholder: 'Their code, like 7KQ2-M9XD', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false' });
     const doAdd = async () => {
       if (!add.value.trim()) { add.focus(); return; }
       const ok = took(await fr('POST', '/v1/friends', { code: add.value }));
@@ -880,7 +914,7 @@ window.createParlor = function createParlor(ctx) {
   // ---- playing -----------------------------------------------------------------------------------------
   let lastPlay = { key: '', at: 0 };
   // the phone's clock and battery: white over Now Playing (dark), dark over the light pages
-  const statusBar = () => { if (api.setStatusBar) api.setStatusBar(fullOpen ? 'light' : 'dark'); };
+  const statusBar = () => { if (api.setStatusBar) api.setStatusBar(fullOpen || (ctx.isDark && ctx.isDark()) ? 'light' : 'dark'); };
   let openOnPlay = null; // the song whose Now Playing opens as soon as it starts (touch screens)
   async function playIds(ids, start, context) {
     // a double-click on a song is one request, not two
@@ -1384,6 +1418,7 @@ window.createParlor = function createParlor(ctx) {
   return {
     render,
     go,
+    statusBar,
     reload: async () => { P = await api.parlorState(); drawBar(true); },
     /** Back button: close the top thing; false when there's nothing left (then app.js leaves the Parlor). */
     back() {

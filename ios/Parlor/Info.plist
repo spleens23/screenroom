@@ -55,6 +55,8 @@
 		</dict>
 	</array>
 	<!-- Playing on Sonos speakers: finding them on the Wi-Fi, and handing them the songs. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo for the picture your Parlor friends see.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Parlor looks for Sonos speakers on your Wi-Fi and plays your music on them.</string>
 	<key>NSBonjourServices</key>

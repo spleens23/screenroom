@@ -15,6 +15,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -24,6 +25,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -70,6 +72,15 @@ class MainActivity : Activity() {
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean { android.util.Log.i("Parlor", "page: ${m.message()}"); return true }
+            // a picture chosen on the page (a profile photo): the phone's own photo picker
+            override fun onShowFileChooser(view: WebView, cb: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                val i = Intent(Intent.ACTION_GET_CONTENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "image/*" }
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    val r = pick(i)
+                    cb.onReceiveValue(r?.data?.let { arrayOf(it) })
+                }
+                return true
+            }
         }
         setContentView(web)
         web.loadUrl("https://$HOST/web/renderer/index.html")

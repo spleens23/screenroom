@@ -1,18 +1,19 @@
 // Parlor's friends service (a Cloudflare Worker, with Workers KV for storage).
 //
-// Each person who sets up a friend profile in Parlor gets an id, a secret token (kept by the app; only its hash is
+// Each person who sets up a friend profile in Parlor (a name; a picture: a character or a small photo of their own)
+// gets an id, a secret token (kept by the app; only its hash is
 // stored here) and a friend code like 7KQ2-M9XD. Giving someone your code lets them send you a friend request;
 // once you accept, each of you sees the other's name, picture and the song or album they're showing.
 // People can remove or block a friend, report one, get a new code, and delete their profile.
 //
 // Storage (KV namespace FRIENDS):
-//   user:<id>   { id, th, code, name, avatar, color, showcase, friends[], incoming[], outgoing[], blocked[], created, updated }
+//   user:<id>   { id, th, code, name, avatar, photo, color, showcase, friends[], incoming[], outgoing[], blocked[], created, updated }
 //   code:<CODE> <id>
 //   report:<time>:<rand>  { by, about, reason, at, name, showcase }
 //   rl:<ip>:<hour>  how many profiles were made from one address this hour (a little rate limit)
 
 const CODE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // (no 0/O, 1/I)
-const MAX_FRIENDS = 300, MAX_PENDING = 100, MAX_ART = 90_000, MAX_NAME = 40;
+const MAX_FRIENDS = 300, MAX_PENDING = 100, MAX_ART = 90_000, MAX_PHOTO = 90_000, MAX_NAME = 40;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -32,7 +33,9 @@ const fmtCode = (c) => (c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : c);
 
 const clean = (s, max) => String(s || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, max);
 const cleanColor = (c) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : '#2f80ed');
-const cleanAvatar = (a) => (/^char:[a-z0-9-]{1,30}$/.test(a || '') ? a : '');
+const cleanAvatar = (a) => (/^char:[a-z0-9-]{1,30}$/.test(a || '') || a === 'photo' ? a : '');
+// a picture of their own: a small square JPEG (the app shrinks it to 256 × 256 first)
+const cleanPhoto = (p) => (typeof p === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(p) && p.length <= MAX_PHOTO ? p : '');
 function cleanShowcase(s) {
   if (!s || typeof s !== 'object') return null;
   const kind = s.kind === 'song' ? 'song' : 'album';
@@ -44,7 +47,7 @@ function cleanShowcase(s) {
 async function getUser(env, id) { if (!id) return null; const v = await env.FRIENDS.get('user:' + id); return v ? JSON.parse(v) : null; }
 const putUser = (env, u) => { u.updated = Date.now(); return env.FRIENDS.put('user:' + u.id, JSON.stringify(u)); };
 /** What a friend (or someone with a request) sees of a person */
-const pub = (u) => ({ id: u.id, name: u.name, avatar: u.avatar, color: u.color, showcase: u.showcase || null, updated: u.updated });
+const pub = (u) => ({ id: u.id, name: u.name, avatar: u.avatar, photo: u.avatar === 'photo' ? u.photo || '' : '', color: u.color, showcase: u.showcase || null, updated: u.updated });
 const without = (list, id) => (list || []).filter((x) => x !== id);
 
 async function auth(req, env) {
@@ -57,7 +60,7 @@ async function auth(req, env) {
 async function me(env, u) {
   const load = async (ids) => (await Promise.all((ids || []).map((id) => getUser(env, id)))).filter(Boolean);
   const [friends, incoming, outgoing] = await Promise.all([load(u.friends), load(u.incoming), load(u.outgoing)]);
-  return json({ ok: true, me: { ...pub(u), code: u.code }, friends: friends.map(pub), incoming: incoming.map(pub), outgoing: outgoing.map((x) => ({ id: x.id, name: x.name, avatar: x.avatar, color: x.color })) });
+  return json({ ok: true, me: { ...pub(u), code: u.code }, friends: friends.map(pub), incoming: incoming.map(pub), outgoing: outgoing.map((x) => ({ id: x.id, name: x.name, avatar: x.avatar, photo: x.avatar === 'photo' ? x.photo || '' : '', color: x.color })) });
 }
 
 export default {
@@ -86,7 +89,8 @@ export default {
         const id = hex(rand(8)), secret = hex(rand(32));
         let code = newCode();
         for (let i = 0; i < 5 && (await env.FRIENDS.get('code:' + normCode(code))); i++) code = newCode();
-        const u = { id, th: await sha(secret), code, name, avatar: cleanAvatar(body.avatar), color: cleanColor(body.color), showcase: null,
+        const photo = cleanPhoto(body.photo), avatar = cleanAvatar(body.avatar);
+        const u = { id, th: await sha(secret), code, name, avatar: avatar === 'photo' && !photo ? '' : avatar, photo, color: cleanColor(body.color), showcase: null,
           friends: [], incoming: [], outgoing: [], blocked: [], created: Date.now() };
         await env.FRIENDS.put('code:' + normCode(code), id);
         await putUser(env, u);
@@ -99,7 +103,9 @@ export default {
       if (path === '/v1/me' && req.method === 'GET') return me(env, u);
       if (path === '/v1/me' && req.method === 'PUT') {
         if ('name' in body) { const nm = clean(body.name, MAX_NAME); if (!nm) return fail(400, 'Your name can’t be empty.'); u.name = nm; }
+        if ('photo' in body) u.photo = cleanPhoto(body.photo);
         if ('avatar' in body) u.avatar = cleanAvatar(body.avatar);
+        if (u.avatar === 'photo' && !u.photo) u.avatar = '';
         if ('color' in body) u.color = cleanColor(body.color);
         if ('showcase' in body) u.showcase = cleanShowcase(body.showcase);
         await putUser(env, u);
@@ -167,7 +173,7 @@ export default {
         }
         if (action === 'report' && req.method === 'POST') {
           await env.FRIENDS.put(`report:${Date.now()}:${hex(rand(4))}`, JSON.stringify({ by: u.id, about: id, reason: clean(body.reason, 500), at: Date.now(),
-            name: o ? o.name : '', showcase: o && o.showcase ? { ...o.showcase, art: o.showcase.art ? '(picture)' : '' } : null }));
+            name: o ? o.name : '', photo: o && o.avatar === 'photo' ? o.photo || '' : '', showcase: o && o.showcase ? { ...o.showcase, art: o.showcase.art ? '(picture)' : '' } : null }));
           return json({ ok: true });
         }
       }

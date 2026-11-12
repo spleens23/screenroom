@@ -26,6 +26,19 @@
   if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent());
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
+  // Parlor light or dark: following the phone's or computer's own setting unless one's been picked here
+  const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  const getAppearance = () => { try { return localStorage.getItem('parlor-appearance') || 'auto'; } catch { return 'auto'; } };
+  const isDark = () => { const a = getAppearance(); return a === 'dark' || (a === 'auto' && !!(darkMQ && darkMQ.matches)); };
+  const applyAppearance = () => {
+    if (!document.body) return;
+    const dark = isDark();
+    document.body.classList.toggle('pdark', dark);
+    if (EDITION === 'music') document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    if (parlorUI && parlorUI.statusBar) parlorUI.statusBar();
+  };
+  if (document.body) applyAppearance(); else document.addEventListener('DOMContentLoaded', () => applyAppearance());
+  if (darkMQ) (darkMQ.addEventListener ? darkMQ.addEventListener('change', applyAppearance) : darkMQ.addListener(applyAppearance));
 
   if (navigator.platform.includes('Mac')) document.body.classList.add('mac');
 
@@ -1864,7 +1877,7 @@
   /** A profile's picture: their photo, a character on their colour, or their initial. */
   function avatar(p, big) {
     const cls = 'avatar' + (big ? ' big' : '');
-    if (p.avatar === 'photo' && p.photo) return h('span', { class: cls + ' photo', style: `background:${p.color || '#555'}` }, h('img', { src: fileUrl(p.photo), alt: '' }));
+    if (p.avatar === 'photo' && p.photo) return h('span', { class: cls + ' photo', style: `background:${p.color || '#555'}` }, h('img', { src: /^data:image\//.test(p.photo) ? p.photo : fileUrl(p.photo), alt: '' }));
     if (p.avatar && p.avatar.startsWith('char:') && window.Avatars) {
       const el = h('span', { class: cls + ' char', style: `background:${p.color || '#555'}` });
       el.innerHTML = window.Avatars.svg(p.avatar.slice(5));
@@ -2062,7 +2075,10 @@
     return h('div', {},
       h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The colour of the buttons and highlights' : 'The colour of the buttons, highlights and the playing song, for films and music'}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
-          style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))));
+          style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))),
+      h('label', { class: 'row-set' }, h('span', {}, 'Appearance', h('small', {}, EDITION === 'music' ? 'Light, dark, or the same as this device.' : 'For the music side: light, dark, or the same as this device.')),
+        h('select', { class: 'dev-select', 'data-key': 'appearance', onchange: (e) => { try { localStorage.setItem('parlor-appearance', e.target.value); } catch {} applyAppearance(); } },
+          [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: getAppearance() === v }, l)))));
   }
 
   function toggle(label, hint, key) {
@@ -2864,6 +2880,7 @@
       isTvBox: () => !!S.appliance,
       // Parlor as an app of its own (iPhone, iPad, Android, Mac, Windows), not the music side of the TV box
       standalone: EDITION === 'music',
+      isDark: () => isDark(),
       // settings kept by the app (the friend profile's key lives there)
       config: () => (S && S.config) || {},
       setConfig: async (patch) => { S = await api.setConfig(patch); return S.config; },
