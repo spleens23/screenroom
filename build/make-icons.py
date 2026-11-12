@@ -88,30 +88,35 @@ def tile(kind, size, style='bleed'):
     return img.resize((size, size), Image.LANCZOS)
 
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-P = lambda *a: os.path.join(ROOT, *a)
+def main():
+  ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+  P = lambda *a: os.path.join(ROOT, *a)
 
-# desktop (Linux, Mac, the TV box): Screenroom; Windows: Parlor
-tile('screenroom', 1024, 'mac').save(P('build/icon.png'))
-ico = tile('parlor', 256, 'win')
-ico.save(P('build/parlor.ico'), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+  # desktop (Linux, Mac, the TV box): Screenroom; Windows: Parlor
+  tile('screenroom', 1024, 'mac').save(P('build/icon.png'))
+  ico = tile('parlor', 256, 'win')
+  ico.save(P('build/parlor.ico'), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
-# iPhone and iPad
-tile('screenroom', 1024).convert('RGB').save(P('ios/Screenroom/Assets.xcassets/AppIcon.appiconset/icon-1024.png'))
-tile('parlor', 1024).convert('RGB').save(P('ios/Screenroom/Assets.xcassets/ParlorIcon.appiconset/icon-1024.png'))
+  # iPhone and iPad
+  tile('screenroom', 1024).convert('RGB').save(P('ios/Screenroom/Assets.xcassets/AppIcon.appiconset/icon-1024.png'))
+  tile('parlor', 1024).convert('RGB').save(P('ios/Screenroom/Assets.xcassets/ParlorIcon.appiconset/icon-1024.png'))
 
-# Android TV
-tile('screenroom', 96).save(P('android/app/src/main/res/mipmap-xhdpi/ic_launcher.png'))
+  # Android TV
+  tile('screenroom', 96).save(P('android/app/src/main/res/mipmap-xhdpi/ic_launcher.png'))
 
-# Android phones: an adaptive icon (Pixel's round / squircle masks), the plain one for anything older
-res = P('android/phone/src/main/res')
-os.makedirs(f'{res}/mipmap-anydpi-v26', exist_ok=True)
-for kind, name in (('screenroom', 'ic_screenroom'), ('parlor', 'ic_parlor')):
-    tile(kind, 192).save(f'{res}/mipmap-xxxhdpi/{name}.png')
-    tile(kind, 432, 'fg').save(f'{res}/mipmap-xxxhdpi/{name}_fg.png')
-    tile(kind, 432, 'bg').save(f'{res}/mipmap-xxxhdpi/{name}_bg.png')
-    open(f'{res}/mipmap-anydpi-v26/{name}.xml', 'w').write(
-        '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        f'    <background android:drawable="@mipmap/{name}_bg" />\n    <foreground android:drawable="@mipmap/{name}_fg" />\n'
-        f'    <monochrome android:drawable="@mipmap/{name}_fg" />\n</adaptive-icon>\n')
-print('done')
+  # Android phones: an adaptive icon (Pixel's round / squircle masks), the plain one for anything older
+  res = P('android/phone/src/main/res')
+  os.makedirs(f'{res}/mipmap-anydpi-v26', exist_ok=True)
+  for kind, name in (('screenroom', 'ic_screenroom'), ('parlor', 'ic_parlor')):
+      tile(kind, 192).save(f'{res}/mipmap-xxxhdpi/{name}.png')
+      tile(kind, 432, 'fg').save(f'{res}/mipmap-xxxhdpi/{name}_fg.png')
+      tile(kind, 432, 'bg').save(f'{res}/mipmap-xxxhdpi/{name}_bg.png')
+      open(f'{res}/mipmap-anydpi-v26/{name}.xml', 'w').write(
+          '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+          f'    <background android:drawable="@mipmap/{name}_bg" />\n    <foreground android:drawable="@mipmap/{name}_fg" />\n'
+          f'    <monochrome android:drawable="@mipmap/{name}_fg" />\n</adaptive-icon>\n')
+  print('done')
+
+
+if __name__ == '__main__':
+    main()

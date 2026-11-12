@@ -18,9 +18,10 @@
   const SOLO = EDITION === 'music' && !!window.S_IOS;
   const THEME_NAME = EDITION === 'music' ? 'Encore' : 'Matinee';
   // Parlor's accent colour (buttons, the playing song, the + buttons): kept on this device
-  const ACCENTS = [['amber', 'Amber', '#E0841C'], ['turquoise', 'Turquoise', '#169C9C'], ['blue', 'Blue', '#2F7FD8'], ['violet', 'Violet', '#8A5CD6'],
+  // (turquoise unless one's been picked here)
+  const ACCENTS = [['turquoise', 'Turquoise', '#169C9C'], ['amber', 'Amber', '#E0841C'], ['blue', 'Blue', '#2F7FD8'], ['violet', 'Violet', '#8A5CD6'],
     ['rose', 'Rose', '#DB4F78'], ['red', 'Red', '#D2443A'], ['green', 'Green', '#3B9A4C'], ['graphite', 'Graphite', '#55524E']];
-  const getAccent = () => { try { return localStorage.getItem('parlor-accent') || 'amber'; } catch { return 'amber'; } };
+  const getAccent = () => { try { return localStorage.getItem('parlor-accent') || 'turquoise'; } catch { return 'turquoise'; } };
   const applyAccent = (v) => { if (document.body) document.body.dataset.accent = v || getAccent(); };
   if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent());
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
