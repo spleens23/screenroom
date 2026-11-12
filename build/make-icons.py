@@ -27,7 +27,7 @@ def background(N, x0, y0, w, r):
 def film(img, cx, cy, s, under=None):
     """One film frame, s = the tile's width. Cream strip with holes cut through to the tile; amber picture."""
     N = img.size[0]
-    fw, fh = s * 0.46, s * 0.60
+    fw, fh = s * 0.62, s * 0.52
     x0, y0 = cx - fw / 2, cy - fh / 2
     shape = Image.new('L', (N, N), 0)
     d = ImageDraw.Draw(shape)
@@ -43,7 +43,7 @@ def film(img, cx, cy, s, under=None):
     img.paste(Image.new('RGBA', (N, N), CREAM + (255,)), (0, 0), shape)
     # the picture
     px0, px1 = x0 + edge * 2 + hw, x0 + fw - edge * 2 - hw
-    py0, py1 = y0 + s * 0.05, y0 + fh - s * 0.05
+    py0, py1 = y0 + s * 0.045, y0 + fh - s * 0.045
     ImageDraw.Draw(img).rounded_rectangle([px0, py0, px1, py1], radius=s * 0.022, fill=AMBER + (255,))
 
 
