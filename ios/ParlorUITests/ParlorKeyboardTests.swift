@@ -12,10 +12,10 @@ final class ParlorKeyboardTests: XCTestCase {
 
     func testKeyboard() {
         let app = XCUIApplication()
-        // (the page shows, in a strip at the bottom, the last few keys it got, where the highlight is and what's
+        // (the page shows, in a box near the top (the on-screen keyboard would hide one at the bottom), the last few keys it got, where the highlight is and what's
         // playing, so the screenshots say what happened; it also notes them for the build workflow)
         app.launchArguments = ["--ui-script", """
-            (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#000c;color:#fff;font:13px monospace;padding:6px 10px;border-radius:8px;white-space:pre;pointer-events:none';
+            (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:40%;right:8px;top:200px;z-index:99999;background:#000c;color:#fff;font:13px monospace;padding:6px 10px;border-radius:8px;white-space:pre;pointer-events:none';
               document.body.appendChild(d); const keys = [];
               const who = (el) => el ? (el.id ? '#' + el.id : '') + (el.tagName || '') + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ').slice(0, 2).join('.') : '') + (el.title ? ' "' + el.title + '"' : '') : '-';
               addEventListener('keydown', (e) => { keys.push((e.metaKey ? '⌘' : '') + (e.ctrlKey ? '^' : '') + JSON.stringify(e.key) + '/' + e.keyCode + (e.isComposing ? ' composing' : '') + ' on ' + who(e.target)); keys.splice(0, keys.length - 6); }, true);
