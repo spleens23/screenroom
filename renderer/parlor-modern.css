@@ -647,3 +647,75 @@ html body .pmenu-card { position: fixed; min-width: 200px; padding: 5px; border-
   box-shadow: 0 10px 34px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.08); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: flex; flex-direction: column; }
 html body .pmenu-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 7px 12px; border-radius: 6px; font-size: 14px; cursor: default; }
 html body .pmenu-item:hover, html body .pmenu-item:focus { background: var(--m-amber, #3CC4C4); color: #fff; outline: none; }
+
+/* ---- Profile and friends (the Parlor app) ---- */
+html body #me-btn { position: relative; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 50%; padding: 0; border: 0; background: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+html body #me-btn[hidden] { display: none; }
+html body #me-btn .avatar { width: 38px; height: 38px; font-size: 17px; border-radius: 50%; }
+html body #me-btn .me-ico { width: 24px; height: 24px; color: #4a443e; }
+html body #me-btn .me-dot { position: absolute; top: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 2px #fff; }
+html body.parlor .fr-head { display: flex; align-items: center; gap: 22px; padding: 18px var(--m-gut, 4%) 6px; flex-wrap: wrap; }
+html body.parlor .fr-me-pic { position: relative; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
+html body.parlor .fr-me-pic .avatar.big { width: 112px; height: 112px; font-size: 48px; border-radius: 50%; }
+html body.parlor .fr-me-pic .fr-edit-badge { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--m-amber, #3CC4C4); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+html body.parlor .fr-me-name { margin: 0 0 4px; font-size: 30px; }
+html body.parlor .fr-code { font-size: 15px; color: #6b645c; }
+html body.parlor .fr-code b { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 18px; letter-spacing: 1px; color: #1e1a16; margin-left: 4px; }
+html body.parlor .fr-code-btns { margin-top: 10px; gap: 8px; flex-wrap: wrap; }
+html body.parlor .fr-sec { padding: 0 var(--m-gut, 4%); }
+html body.parlor .fr-sec h2 { margin-left: 0 !important; padding-left: 0 !important; }
+html body.parlor .fr-addrow { display: flex; gap: 10px; max-width: 460px; }
+html body.parlor .fr-addrow input { flex: 1 1 auto; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+html body.parlor .fr-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,.07); max-width: 640px; }
+html body.parlor .fr-row .fr-n { flex: 1 1 auto; font-weight: 600; }
+html body.parlor .fr-row .fr-x { display: flex; gap: 8px; }
+html body.parlor .fr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+html body.parlor .fr-card { text-align: left; border: 1px solid rgba(0,0,0,.08); border-radius: 14px; padding: 12px; background: #fff; cursor: pointer; color: inherit; font: inherit; display: flex; flex-direction: column; gap: 10px; }
+html body.parlor .fr-card:hover, html body.parlor .fr-card:focus-visible { box-shadow: 0 0 0 3px var(--m-amber, #3CC4C4); outline: none; }
+html body.parlor .fr-card-top { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+html body.parlor .fr-card .avatar, html body.parlor .fr-row .avatar { width: 40px; height: 40px; border-radius: 50%; font-size: 18px; flex: 0 0 auto; }
+html body .sc { display: flex; align-items: center; gap: 12px; min-width: 0; }
+html body .sc-none { color: #8c857d; font-size: 14px; }
+html body .sc-art { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+html body .sc-gen { display: flex; align-items: center; justify-content: center; background: hsl(var(--h), 45%, 55%); color: #fff; font-size: 26px; }
+html body .sc-txt { min-width: 0; }
+html body .sc-k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--m-amber, #3CC4C4); font-weight: 700; }
+html body .sc-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body .sc-s { font-size: 13px; color: #8c857d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body.parlor .fr-show { all: unset; box-sizing: border-box; display: block; cursor: pointer; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid rgba(0,0,0,.08); max-width: 460px; width: 100%; }
+html body.parlor .fr-show:focus-visible { box-shadow: 0 0 0 3px var(--m-amber, #3CC4C4); }
+html body.parlor .fr-setup { padding: 0 var(--m-gut, 4%); max-width: 640px; }
+html body.parlor .fr-setup .fr-name { max-width: 420px; margin: 14px 0 0; }
+html body.parlor .pnote.small { font-size: 13px; opacity: .8; }
+html body.parlor .fr-foot { padding: 30px var(--m-gut, 4%) 10px; }
+html body .poverlay.fr-edit .poverlay-card { width: min(620px, 94vw); max-height: 88vh; overflow-y: auto; }
+html body .poverlay .fr-pics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+html body .poverlay .fr-pics .pic { padding: 0; border: 2px solid transparent; border-radius: 50%; background: none; cursor: pointer; }
+html body .poverlay .fr-pics .pic.on { border-color: var(--m-amber, #3CC4C4); }
+html body .poverlay .fr-pics .avatar { width: 46px; height: 46px; border-radius: 50%; }
+html body .poverlay .fr-h2 { margin-top: 18px !important; }
+html body .poverlay .fr-q { width: 100%; margin: 12px 0 8px; }
+html body .poverlay .fr-pick { max-height: 32vh; }
+html body .poverlay .fr-opt { display: flex !important; align-items: center; gap: 10px; text-align: left; }
+html body .poverlay .fr-opt .cover.tiny { width: 36px; height: 36px; flex: 0 0 auto; border-radius: 5px; overflow: hidden; }
+html body .poverlay .fr-opt small { opacity: .7; }
+html body .poverlay .fr-who { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+html body .poverlay .fr-who .avatar.big { width: 64px; height: 64px; border-radius: 50%; font-size: 28px; }
+html body .poverlay .fr-who h2 { margin: 0; }
+html body .poverlay .fr-acts { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+html body .poverlay .fr-why { width: 100%; min-height: 80px; resize: vertical; font: inherit; }
+@media (max-width: 600px) {
+  html body.parlor.parlor.parlor #me-btn { width: 40px; height: 40px; order: 1; }
+  html body.parlor .fr-head { padding: 10px 20px 4px; gap: 16px; }
+  html body.parlor .fr-me-pic .avatar.big { width: 88px; height: 88px; font-size: 38px; }
+  html body.parlor .fr-sec, html body.parlor .fr-setup, html body.parlor .fr-foot { padding-left: 20px; padding-right: 20px; }
+  html body.parlor .fr-grid { grid-template-columns: 1fr; }
+}
+html body .ppage input.pname-input, html body .poverlay textarea.pname-input { box-sizing: border-box; background: #fff; color: #1e1a16; -webkit-text-fill-color: currentColor; border: 1px solid #c9c3bb;
+  border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 16px; letter-spacing: normal; width: 100%; }
+html body .ppage input.pname-input::placeholder, html body .poverlay textarea.pname-input::placeholder { color: #8c857d; -webkit-text-fill-color: #8c857d; }
+html body .ppage input.pname-input:focus, html body .poverlay textarea.pname-input:focus { outline: 2px solid var(--m-amber, #3CC4C4); outline-offset: 1px; }
+html body.parlor .fr-setup .btns { margin-top: 14px; padding-left: 0; }
+html body.parlor .fr-sec { margin-top: 26px !important; }
+html body.parlor .fr-sec h2 { margin-bottom: 10px !important; }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data: https://*.mzstatic.com; media-src 'self' file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://*.workers.dev; img-src 'self' file: data: https://*.mzstatic.com; media-src 'self' file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screenroom</title>
 <link rel="stylesheet" href="fonts/noto-sans-jp.css">
@@ -60,6 +60,7 @@
 <script src="../lib/media-core.js"></script>
 <script src="licenses.js"></script>
 <script src="avatars.js"></script>
+<script src="friends-config.js"></script>
 <script src="parlor.js"></script>
 <script src="app.js"></script>
 </body>

@@ -90,7 +90,7 @@ window.createParlor = function createParlor(ctx) {
   }
 
   async function load() {
-    if (!loading) loading = api.parlorState().then((s) => { P = s; loading = null; return s; });
+    if (!loading) loading = api.parlorState().then((s) => { P = s; loading = null; drawMeButton(); refreshFriends(); return s; });
     return loading;
   }
   async function refresh() { P = await api.parlorState(); render(); }
@@ -314,6 +314,238 @@ window.createParlor = function createParlor(ctx) {
         }) }, 'Keep as Playlist')),
       songTable(m.ids, { context: ctxm, numbered: true }));
   }
+  // ---- friends (the Parlor app on phones, iPad, Mac and Windows; not the TV box) ---------------------------
+  // A friend profile lives on Parlor's friends service (friends/worker.js): a name, a picture, a friend code and
+  // the song or album you choose to show. Friends are added by code, and see each other's picture and pick.
+  const FR = { me: null, friends: [], incoming: [], outgoing: [], error: '', loading: false, at: 0 };
+  const FRIEND_COLORS = ['#2f80ed', '#3cc4c4', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#eb5757', '#b5523a'];
+  const friendsOn = () => !!(ctx.standalone && window.FRIENDS_URL);
+  const acct = () => { const all = (ctx.config && ctx.config().friends) || {}; return all[P ? P.profile : ''] || null; };
+  async function saveAcct(a) {
+    const all = { ...((ctx.config && ctx.config().friends) || {}) };
+    if (a) all[P.profile] = a; else delete all[P.profile];
+    await ctx.setConfig({ friends: all });
+  }
+  async function fr(method, path, body) {
+    const a = acct();
+    let r;
+    try {
+      r = await fetch(window.FRIENDS_URL.replace(/\/$/, '') + path, { method, headers: { 'Content-Type': 'application/json', ...(a ? { Authorization: 'Bearer ' + a.token } : {}) },
+        body: body ? JSON.stringify(body) : undefined });
+    } catch { return { ok: false, error: 'Couldn’t reach the friends service. Are you online?' }; }
+    let j = null; try { j = await r.json(); } catch {}
+    if (r.status === 401 && a) { await saveAcct(null); Object.assign(FR, { me: null, friends: [], incoming: [], outgoing: [] }); }
+    return j || { ok: false, error: `The friends service didn’t answer properly (${r.status}).` };
+  }
+  function took(j) {
+    if (!j || !j.ok) { FR.error = (j && j.error) || 'Something went wrong.'; return false; }
+    if (j.me) Object.assign(FR, { me: j.me, friends: j.friends || [], incoming: j.incoming || [], outgoing: j.outgoing || [], error: '', at: Date.now() });
+    drawMeButton();
+    return true;
+  }
+  async function refreshFriends() {
+    // (another profile on this computer: its own friend profile)
+    if (P && FR.pid !== P.profile) { Object.assign(FR, { pid: P.profile, me: null, friends: [], incoming: [], outgoing: [], error: '', at: 0 }); drawMeButton(); }
+    if (!friendsOn() || !acct() || FR.loading) return;
+    FR.loading = true;
+    try { took(await fr('GET', '/v1/me')); } finally { FR.loading = false; }
+    if (view === 'profile') render();
+  }
+  const youAvatar = (p, big) => ctx.avatar({ name: (p && p.name) || '?', color: (p && p.color) || '#2f80ed', avatar: (p && p.avatar) || '' }, big);
+
+  // the round button in the top bar: your picture (a dot when someone wants to be friends)
+  let meBtn = null;
+  function drawMeButton() {
+    if (!friendsOn()) { if (meBtn) meBtn.hidden = true; return; }
+    if (!meBtn) {
+      meBtn = h('button', { id: 'me-btn', title: 'Profile and friends', 'aria-label': 'Profile and friends', onclick: () => go('profile') });
+      const sb = $('#settings-btn'); sb && sb.parentElement.insertBefore(meBtn, sb);
+    }
+    meBtn.hidden = false;
+    meBtn.replaceChildren(FR.me ? youAvatar(FR.me) : svg('<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>', 'ico me-ico'),
+      FR.incoming.length ? h('span', { class: 'me-dot', 'aria-label': `${FR.incoming.length} friend request${FR.incoming.length > 1 ? 's' : ''}` }) : null);
+  }
+
+  /** A small copy of a cover for the friends service (a data: URL), or '' */
+  async function artThumb(a) {
+    if (!a || !a.art) return '';
+    if (api.artThumb) { try { return (await api.artThumb(a.art)) || ''; } catch { return ''; } }
+    try {
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.src = fileUrl(a.art);
+      await img.decode();
+      const c = document.createElement('canvas'); c.width = c.height = 160;
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 160, 160);
+      return c.toDataURL('image/jpeg', 0.8);
+    } catch { return ''; }
+  }
+  const showcaseArt = (s, cls) => (s && s.art ? h('img', { class: cls || 'sc-art', src: s.art, alt: '' })
+    : h('div', { class: (cls || 'sc-art') + ' sc-gen', style: `--h:${hue((s && s.title) || '')}` }, h('span', {}, s && s.kind === 'song' ? '♪' : '◉')));
+  function showcaseLine(s, empty) {
+    if (!s) return h('div', { class: 'sc sc-none' }, empty || 'Nothing chosen yet');
+    return h('div', { class: 'sc' }, showcaseArt(s), h('div', { class: 'sc-txt' },
+      h('div', { class: 'sc-k' }, s.kind === 'song' ? 'Song' : 'Album'), h('div', { class: 'sc-t' }, s.title),
+      h('div', { class: 'sc-s' }, [s.artist, s.kind === 'song' ? s.album : s.year].filter(Boolean).join(' · '))));
+  }
+
+  // Your picture (tap it): the picture and colour, and the song or album your friends see
+  function editMe() {
+    const d = { avatar: FR.me.avatar || '', color: FR.me.color || '#2f80ed' };
+    const pics = h('div', { class: 'pics fr-pics' }), sw = h('div', { class: 'swatches' });
+    const drawPics = () => pics.replaceChildren(
+      h('button', { class: 'pic' + (!d.avatar ? ' on' : ''), title: 'Initial', onclick: () => { d.avatar = ''; drawPics(); } }, ctx.avatar({ name: FR.me.name, color: d.color })),
+      ...(window.Avatars ? window.Avatars.list : []).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => { d.avatar = 'char:' + c.id; drawPics(); } },
+        ctx.avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))));
+    const drawSw = () => sw.replaceChildren(...FRIEND_COLORS.map((c) => h('button', { class: 'swatch' + (c === d.color ? ' on' : ''), style: `background:${c}`, title: c, onclick: () => { d.color = c; drawSw(); drawPics(); } })));
+    drawPics(); drawSw();
+    // what to show: search the library
+    const q = h('input', { type: 'search', class: 'pname-input fr-q', placeholder: 'Search your albums and songs', autocomplete: 'off' });
+    const list = h('div', { class: 'pick-list fr-pick' });
+    let chosen = FR.me.showcase || null;
+    const cur = h('div', {});
+    const drawCur = () => cur.replaceChildren(showcaseLine(chosen, 'Nothing: your friends just see your name and picture'));
+    const choose = async (o) => { chosen = o; drawCur(); };
+    const drawList = () => {
+      const s = q.value.trim().toLowerCase();
+      const albums = P.albums.filter((a) => !s || `${a.title} ${a.artist}`.toLowerCase().includes(s)).slice(0, s ? 30 : 12);
+      const songs = s ? libIds().map(track).filter((t) => t && `${t.title} ${t.artist}`.toLowerCase().includes(s)).slice(0, 30) : [];
+      list.replaceChildren(
+        h('button', { class: 'btn secondary', onclick: () => choose(null) }, 'Show nothing'),
+        ...albums.map((a) => h('button', { class: 'btn secondary fr-opt', onclick: async () => choose({ kind: 'album', title: a.title, artist: a.artist, year: a.year || null, art: await artThumb(a), key: a.key }) },
+          cover(a, 'tiny'), h('span', {}, h('b', {}, a.title), h('small', {}, ` Album · ${a.artist}`)))),
+        ...songs.map((t) => h('button', { class: 'btn secondary fr-opt', onclick: async () => choose({ kind: 'song', title: t.title, artist: t.artist, album: t.album, art: await artThumb(album(t.albumKey)) }) },
+          cover(album(t.albumKey), 'tiny'), h('span', {}, h('b', {}, t.title), h('small', {}, ` Song · ${t.artist}`)))));
+    };
+    q.addEventListener('input', drawList);
+    drawList(); drawCur();
+    overlay('fr-edit',
+      h('h2', {}, 'Your picture'), pics, sw,
+      h('h2', { class: 'fr-h2' }, 'Showing to friends'), cur, q, list,
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn primary', onclick: async () => {
+          const sc = chosen ? { kind: chosen.kind, title: chosen.title, artist: chosen.artist, album: chosen.album || '', year: chosen.year || null, art: chosen.art || '' } : null;
+          const ok = took(await fr('PUT', '/v1/me', { avatar: d.avatar, color: d.color, showcase: sc }));
+          if (!ok) { ctx.flash(FR.error); return; }
+          closeOverlay(); render();
+        } }, 'Save'),
+        h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
+  }
+
+  // A friend (tap them): what they're showing, and remove / block / report
+  function friendSheet(f) {
+    overlay('fr-friend',
+      h('div', { class: 'fr-who' }, youAvatar(f, true), h('h2', {}, f.name)),
+      showcaseLine(f.showcase, `${f.name} isn’t showing anything right now`),
+      h('div', { class: 'btns fr-acts' },
+        h('button', { class: 'btn secondary', onclick: async () => {
+          if (!(await ctx.confirm(`Remove ${f.name}?`, 'You’ll stop seeing each other. You can add each other again with your codes.', 'Remove', 'Cancel', true))) return;
+          took(await fr('DELETE', `/v1/friends/${f.id}`)); closeOverlay(); render();
+        } }, 'Remove Friend'),
+        h('button', { class: 'btn secondary danger', onclick: async () => {
+          if (!(await ctx.confirm(`Block ${f.name}?`, 'They’re removed and can’t send you requests, even with your code.', 'Block', 'Cancel', true))) return;
+          took(await fr('POST', `/v1/friends/${f.id}/block`)); closeOverlay(); render();
+        } }, 'Block'),
+        h('button', { class: 'btn secondary danger', onclick: () => reportSheet(f) }, 'Report…'),
+        h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Close')));
+  }
+  function reportSheet(f) {
+    const why = h('textarea', { class: 'pname-input fr-why', rows: '3', maxlength: '500', placeholder: 'What’s wrong (their name, picture or what they’re showing)?' });
+    const block = h('input', { type: 'checkbox', checked: true });
+    overlay('fr-report', h('h2', {}, `Report ${f.name}`), why,
+      h('label', { class: 'row-set' }, h('span', {}, 'Block them too'), block),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn primary', onclick: async () => {
+          const r = await fr('POST', `/v1/friends/${f.id}/report`, { reason: why.value });
+          if (!r.ok) { ctx.flash(r.error); return; }
+          if (block.checked) took(await fr('POST', `/v1/friends/${f.id}/block`));
+          closeOverlay(); ctx.flash('Thanks. The report was sent.'); render();
+        } }, 'Send Report'),
+        h('button', { class: 'btn secondary', onclick: closeOverlay }, 'Cancel')));
+  }
+
+  async function shareCode() {
+    const code = FR.me.code, text = `Add me on Parlor: my friend code is ${code}`;
+    try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(code); ctx.flash(`Copied ${code}`); return; } catch {}
+    ctx.flash(`Your code: ${code}`);
+  }
+
+  function renderProfile() {
+    if (!friendsOn()) return page('Profile', h('p', { class: 'pnote' }, 'Friends aren’t switched on in this version of Parlor yet.'));
+    if (!acct()) {
+      // set up a friend profile
+      const d = { avatar: '', color: FRIEND_COLORS[hue(String(Date.now())) % FRIEND_COLORS.length] };
+      const name = h('input', { type: 'text', class: 'pname-input fr-name', maxlength: '40', placeholder: 'Your name (what friends see)', autocomplete: 'off' });
+      const pics = h('div', { class: 'pics fr-pics' });
+      const drawPics = () => pics.replaceChildren(...(window.Avatars ? window.Avatars.list : []).slice(0, 12).map((c) => h('button', { class: 'pic' + (d.avatar === 'char:' + c.id ? ' on' : ''), title: c.name, onclick: () => { d.avatar = 'char:' + c.id; drawPics(); } },
+        ctx.avatar({ name: c.name, color: d.color, avatar: 'char:' + c.id }))));
+      drawPics();
+      const go1 = h('button', { class: 'btn primary', onclick: async () => {
+        if (!name.value.trim()) { name.focus(); ctx.flash('Give your profile a name.'); return; }
+        go1.disabled = true;
+        const r = await fr('POST', '/v1/register', { name: name.value.trim(), avatar: d.avatar, color: d.color });
+        go1.disabled = false;
+        if (!r.ok) { ctx.flash(r.error); return; }
+        await saveAcct({ id: r.id, token: r.token });
+        await refreshFriends(); render();
+      } }, 'Make My Profile');
+      return page('Profile', h('div', { class: 'fr-setup' },
+        h('p', { class: 'pnote' }, 'Make a friend profile to swap codes with friends and show them a song or album you love.'),
+        h('h3', {}, 'Pick a picture'), pics, name, h('div', { class: 'btns pbtns' }, go1),
+        h('p', { class: 'pnote small' }, 'Friends you accept see your name, picture and the song or album you choose. Nothing else from your library leaves this device.')));
+    }
+    if (!FR.me) {
+      refreshFriends();
+      return page('Profile', h('p', { class: 'pnote' }, FR.error || 'Loading your friends…'));
+    }
+    const me = FR.me;
+    const add = h('input', { type: 'text', class: 'pname-input fr-add', maxlength: '12', placeholder: 'Friend code, like 7KQ2-M9XD', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false' });
+    const doAdd = async () => {
+      if (!add.value.trim()) { add.focus(); return; }
+      const ok = took(await fr('POST', '/v1/friends', { code: add.value }));
+      if (!ok) { ctx.flash(FR.error); return; }
+      ctx.flash('Request sent'); render();
+    };
+    add.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); doAdd(); } });
+    const person = (p, ...extra) => h('div', { class: 'fr-row' }, youAvatar(p), h('span', { class: 'fr-n' }, p.name), h('span', { class: 'fr-x' }, ...extra));
+    page(null,
+      h('div', { class: 'fr-head' },
+        h('button', { class: 'fr-me-pic', title: 'Change your picture and what you’re showing', onclick: editMe }, youAvatar(me, true), h('span', { class: 'fr-edit-badge' }, 'Edit')),
+        h('div', { class: 'fr-me-txt' },
+          h('h1', { class: 'fr-me-name' }, me.name),
+          h('div', { class: 'fr-code' }, 'Friend code ', h('b', {}, me.code)),
+          h('div', { class: 'btns fr-code-btns' },
+            h('button', { class: 'btn secondary', onclick: shareCode }, navigator.share ? 'Share Code' : 'Copy Code'),
+            h('button', { class: 'btn secondary', onclick: () => nameDialog('Your Name', me.name, 'Save', async (nm) => { if (took(await fr('PUT', '/v1/me', { name: nm }))) { closeOverlay(); render(); } else ctx.flash(FR.error); }) }, 'Rename'),
+            h('button', { class: 'btn secondary', onclick: async () => {
+              if (!(await ctx.confirm('Get a new friend code?', 'Your old code stops working. Friends you have stay friends.', 'New Code', 'Cancel'))) return;
+              took(await fr('POST', '/v1/me/code')); render();
+            } }, 'New Code')))),
+      h('section', { class: 'row fr-sec' }, h('h2', {}, 'Showing to friends'),
+        h('button', { class: 'fr-show', onclick: editMe }, showcaseLine(me.showcase, 'Nothing yet. Tap to pick a song or album.'))),
+      h('section', { class: 'row fr-sec' }, h('h2', {}, 'Add a friend'), h('div', { class: 'fr-addrow' }, add, h('button', { class: 'btn primary', onclick: doAdd }, 'Add'))),
+      FR.incoming.length ? h('section', { class: 'row fr-sec' }, h('h2', {}, 'Requests'),
+        ...FR.incoming.map((p) => person(p,
+          h('button', { class: 'btn primary', onclick: async () => { took(await fr('POST', `/v1/friends/${p.id}/accept`)); render(); } }, 'Accept'),
+          h('button', { class: 'btn secondary', onclick: async () => { took(await fr('POST', `/v1/friends/${p.id}/decline`)); render(); } }, 'Decline'),
+          h('button', { class: 'btn secondary danger', title: 'Block', onclick: async () => { took(await fr('POST', `/v1/friends/${p.id}/block`)); render(); } }, 'Block')))) : null,
+      FR.outgoing.length ? h('section', { class: 'row fr-sec' }, h('h2', {}, 'Waiting for'),
+        ...FR.outgoing.map((p) => person(p, h('button', { class: 'btn secondary', onclick: async () => { took(await fr('DELETE', `/v1/friends/${p.id}`)); render(); } }, 'Cancel')))) : null,
+      h('section', { class: 'row fr-sec' }, h('h2', {}, FR.friends.length ? `Friends (${FR.friends.length})` : 'Friends'),
+        FR.friends.length ? h('div', { class: 'fr-grid' }, FR.friends.map((f) => h('button', { class: 'fr-card', 'data-key': 'fr:' + f.id, title: f.name, onclick: () => friendSheet(f) },
+          h('div', { class: 'fr-card-top' }, youAvatar(f), h('span', { class: 'fr-n' }, f.name)),
+          showcaseLine(f.showcase, 'Not showing anything'))))
+          : h('p', { class: 'pnote' }, 'No friends yet. Share your code, or add a friend’s.')),
+      h('div', { class: 'fr-foot' }, h('button', { class: 'link danger', onclick: async () => {
+        if (!(await ctx.confirm('Delete your friend profile?', 'Your name, picture, code and friends are deleted from the friends service. Your music stays.', 'Delete', 'Cancel', true))) return;
+        const r = await fr('DELETE', '/v1/me');
+        if (!r.ok) { ctx.flash(r.error); return; }
+        await saveAcct(null); Object.assign(FR, { me: null, friends: [], incoming: [], outgoing: [] }); drawMeButton(); render();
+      } }, 'Delete My Friend Profile')));
+  }
+  // (fresh while the profile page is open, and now and then otherwise so a new request shows its dot)
+  setInterval(() => { if (document.hidden) return; if (view === 'profile' || Date.now() - FR.at > 5 * 60000) refreshFriends(); }, 30000);
+
   function renderPlaylists() {
     page('Playlists', grid([
       h('button', { class: 'card pcard newpl', 'data-key': 'pl:new', onclick: () => newPlaylist([]) },
@@ -370,6 +602,7 @@ window.createParlor = function createParlor(ctx) {
     if (view === 'playlists') return renderPlaylists();
     if (view.startsWith('playlist:')) return renderPlaylist(view.slice(9));
     if (view.startsWith('mix:')) return renderMix(view.slice(4));
+    if (view === 'profile') return renderProfile();
     renderHome();
   }
   const history = [];

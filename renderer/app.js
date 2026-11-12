@@ -2864,6 +2864,9 @@
       isTvBox: () => !!S.appliance,
       // Parlor as an app of its own (iPhone, iPad, Android, Mac, Windows), not the music side of the TV box
       standalone: EDITION === 'music',
+      // settings kept by the app (the friend profile's key lives there)
+      config: () => (S && S.config) || {},
+      setConfig: async (patch) => { S = await api.setConfig(patch); return S.config; },
       confirm: askConfirm,
       // the house: albums people recommended, and recommending one
       avatar,

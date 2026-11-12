@@ -1,0 +1,9 @@
+# Parlor's friends service. Deployed by .github/workflows/friends.yml (which fills in the storage id below).
+name = "parlor-friends"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "FRIENDS"
+id = "KV_ID"

@@ -1,0 +1,37 @@
+// Tries the friends service against a stand-in for Workers KV: node friends/test-local.mjs
+import worker from './worker.js';
+const store = new Map();
+const env = { FRIENDS: { get: async (k) => store.get(k) ?? null, put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } } };
+const call = async (method, path, body, token) => {
+  const r = await worker.fetch(new Request('https://x' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined }), env);
+  return r.json();
+};
+const ok = (c, m) => { if (!c) { console.error('FAILED: ' + m); process.exitCode = 1; } else console.log('ok  ' + m); };
+const a = await call('POST', '/v1/register', { name: 'Stella', avatar: 'char:fox', color: '#2f80ed' });
+const b = await call('POST', '/v1/register', { name: 'Sam' });
+ok(a.ok && /^[2-9A-Z]{4}-[2-9A-Z]{4}$/.test(a.code), 'register gives a code ' + a.code);
+let r = await call('POST', '/v1/friends', { code: a.code.toLowerCase().replace('-', ' ') }, b.token);
+ok(r.ok && r.outgoing.length === 1, 'Sam asks Stella (code typed loosely)');
+r = await call('GET', '/v1/me', null, a.token);
+ok(r.incoming.length === 1 && r.incoming[0].name === 'Sam', 'Stella sees the request');
+r = await call('POST', `/v1/friends/${b.id}/accept`, {}, a.token);
+ok(r.friends.length === 1 && r.incoming.length === 0, 'Stella accepts');
+r = await call('PUT', '/v1/me', { showcase: { kind: 'album', title: 'K-12', artist: 'Melanie Martinez', year: 2019, art: 'data:image/jpeg;base64,AAAA' } }, a.token);
+ok(r.me.showcase && r.me.showcase.title === 'K-12', 'Stella shows an album');
+r = await call('GET', '/v1/me', null, b.token);
+ok(r.friends[0].showcase.title === 'K-12' && r.friends[0].name === 'Stella', 'Sam sees it');
+ok(!JSON.stringify(r).includes('"th"') && !JSON.stringify(r).includes('outgoing":[{"id":"' + a.id + '","name":"Stella","avatar":"char:fox","color":"#2f80ed","code'), 'no secrets or codes of others leak');
+r = await call('POST', `/v1/friends/${a.id}/block`, {}, b.token);
+ok(r.friends.length === 0, 'Sam blocks Stella');
+r = await call('POST', '/v1/friends', { code: b.code }, a.token);
+r = await call('GET', '/v1/me', null, b.token);
+ok(r.incoming.length === 0, 'a blocked person’s request goes nowhere');
+r = await call('GET', '/v1/me', null, 'deadbeefdeadbeef.' + '0'.repeat(64));
+ok(!r.ok, 'a wrong token is refused');
+r = await call('POST', '/v1/friends/' + a.id + '/report', { reason: 'test' }, b.token);
+ok(r.ok && [...store.keys()].some((k) => k.startsWith('report:')), 'report kept');
+const old = a.code;
+r = await call('POST', '/v1/me/code', {}, a.token);
+ok(r.me.code !== old && !store.has('code:' + old.replace('-', '')), 'new code replaces the old one');
+r = await call('DELETE', '/v1/me', null, a.token);
+ok(r.ok && !store.has('user:' + a.id), 'profile deleted');

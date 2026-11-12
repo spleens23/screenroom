@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld('api', {
   parlorState: () => ipcRenderer.invoke('parlor-state'),
   parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),
   parlorPin: (key, on) => ipcRenderer.invoke('parlor-pin', key, on),
+  artThumb: (file) => ipcRenderer.invoke('art-thumb', file),
   parlorSetVersion: (key, version) => ipcRenderer.invoke('parlor-set-version', key, version),
   parlorAddDir: (dir) => ipcRenderer.invoke('parlor-add-dir', dir || null),
   parlorRemoveDir: (dir) => ipcRenderer.invoke('parlor-remove-dir', dir),

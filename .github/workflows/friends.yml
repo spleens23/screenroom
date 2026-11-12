@@ -1,0 +1,84 @@
+name: Parlor friends service
+
+# Puts Parlor's friends service (friends/worker.js) on Cloudflare, free plan. Needs two repository secrets:
+# CLOUDFLARE_API_TOKEN (a token made from the "Edit Cloudflare Workers" template) and CLOUDFLARE_ACCOUNT_ID.
+# The first time (or if the service's address changes) it writes the address into renderer/friends-config.js
+# and starts the app builds, so the apps know where to find it.
+
+on:
+  push:
+    branches: [main]
+    paths: ['friends/**', '.github/workflows/friends.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: friends
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Try the service here first
+        run: node friends/test-local.mjs
+
+      - name: Is Cloudflare set up?
+        id: cf
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "ready=yes" >> "$GITHUB_OUTPUT"
+          else echo "::notice title=Friends::Not put on Cloudflare yet: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to the repository's secrets."; echo "ready=no" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Put it on Cloudflare
+        if: steps.cf.outputs.ready == 'yes'
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          H=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+          # the storage (made the first time)
+          KV=$(curl -fsS "${H[@]}" "$API/storage/kv/namespaces?per_page=100" | jq -r '.result[] | select(.title == "parlor-friends") | .id' | head -1)
+          if [ -z "$KV" ]; then
+            KV=$(curl -fsS "${H[@]}" -X POST "$API/storage/kv/namespaces" -d '{"title":"parlor-friends"}' | jq -r '.result.id')
+          fi
+          [ -n "$KV" ] && [ "$KV" != null ] || { echo "::error::Couldn't make the storage. Does the token have Workers KV Storage: Edit?"; exit 1; }
+          sed -i "s/KV_ID/$KV/" friends/wrangler.toml
+          # the address: <name>.<your workers.dev subdomain>.workers.dev
+          SUB=$(curl -fsS "${H[@]}" "$API/workers/subdomain" | jq -r '.result.subdomain // empty')
+          if [ -z "$SUB" ]; then
+            echo "::error title=Friends::This Cloudflare account has no workers.dev address yet. Open Workers & Pages in the Cloudflare dashboard once (it sets one up), then run this again."
+            exit 1
+          fi
+          cd friends
+          npx --yes wrangler@4 deploy
+          URL="https://parlor-friends.$SUB.workers.dev"
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          for i in 1 2 3 4 5 6; do curl -fsS "$URL/v1" && break; sleep 10; done
+          echo
+
+      - name: Tell the apps where it is
+        if: steps.cf.outputs.ready == 'yes'
+        run: |
+          set -euo pipefail
+          WANT="window.FRIENDS_URL = '$URL';"
+          if grep -qF "$WANT" renderer/friends-config.js; then echo "The apps already know: $URL"; exit 0; fi
+          printf '%s\n%s\n' "// Where Parlor's friends service is (written by .github/workflows/friends.yml)." "$WANT" > renderer/friends-config.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add renderer/friends-config.js
+          git commit -m "Parlor's friends service is at $URL"
+          git push
+          # (a push made from here doesn't start other builds by itself)
+          for w in ios.yml phone-android.yml windows.yml; do gh workflow run "$w" --ref main || echo "couldn't start $w"; done
