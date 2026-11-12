@@ -1,12 +1,13 @@
-# Screenroom's and Parlor's icons: the Matinee ink-brown tile with one cream shape and an amber heart.
-#   Screenroom: a single frame of film (sprocket holes down both sides), its picture lit amber.
-#   Parlor: a record, its label amber.
+# Screenroom's and Parlor's icons: the Matinee ink-brown tile with one cream shape and a turquoise heart
+# (turquoise: the apps' standard accent colour).
+#   Screenroom: a single frame of film (sprocket holes down both sides), its picture lit turquoise.
+#   Parlor: a speaker, its tweeter and woofer turquoise.
 # Run from the repository: python3 build/make-icons.py   (writes every size each platform needs)
 import os
 from PIL import Image, ImageDraw
 
 INK_TOP, INK_BOT = (38, 29, 22), (20, 15, 11)
-CREAM, AMBER = (243, 233, 220), (240, 167, 58)
+CREAM, ACCENT = (243, 233, 220), (60, 196, 196)
 GROOVE = (214, 202, 188)
 SS = 4  # drawn 4× and scaled down, for smooth edges
 
@@ -25,7 +26,7 @@ def background(N, x0, y0, w, r):
 
 
 def film(img, cx, cy, s, under=None):
-    """One film frame, s = the tile's width. Cream strip with holes cut through to the tile; amber picture."""
+    """One film frame, s = the tile's width. Cream strip with holes cut through to the tile; turquoise picture."""
     N = img.size[0]
     fw, fh = s * 0.62, s * 0.52
     x0, y0 = cx - fw / 2, cy - fh / 2
@@ -44,11 +45,11 @@ def film(img, cx, cy, s, under=None):
     # the picture
     px0, px1 = x0 + edge * 2 + hw, x0 + fw - edge * 2 - hw
     py0, py1 = y0 + s * 0.045, y0 + fh - s * 0.045
-    ImageDraw.Draw(img).rounded_rectangle([px0, py0, px1, py1], radius=s * 0.022, fill=AMBER + (255,))
+    ImageDraw.Draw(img).rounded_rectangle([px0, py0, px1, py1], radius=s * 0.022, fill=ACCENT + (255,))
 
 
 def disc(img, cx, cy, s, under):
-    """A record, s = the tile's width: cream, a few fine grooves, an amber label, the spindle hole."""
+    """A record, s = the tile's width: cream, a few fine grooves, a turquoise label, the spindle hole."""
     N = img.size[0]
     R = s * 0.31
     shape = Image.new('L', (N, N), 0)
@@ -62,11 +63,25 @@ def disc(img, cx, cy, s, under):
         r = R * f
         dd.ellipse([cx - r, cy - r, cx + r, cy + r], outline=GROOVE + (255,), width=max(1, int(s * 0.007)))
     lab = R * 0.40
-    dd.ellipse([cx - lab, cy - lab, cx + lab, cy + lab], fill=AMBER + (255,))
+    dd.ellipse([cx - lab, cy - lab, cx + lab, cy + lab], fill=ACCENT + (255,))
     # (the hole goes through the label too)
     cut = Image.new('L', (N, N), 0)
     ImageDraw.Draw(cut).ellipse([cx - hole, cy - hole, cx + hole, cy + hole], fill=255)
     img.paste(under, (0, 0), cut)
+
+
+def speaker(img, cx, cy, s, under=None):
+    """A speaker cabinet, s = the tile's width: cream, a turquoise tweeter above a turquoise woofer."""
+    d = ImageDraw.Draw(img)
+    w, h = s * 0.44, s * 0.62
+    x0, y0 = cx - w / 2, cy - h / 2
+    d.rounded_rectangle([x0, y0, x0 + w, y0 + h], radius=s * 0.06, fill=CREAM + (255,))
+    tr, ty = s * 0.05, y0 + h * 0.22
+    d.ellipse([cx - tr, ty - tr, cx + tr, ty + tr], fill=ACCENT + (255,))
+    wr, wy = s * 0.14, y0 + h * 0.64
+    d.ellipse([cx - wr, wy - wr, cx + wr, wy + wr], fill=ACCENT + (255,))
+    cr = wr * 0.32
+    d.ellipse([cx - cr, wy - cr, cx + cr, wy + cr], fill=CREAM + (255,))
 
 
 def tile(kind, size, style='bleed'):
@@ -84,7 +99,7 @@ def tile(kind, size, style='bleed'):
         return img.resize((size, size), Image.LANCZOS)
     under = img.copy()
     s = w if style != 'fg' else N * 66 / 108 * 1.12  # (an adaptive icon's shape lives in the middle 66 of 108)
-    (film if kind == 'screenroom' else disc)(img, N / 2, N / 2, s, under)
+    (film if kind == 'screenroom' else speaker)(img, N / 2, N / 2, s, under)
     return img.resize((size, size), Image.LANCZOS)
 
 
