@@ -1,2 +1,2 @@
 // Where Parlor's friends service is (written by .github/workflows/friends.yml).
-window.FRIENDS_URL = '';
+window.FRIENDS_URL = 'https://parlor-friends.stelladuckanimations.workers.dev';
