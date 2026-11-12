@@ -158,6 +158,55 @@
 
   // ---- star ratings (shared by every profile) ----------------------------------------------------------
   const rkey = (e) => (window.MediaCore && MediaCore.ratingKey ? MediaCore.ratingKey(e) : '');
+
+  // ---- holiday films (MediaCore.HOLIDAYS): found from titles, descriptions and genres, or set by hand on the
+  // film's page (kept for the whole house in config.holidayTags: { <title key>: ['christmas'] | [] = none }) --
+  const HOL = () => (window.MediaCore && MediaCore.HOLIDAYS) || [];
+  const holName = (id) => (HOL().find((x) => x.id === id) || {}).name || id;
+  const holTags = () => (S && S.config && S.config.holidayTags) || {};
+  const holManual = (e) => { const t = holTags()[rkey(e)]; return Array.isArray(t) ? t : null; };
+  const autoHol = (o) => (window.MediaCore && MediaCore.autoHolidays ? MediaCore.autoHolidays(o) : []);
+  /** A series' own holidays (its name or genres say so); its single holiday episodes are found one by one. */
+  const holEp = (ep) => autoHol({ title: ep.tv.name, description: ep.description });
+  function entryHolidays(e) {
+    const m = holManual(e);
+    if (m) return m;
+    return e.kind === 'series' ? autoHol({ title: e.name, genres: e.genres }) : autoHol({ title: e.name, description: e.description, genres: e.genres });
+  }
+  /** What the film's page offers as "found automatically" */
+  const foundHol = (e) => e.kind === 'series'
+    ? [...new Set([...autoHol({ title: e.name, genres: e.genres }), ...e.eps.flatMap(holEp)])]
+    : autoHol({ title: e.name, description: e.description, genres: e.genres });
+  // (for testing: window.__srToday = '2026-12-20' shows Home as it will look that day)
+  const today = () => (window.__srToday ? new Date(window.__srToday) : new Date());
+  /** Home's rows for the holidays coming up: [[name, list, 'holiday']] */
+  function holidayRows(all) {
+    if (!window.MediaCore || !MediaCore.holidaysInSeason) return [];
+    return MediaCore.holidaysInSeason(today()).map((id) => {
+      const list = [];
+      for (const e of all) {
+        if (entryHolidays(e).includes(id)) list.push(e);
+        else if (e.kind === 'series' && !holManual(e)) {
+          const ep = e.eps.find((x) => holEp(x).includes(id));
+          if (ep) list.push({ entry: e, ep, p: null }); // (the card opens the series at that episode)
+        }
+      }
+      const tv = list.some((x) => x.entry);
+      return [`${holName(id)} ${tv ? 'Movies & Specials' : 'Movies'}`, list, 'holiday'];
+    }).filter((r) => r[1].length);
+  }
+  /** For search: the holiday names that belong to each file (so "christmas" finds the films tagged by hand too) */
+  let holIdx = null, holIdxOf = null;
+  function holSearchText(it) {
+    if (!holIdx || holIdxOf !== S.library || holIdx.tags !== holTags()) {
+      holIdx = new Map(); holIdx.tags = holTags(); holIdxOf = S.library;
+      for (const e of buildCatalog(S.library)) {
+        const own = entryHolidays(e);
+        for (const i of e.items) holIdx.set(i.id, [...new Set([...own, ...(e.kind === 'series' && !holManual(e) ? holEp(i) : [])])].map(holName).join(' '));
+      }
+    }
+    return holIdx.get(it.id) || '';
+  }
   /** [{ profile, stars, at }] for a title: only profiles that still exist. */
   function ratingsFor(e) {
     const r = (S.ratings || {})[rkey(e)] || {};
@@ -542,7 +591,7 @@
   function matches(it) {
     if (!query) return true;
     const q = query.toLowerCase();
-    return [it.title, it.tv && it.tv.series, it.tv && it.tv.name, it.description, it.artist, it.genres.join(' ')].join(' ').toLowerCase().includes(q);
+    return [it.title, it.tv && it.tv.series, it.tv && it.tv.name, it.description, it.artist, it.genres.join(' '), holSearchText(it)].join(' ').toLowerCase().includes(q);
   }
 
   function rowsFor() {
@@ -552,6 +601,8 @@
     const recd = recommendedEntries(all);
     if (recd.length) rows.push(['Recommended for You', recd]);
     if (cont.length) rows.push(['Continue Watching', cont]);
+    // Christmas films from November, Halloween ones from late September, …
+    rows.push(...holidayRows(all));
     rows.push(['Recently Added', [...all].sort((a, b) => b.mtime - a.mtime).slice(0, 20)]);
     // Rated 4 stars or more by the people in this house (best first)
     const faves = all.map((e) => ({ e, r: avgRating(e) })).filter((x) => x.r && x.r.avg >= 4)
@@ -631,7 +682,9 @@
     let e = all.find((x) => x.key === heroKey);
     if (!e) {
       const cont = rows.length && rows[0][0] === 'Continue Watching' ? rows[0][1].map((c) => c.entry).find((x) => x.backdrop) : null;
-      e = cont || all[Math.floor(Math.random() * all.length)];
+      // (in the holiday season, the big picture is one of its films)
+      const hol = rows.filter((r) => r[2] === 'holiday').flatMap((r) => r[1].map((x) => x.entry || x)).filter((x) => x.backdrop);
+      e = cont || (hol.length ? hol[Math.floor(Math.random() * hol.length)] : all[Math.floor(Math.random() * all.length)]);
       heroKey = e.key;
     }
     return e;
@@ -840,6 +893,28 @@
     return h('div', {}, p, more);
   }
 
+  // "Holiday: Christmas (found automatically)" on a film's page, changeable (not on kids profiles)
+  function holidayBlock(e) {
+    if (!HOL().length || !rkey(e) || !api.setConfig) return null;
+    const manual = holManual(e), found = foundHol(e);
+    const shown = manual || found;
+    if (S.profile && S.profile.kids) return shown.length ? h('div', {}, h('b', {}, 'Holiday: '), shown.map(holName).join(', ')) : null;
+    const cur = manual ? (manual[0] || 'none') : 'auto';
+    const key = rkey(e);
+    return h('label', { class: 'holiday-pick' }, h('b', {}, 'Holiday: '),
+      h('select', { class: 'dev-select', onchange: async (ev) => {
+        const v = ev.target.value;
+        const next = { ...holTags() };
+        if (v === 'auto') delete next[key]; else next[key] = v === 'none' ? [] : [v];
+        S = await api.setConfig({ holidayTags: next });
+        renderModal(); render();
+        const sel = $('#modal .holiday-pick select'); sel && sel.focus();
+      } },
+      h('option', { value: 'auto', selected: cur === 'auto' }, found.length ? `${found.map(holName).join(' & ')} (found automatically)` : 'None (automatic)'),
+      HOL().map((x) => h('option', { value: x.id, selected: cur === x.id }, x.name)),
+      h('option', { value: 'none', selected: cur === 'none' }, 'Not a holiday film')));
+  }
+
   function movieDetail(e) {
     const vs = e.versions || [e.item];
     const item = (open.version && vs.find((v) => v.id === open.version)) || e.item;
@@ -879,6 +954,7 @@
         h('div', { class: 'side' },
           item.genres.length ? h('div', {}, h('b', {}, 'Genres: '), item.genres.join(', ')) : null,
           item.artist ? h('div', {}, h('b', {}, 'Credits: '), item.artist) : null,
+          holidayBlock(e),
           h('div', {}, h('b', {}, 'Video: '), [v.codec, v.width && `${v.width}×${v.height}`, v.fps && `${v.fps}fps`, v.hdr].filter(Boolean).join(' · ')),
           h('div', {}, h('b', {}, 'Subtitles: '), item.subs.length ? item.subs.map((s) => s.lang || s.codec).join(', ') : 'none'),
           h('div', {}, h('b', {}, 'Size: '), (item.size / 1e9).toFixed(2) + ' GB'),
@@ -936,6 +1012,7 @@
           h('div', { class: 'eps' }, epRows)),
         h('div', { class: 'side' },
           e.genres.length ? h('div', {}, h('b', {}, 'Genres: '), e.genres.join(', ')) : null,
+          holidayBlock(e),
           h('div', {}, h('b', {}, 'Seasons: '), e.seasons.size),
           h('div', {}, h('b', {}, 'Episodes: '), e.eps.length),
           h('div', {}, h('b', {}, 'Watched: '), `${e.eps.filter((x) => isDone(x.id)).length} of ${e.eps.length}`),

@@ -75,6 +75,8 @@ body.mac #nav { padding-left: 90px; }
 .m-body p { line-height: 1.5; margin: 0 0 18px; }
 .side { font-size: 13px; color: var(--muted); line-height: 1.7; }
 .side b { color: #ddd; font-weight: 500; }
+.holiday-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+.holiday-pick select { padding: 4px 8px; max-width: 100%; }
 .tracks { margin-top: 8px; }
 .tracks h3 { font-size: 15px; margin: 0 0 8px; }
 .track { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 4px; background: #232323; margin-bottom: 6px; cursor: pointer; border: 1px solid transparent; }
