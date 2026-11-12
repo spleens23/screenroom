@@ -214,6 +214,23 @@ jobs:
           echo "the file on the phone: $(shasum -a 256 "$SA/01 Atmos Song.m4a" | cut -d' ' -f1) $(stat -f%z "$SA/01 Atmos Song.m4a") bytes"
           if [ -s "$PD/Library/Caches/page-errors.log" ]; then cp "$PD/Library/Caches/page-errors.log" shots/parlor-page-errors.txt; else echo "(no page errors)" > shots/parlor-page-errors.txt; fi
           cat shots/parlor-page-errors.txt
+      - name: Parlor with a keyboard
+        continue-on-error: true
+        run: |
+          UDID="$(cat udid.txt)"
+          mkdir -p shots
+          PD="$(xcrun simctl get_app_container "$UDID" dev.screenroom.parlor data)"
+          : > "$PD/Library/Caches/page-errors.log" 2>/dev/null || true
+          cd ios
+          set -o pipefail
+          TEST_RUNNER_SHOTS="$PWD/../shots" xcodebuild test -project Screenroom.xcodeproj -scheme Parlor -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1 \
+            | tee uitest-parlor.log | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)" || true
+          { grep -E "Test Case .*(passed|failed)|: error:|TEST (SUCCEEDED|FAILED)" uitest-parlor.log; echo ---; tail -25 uitest-parlor.log; } > ../shots/parlor-keyboard.txt
+          PD="$(xcrun simctl get_app_container "$UDID" dev.screenroom.parlor data)"
+          echo "--- what was playing, second by second:" >> ../shots/parlor-keyboard.txt
+          grep "kb player" "$PD/Library/Caches/page-errors.log" | uniq | tail -40 >> ../shots/parlor-keyboard.txt || true
+          cat ../shots/parlor-keyboard.txt
       - name: Share the screenshots
         if: always()
         env:

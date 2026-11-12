@@ -743,9 +743,8 @@
   };
 
   function applyTheme() {
-    document.body.classList.toggle('heir', !!(S && S.theme === 'heirloom'));
     // Matinee: the standard look (stored as '2020s')
-    document.body.classList.toggle('mat', !(S && S.theme === 'heirloom'));
+    document.body.classList.add('mat');
     document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
   }
   function render() {
@@ -1029,7 +1028,10 @@
     hideSaver();
     if (filmPlaying) return; // a second press while the film is starting does nothing
     filmPlaying = true;
-    const r = await api.play({ id, audioTrack, fromStart });
+    // (the film player's controls take the accent colour picked in Settings)
+    let accent = '';
+    try { accent = getComputedStyle(document.body).getPropertyValue('--m-amber').trim(); } catch {}
+    const r = await api.play({ id, audioTrack, fromStart, accent });
     if (!r.ok) {
       if (/already playing/i.test(r.error || '')) return; // it's starting: just let it
       filmPlaying = false;
@@ -2055,24 +2057,12 @@
   }
 
   // ---- settings ----------------------------------------------------------------
-  // Settings → Theme: Matinee (stored as '2020s') or Heirloom. For this profile, or for everyone when "Same theme for
-  // every profile" is ticked.
-  function themeBlock(kids) {
-    const set = async (o, key) => {
-      S = await api.setTheme(o);
-      render(); renderSettings();
-      const again = $(`#settings [data-key="${key}"]`); again && again.focus({ preventScroll: true });
-    };
-    const who = S.config.themeAll ? 'everyone' : (S.profile ? S.profile.name : 'this profile');
+  // Settings → the look: the accent colour (kept on this device)
+  function themeBlock() {
     return h('div', {},
-      h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, `How ${APP} looks${SOLO ? '' : ` for ${who}`}. ${THEME_NAME}: ${EDITION === 'music' ? "Parlor's own light look, after the old iTunes" : "Screenroom's own warm picture-house look"}. Heirloom: glossy light blue, like the Heirloom tablet.`)),
-        h('select', { class: 'dev-select', 'data-key': 'theme', onchange: (e) => set({ theme: e.target.value }, 'theme') },
-          [['2020s', THEME_NAME], ['heirloom', 'Heirloom']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))),
-      true ? h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The colour of the buttons and highlights' : 'The colour of the buttons, highlights and the playing song, for films and music'}${S.theme === 'heirloom' ? ` (in the ${THEME_NAME} theme; Heirloom keeps its blue)` : ''}.`)),
+      h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The colour of the buttons and highlights' : 'The colour of the buttons, highlights and the playing song, for films and music'}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
-          style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))) : null,
-      kids || SOLO ? null : h('label', { class: 'row-set' }, h('span', {}, 'Same theme for every profile', h('small', {}, 'One look for the whole box (and the profile picker), instead of each profile choosing its own.')),
-        h('input', { type: 'checkbox', 'data-key': 'themeAll', checked: !!S.config.themeAll, onchange: (e) => set({ all: e.target.checked }, 'themeAll') })));
+          style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))));
   }
 
   function toggle(label, hint, key) {
@@ -2125,7 +2115,7 @@
   function renderSettingsNow() {
     if (S.profile && S.profile.kids) {
       $('#settings-body').replaceChildren(h('h2', {}, 'Settings'), h('h3', {}, 'Profiles'), profilesBlock(),
-        api.setTheme ? h('h3', {}, 'Theme') : null, api.setTheme ? themeBlock(true) : null);
+        api.setTheme ? h('h3', {}, 'Look') : null, api.setTheme ? themeBlock(true) : null);
       return;
     }
     const deviceSel = h('select', { class: 'dev-select', onchange: async (e) => { S = await api.setConfig({ audioDevice: e.target.value }); } },
@@ -2156,7 +2146,7 @@
       h('h2', {}, 'Settings'),
       api.saveProfile && S.profile && !SOLO ? h('h3', {}, 'Profiles') : null,
       api.saveProfile && S.profile && !SOLO ? profilesBlock() : null,
-      api.setTheme ? h('h3', {}, 'Theme') : null,
+      api.setTheme ? h('h3', {}, 'Look') : null,
       api.setTheme ? themeBlock() : null,
       films && api.clearInProgress ? h('h3', {}, 'Continue Watching') : null,
       films && api.clearInProgress ? h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, `Forget where ${S.profile ? S.profile.name : 'you'} stopped in films and episodes that aren't finished. Finished ones stay marked as watched.`),
@@ -2613,6 +2603,28 @@
       if (e.key === 'Escape' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); closeOsk(); return; }
     }
     if (isTextInput(t) && printable(e)) kbTypedAt = Date.now();
+    // Keyboard shortcuts on a computer (and an iPad or Mac with a keyboard), as in other music and film apps:
+    // ⌘/Ctrl+F search, ⌘/Ctrl+, settings, ⌘/Ctrl+[ back; in the Parlor, Space plays / pauses, ⌘/Ctrl+→/← next /
+    // previous song, ⌘/Ctrl+↑/↓ volume; the menu key or Shift+F10 on a song or album opens its menu.
+    const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
+    if (mod && !S.tv) {
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (k === 'f') { e.preventDefault(); const sb = $('#search'); sb.focus(); sb.select(); return; }
+      if (k === ',') { e.preventDefault(); toggleSettings(); return; }
+      if (k === '[') { e.preventDefault(); goBack(); return; }
+      if (mode === 'parlor' && api.musicCmd && !isTextInput(t)) {
+        const cmd = { ArrowRight: 'next', ArrowLeft: 'prev', ArrowUp: 'volup', ArrowDown: 'voldown' }[k];
+        if (cmd) { e.preventDefault(); api.musicCmd(cmd); return; }
+      }
+    }
+    // (Space plays / pauses wherever the highlight is, as in other music apps; Return opens / plays the highlighted thing)
+    if (mode === 'parlor' && api.musicCmd && !S.tv && e.key === ' ' && !mod && !/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && !dlg && !osk && !pinState
+      && !(t.closest && t.closest('#settings, #poverlay, #sheet, #pinpad, #who'))) {
+      e.preventDefault(); if (!e.repeat) api.musicCmd('toggle'); return;
+    }
+    if (mode === 'parlor' && parlorUI && parlorUI.menuFor && !S.tv && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && t.closest && t.closest('tr.srow, .pcard[data-key], .ptile[data-key]')) {
+      if (parlorUI.menuFor(t.closest('tr.srow, .pcard[data-key], .ptile[data-key]'))) { e.preventDefault(); return; }
+    }
     if (pinState && /^[0-9]$/.test(e.key)) { e.preventDefault(); pinState.add(e.key); return; }
     if (pinState && e.key === 'Backspace') { e.preventDefault(); pinState.del(); return; }
     if (t.tagName === 'INPUT' && t.type === 'search') {
@@ -2745,6 +2757,8 @@
 
   // Focus rings show while navigating with remote/keyboard/gamepad, and hide again when the mouse is used.
   window.addEventListener('mousedown', () => document.body.classList.remove('navmode'));
+  // a mouse's own Back button
+  window.addEventListener('mouseup', (e) => { if (e.button === 3 && !S.tv) { e.preventDefault(); goBack(); } });
   window.addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) document.body.classList.remove('navmode'); });
 
   // Hide the mouse pointer after a few seconds in TV mode. It only comes back when the mouse really moves: not
@@ -2848,6 +2862,8 @@
       openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
       wantsKeyboard: () => oskAllowed() && !kbInUse(),
       isTvBox: () => !!S.appliance,
+      // Parlor as an app of its own (iPhone, iPad, Android, Mac, Windows), not the music side of the TV box
+      standalone: EDITION === 'music',
       confirm: askConfirm,
       // the house: albums people recommended, and recommending one
       avatar,

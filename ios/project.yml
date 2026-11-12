@@ -74,7 +74,20 @@ targets:
         PRODUCT_NAME: Parlor
         ASSETCATALOG_COMPILER_APPICON_NAME: ParlorIcon
         INFOPLIST_FILE: Parlor/Info.plist
-    scheme: {}
+    scheme:
+      testTargets: [ParlorUITests]
+  # Parlor with a keyboard in a simulated iPad (the build workflow runs it)
+  ParlorUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [ParlorUITests]
+    dependencies:
+      - target: Parlor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.screenroom.parlor.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
   # Taps through the player in a simulated iPad (the build workflow runs it)
   ScreenroomUITests:
     type: bundle.ui-testing

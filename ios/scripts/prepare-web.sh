@@ -30,8 +30,8 @@ s = s.replace("script-src 'self'", "script-src 'self' file:")
 assert "img-src 'self' file:" in s, 'CSP changed: update prepare-web.sh'
 s = s.replace("img-src 'self' file:", "img-src 'self' file: srfile:")
 s = s.replace("media-src 'self' file:", "media-src 'self' file: srfile:")
-s = s.replace('<link rel="stylesheet" href="theme-heirloom.css">',
-              '<link rel="stylesheet" href="theme-heirloom.css">\n<link rel="stylesheet" href="ios.css">')
+s = s.replace('<link rel="stylesheet" href="theme-matinee.css">',
+              '<link rel="stylesheet" href="theme-matinee.css">\n<link rel="stylesheet" href="ios.css">')
 s = s.replace('<script src="../lib/media-core.js"></script>',
               '<script src="media-core.js"></script>\n<script src="ios-api.js"></script>')
 assert 'ios-api.js' in s and 'ios.css' in s and '../' not in s.split('<body>')[1], 'index.html changed: update prepare-web.sh'

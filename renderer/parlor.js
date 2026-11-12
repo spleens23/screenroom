@@ -100,6 +100,11 @@ window.createParlor = function createParlor(ctx) {
     return h('button', { class: 'card pcard', 'data-key': a.key, title: `${a.title} — ${a.artist}`, onclick: () => openAlbum(a.key) },
       sleeve(a), h('div', { class: 'pcard-t' }, a.title), h('div', { class: 'pcard-s' }, a.artist));
   }
+  /** A pinned album on Home in the Parlor app: small, like an app on a phone's home screen. */
+  function pinTile(a) {
+    return h('button', { class: 'ptile', 'data-key': a.key, title: `${a.title} — ${a.artist}`, onclick: () => openAlbum(a.key) },
+      cover(a, 'tiny'), h('span', { class: 'ptile-t' }, a.title));
+  }
   function playlistCard(pl) {
     const arts = [...new Set(pl.tracks.map((id) => (track(id) || {}).albumKey))].map(album).filter((a) => a && a.art).slice(0, 4);
     const mosaic = h('div', { class: 'cover mosaic' + (arts.length >= 4 ? ' four' : '') },
@@ -108,6 +113,11 @@ window.createParlor = function createParlor(ctx) {
     return h('button', { class: 'card pcard', 'data-key': 'pl:' + pl.id, title: pl.name, onclick: () => go('playlist:' + pl.id) },
       mosaic, h('div', { class: 'pcard-t' }, pl.name), h('div', { class: 'pcard-s' }, plural(pl.tracks.length, 'song')));
   }
+  // the library's songs, one per place in each album (an album there in stereo and in spatial audio: the version it plays)
+  const libIds = () => P.albums.flatMap((a) => a.tracks);
+  // Spatial Audio: Dolby Atmos and other surround songs, whichever version their album plays
+  const isSpatial = (t) => !!t && (!!t.atmos || (t.channels || 0) > 2);
+  const spatialIds = () => P.albums.flatMap((a) => (a.spatial || a.tracks).filter((id) => isSpatial(track(id))));
   const row = (title, cards) => (cards.length ? h('section', { class: 'row' }, h('h2', {}, title), h('div', { class: 'strip' }, cards)) : null);
   const grid = (cards) => h('div', { class: 'grid pgrid' }, cards);
   const page = (title, ...kids) => main.replaceChildren(h('div', { class: 'ppage' }, title ? h('h1', { class: 'page-title' }, title) : null, ...kids));
@@ -131,10 +141,12 @@ window.createParlor = function createParlor(ctx) {
     const added = P.albums.slice().sort((a, b) => b.added - a.added).slice(0, 20);
     page(null,
       h('div', { class: 'phead' }, h('h1', {}, 'Parlor'), h('div', { class: 'pstats' },
-        `${plural(P.albums.length, 'album')} · ${plural(Object.keys(P.tracks).length, 'song')}`)),
+        `${plural(P.albums.length, 'album')} · ${plural(libIds().length, 'song')}`)),
       h('div', { class: 'rows' },
         // favourites, pinned from their album pages
-        pinned.length ? row('Pinned', pinned.map(albumCard)) : null,
+        pinned.length ? (ctx.standalone
+          ? h('section', { class: 'row prow-pins' }, h('h2', {}, 'Pinned'), h('div', { class: 'ptiles' }, pinned.map(pinTile)))
+          : row('Pinned', pinned.map(albumCard))) : null,
         ctx.albumRecs ? row('Recommended for You', (() => {
           const seen = new Set();
           return ctx.albumRecs().map((x) => ({ ...x, a: album(x.rec.key) })).filter((x) => x.a && !seen.has(x.a.key) && seen.add(x.a.key)).map((x) => {
@@ -143,6 +155,7 @@ window.createParlor = function createParlor(ctx) {
             return c;
           });
         })()) : null,
+        ctx.standalone ? row('Made for Today', dailyMixes().map(mixCard)) : null,
         row('Recently Played', recent.map(albumCard)),
         row('Recently Added', added.map(albumCard)),
         row('Playlists', P.playlists.map(playlistCard)),
@@ -188,13 +201,118 @@ window.createParlor = function createParlor(ctx) {
       })));
   }
   function renderSongs() {
-    const ids = Object.values(P.tracks).sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || (a.disc - b.disc) || (a.track - b.track)).map((t) => t.id);
+    const ids = libIds().map(track).filter(Boolean).sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || (a.disc - b.disc) || (a.track - b.track)).map((t) => t.id);
     const ctxs = { kind: 'songs', name: 'Songs' };
     page('Songs',
       ids.length ? h('div', { class: 'btns pbtns' },
         h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxs) }, svg(ICON.play), 'Play'),
         h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxs) }, svg(ICON.shuffle), 'Shuffle')) : null,
       songTable(ids, { context: ctxs }));
+  }
+  // Spatial Audio: just the Dolby Atmos (and other surround) songs, and the albums they're on
+  function renderSpatial() {
+    const ids = spatialIds().map(track).filter(Boolean)
+      .sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || (a.disc - b.disc) || (a.track - b.track)).map((t) => t.id);
+    const keys = new Set(ids.map((id) => track(id).albumKey));
+    const albums = P.albums.filter((a) => keys.has(a.key));
+    const atmos = ids.filter((id) => track(id).atmos).length;
+    const dur = ids.reduce((s, id) => s + (track(id).duration || 0), 0);
+    const ctxs = { kind: 'spatial', name: 'Spatial Audio' };
+    if (!ids.length) return page('Spatial Audio', h('p', { class: 'pnote' }, 'No Dolby Atmos or surround songs yet. Albums in spatial audio show up here when they’re added.'));
+    page('Spatial Audio',
+      h('div', { class: 'pstats' }, `${plural(ids.length, 'song')}${atmos && atmos < ids.length ? ` (${atmos} in Dolby Atmos)` : atmos ? ' in Dolby Atmos' : ''} · ${longDur(dur)}`),
+      h('div', { class: 'btns pbtns' },
+        h('button', { class: 'btn primary', onclick: () => playIds(ids, 0, ctxs) }, svg(ICON.play), 'Play'),
+        h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(ids), 0, ctxs) }, svg(ICON.shuffle), 'Shuffle')),
+      h('div', { class: 'rows' }, row('Albums', albums.map(albumCard)),
+        h('section', { class: 'row' }, h('h2', {}, 'Songs'), songTable(ids, { context: ctxs })), ));
+  }
+  // ---- made for today: a few mixes from the library, new each day (the same all day) ----------------------
+  // From what's been played lately, the genres there's most of, albums not played in a while, and spatial audio.
+  const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+  function seeded(str) {
+    let x = 2166136261 >>> 0;
+    for (const c of str) x = Math.imul(x ^ c.charCodeAt(0), 16777619) >>> 0;
+    return () => { x = (x + 0x6D2B79F5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const seededShuffle = (arr, rnd) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  /** n songs from these albums' songs, no more than `per` from one album, in a mixed-up order. */
+  function pickFrom(albums, n, rnd, per = 2) {
+    const out = [];
+    const pools = seededShuffle(albums, rnd).map((a) => seededShuffle(a.tracks.filter((id) => track(id)), rnd).slice(0, per));
+    for (let round = 0; round < per && out.length < n; round++) for (const p of pools) { if (p[round] && out.length < n) out.push(p[round]); }
+    return seededShuffle(out, rnd);
+  }
+  let mixCache = null;
+  function dailyMixes() {
+    const day = todayKey();
+    const sig = `${day}|${P.profile}|${P.albums.length}|${(P.recent || []).join(',')}`;
+    if (mixCache && mixCache.sig === sig) return mixCache.mixes;
+    const mixes = [];
+    const R = (id) => seeded(`${day}|${P.profile}|${id}`);
+    const recent = (P.recent || []).map(album).filter(Boolean);
+    const inLists = new Set(P.playlists.flatMap((pl) => pl.tracks.map((id) => (track(id) || {}).albumKey)));
+    const loved = [...new Set([...recent, ...P.albums.filter((a) => inLists.has(a.key)), ...(P.pinned || []).map(album).filter(Boolean)])];
+    if (P.albums.length >= 3) {
+      // what's been on lately, with some of the rest for company
+      const rnd = R('today');
+      const base = loved.length ? loved : P.albums;
+      const fav = pickFrom(base, 16, rnd, Math.min(5, Math.max(2, Math.ceil(16 / base.length))));
+      const rest = pickFrom(P.albums.filter((a) => !loved.includes(a)), 9, rnd, 1);
+      const ids = seededShuffle([...new Set([...fav, ...rest])], rnd);
+      if (ids.length >= 5) mixes.push({ id: 'today', name: 'Today’s Mix', blurb: 'What you’ve had on lately, and some of the rest', ids });
+    }
+    // a mix for each of the genres there's most of
+    const byGenre = new Map();
+    for (const a of P.albums) { const g = (a.genre || '').trim(); if (g) { if (!byGenre.has(g)) byGenre.set(g, []); byGenre.get(g).push(a); } }
+    const genres = [...byGenre.entries()].filter(([, l]) => l.length >= 2).sort((a, b) => b[1].length - a[1].length).slice(0, 3);
+    for (const [g, list] of genres) {
+      const ids = pickFrom(list, 20, R('g:' + g), 3);
+      if (ids.length >= 5) mixes.push({ id: 'g:' + g, name: `${g} Mix`, blurb: `${g} from across your library`, ids });
+    }
+    // albums not played lately (or ever)
+    const played = new Set((P.recent || []));
+    const quiet = P.albums.filter((a) => !played.has(a.key));
+    if (quiet.length >= 3 && quiet.length < P.albums.length) {
+      const ids = pickFrom(quiet, 20, R('rediscover'), 2);
+      if (ids.length >= 5) mixes.push({ id: 'rediscover', name: 'Rediscover', blurb: 'From albums you haven’t played in a while', ids });
+    }
+    // spatial audio
+    const sp = spatialIds();
+    if (sp.length >= 5) {
+      const byAlbum = new Map();
+      for (const id of sp) { const k = track(id).albumKey; if (!byAlbum.has(k)) byAlbum.set(k, []); byAlbum.get(k).push(id); }
+      const ids = pickFrom([...byAlbum.entries()].map(([key, t]) => ({ key, tracks: t })), 20, R('spatial'), 3);
+      mixes.push({ id: 'spatial', name: 'Spatial Mix', blurb: 'Dolby Atmos and surround', ids });
+    }
+    mixCache = { sig, mixes };
+    return mixes;
+  }
+  function mixCard(m) {
+    const arts = [...new Set(m.ids.map((id) => (track(id) || {}).albumKey))].map(album).filter((a) => a && a.art).slice(0, 4);
+    const mosaic = h('div', { class: 'cover mosaic mixcover' + (arts.length >= 4 ? ' four' : '') },
+      ...(arts.length >= 4 ? arts : arts.slice(0, 1)).map((a) => h('img', { src: fileUrl(a.art), alt: '' })),
+      arts.length ? null : h('div', { class: 'cover-blank list' }, h('span', {}, '♫')),
+      h('span', { class: 'mix-name' }, m.name));
+    return h('button', { class: 'card pcard', 'data-key': 'mix:' + m.id, title: m.name, onclick: () => go('mix:' + m.id) },
+      mosaic, h('div', { class: 'pcard-s' }, `${plural(m.ids.length, 'song')} · ${m.blurb}`));
+  }
+  function renderMix(id) {
+    const m = dailyMixes().find((x) => x.id === id);
+    if (!m) return go('home');
+    const dur = m.ids.reduce((s, t) => s + ((track(t) || {}).duration || 0), 0);
+    const ctxm = { kind: 'mix', id: m.id, name: m.name };
+    page(m.name,
+      h('div', { class: 'pstats' }, `${m.blurb} · ${plural(m.ids.length, 'song')} · ${longDur(dur)} · a new one tomorrow`),
+      h('div', { class: 'btns pbtns' },
+        h('button', { class: 'btn primary', onclick: () => playIds(m.ids, 0, ctxm) }, svg(ICON.play), 'Play'),
+        h('button', { class: 'btn secondary', onclick: () => playIds(shuffle(m.ids), 0, ctxm) }, svg(ICON.shuffle), 'Shuffle'),
+        h('button', { class: 'btn secondary', onclick: () => nameDialog('Keep as a Playlist', `${m.name} (${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})`, 'Keep', async (name) => {
+          const r = await api.playlistCreate(name, m.ids);
+          if (!r.ok) { ctx.flash(r.error); return; }
+          P = r.state; closeOverlay(); ctx.flash(`Kept as ${name}`);
+        }) }, 'Keep as Playlist')),
+      songTable(m.ids, { context: ctxm, numbered: true }));
   }
   function renderPlaylists() {
     page('Playlists', grid([
@@ -225,7 +343,7 @@ window.createParlor = function createParlor(ctx) {
   function renderSearch(q) {
     const s = q.toLowerCase();
     const albums = P.albums.filter((a) => `${a.title} ${a.artist} ${a.genre || ''}`.toLowerCase().includes(s));
-    const songs = Object.values(P.tracks).filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(s)).map((t) => t.id);
+    const songs = libIds().map(track).filter(Boolean).filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(s)).map((t) => t.id);
     const arts = artists().filter(([n]) => n.toLowerCase().includes(s));
     page(`Results for “${q}”`,
       arts.length ? h('section', { class: 'row' }, h('h2', {}, 'Artists'), h('div', { class: 'strip' }, arts.map(([name, list]) =>
@@ -237,7 +355,10 @@ window.createParlor = function createParlor(ctx) {
 
   function render() {
     if (!P) { main.replaceChildren(h('div', { class: 'pempty' }, h('p', {}, 'Opening the Parlor…'))); load().then(render); return; }
-    document.querySelectorAll('#pnav a').forEach((x) => x.classList.toggle('active', x.dataset.pview === view.split(':')[0] || (view.startsWith('artist:') && x.dataset.pview === 'artists') || (view.startsWith('playlist:') && x.dataset.pview === 'playlists')));
+    document.querySelectorAll('#pnav a').forEach((x) => x.classList.toggle('active', x.dataset.pview === view.split(':')[0] || (view.startsWith('artist:') && x.dataset.pview === 'artists') || (view.startsWith('playlist:') && x.dataset.pview === 'playlists') || (view.startsWith('mix:') && x.dataset.pview === 'home')));
+    // (the Spatial Audio tab only once there's something in spatial audio)
+    const sp = document.querySelector('#pnav a[data-pview="spatial"]');
+    if (sp) sp.hidden = !spatialIds().length;
     const q = ctx.query();
     if (!P.albums.length) return renderEmpty();
     if (q) return renderSearch(q);
@@ -245,8 +366,10 @@ window.createParlor = function createParlor(ctx) {
     if (view === 'artists') return renderArtists();
     if (view.startsWith('artist:')) return renderArtist(view.slice(7));
     if (view === 'songs') return renderSongs();
+    if (view === 'spatial') return renderSpatial();
     if (view === 'playlists') return renderPlaylists();
     if (view.startsWith('playlist:')) return renderPlaylist(view.slice(9));
+    if (view.startsWith('mix:')) return renderMix(view.slice(4));
     renderHome();
   }
   const history = [];
@@ -393,7 +516,49 @@ window.createParlor = function createParlor(ctx) {
     const f = el.querySelector('button, input'); f && f.focus();
     return el;
   }
-  function closeOverlay() { const o = $('#poverlay'); if (o) { o.remove(); return true; } return false; }
+  function closeOverlay() { const o = $('#poverlay'); if (o) { const back = o.back; o.remove(); if (back && back.isConnected) back.focus({ preventScroll: true }); return true; } return false; }
+
+  // Right-click (or the keyboard's menu key, or Shift+F10) on a song, an album, a mix or a playlist: what you can do with it.
+  function contextMenu(target, x, y) {
+    const srow = target.closest && target.closest('tr.srow');
+    const card = target.closest && target.closest('.pcard[data-key], .ptile[data-key]');
+    let items = [];
+    if (srow) {
+      const id = srow.dataset.id, t = track(id);
+      if (!t) return false;
+      const nm = `“${t.title}”`;
+      items = [['Play', () => srow.click()], ['Play Next', () => queueUp([id], true, nm)], ['Add to Queue', () => queueUp([id], false, nm)],
+        ['Add to a Playlist…', () => pickPlaylist([id])], album(t.albumKey) ? ['Go to Album', () => openAlbum(t.albumKey)] : null, ['Go to Artist', () => go('artist:' + t.artist)]];
+    } else if (card) {
+      const key = card.dataset.key;
+      const a = album(key);
+      const mix = key.startsWith('mix:') && dailyMixes().find((m) => 'mix:' + m.id === key);
+      const pl = key.startsWith('pl:') && P.playlists.find((p) => 'pl:' + p.id === key);
+      const list = (name, ids, c, open) => [['Open', open], ['Play', () => playIds(ids, 0, c)], ['Shuffle', () => playIds(shuffle(ids), 0, c)],
+        ['Play Next', () => queueUp(ids, true, name)], ['Add to Queue', () => queueUp(ids, false, name)]];
+      if (a) items = [...list(`“${a.title}”`, a.tracks, { kind: 'album', id: a.key, name: a.title }, () => openAlbum(a.key)),
+        ['Add to a Playlist…', () => pickPlaylist(a.tracks)], [isPinned(a) ? 'Unpin from Home' : 'Pin to Home', () => togglePin(a)], ['Go to Artist', () => go('artist:' + a.artist)]];
+      else if (mix) items = [...list(mix.name, mix.ids, { kind: 'mix', id: mix.id, name: mix.name }, () => go(key))];
+      else if (pl && pl.tracks.length) items = [...list(`“${pl.name}”`, pl.tracks, { kind: 'playlist', id: pl.id, name: pl.name }, () => go('playlist:' + pl.id))];
+    }
+    items = items.filter(Boolean);
+    if (!items.length) return false;
+    closeOverlay();
+    const card2 = h('div', { class: 'pmenu-card', role: 'menu' }, items.map(([l, fn]) => h('button', { class: 'pmenu-item', role: 'menuitem', onclick: () => { closeOverlay(); fn(); } }, l)));
+    const el = h('div', { class: 'poverlay pmenu', id: 'poverlay', onmousedown: (e) => { if (e.target === el) closeOverlay(); }, oncontextmenu: (e) => { e.preventDefault(); if (e.target === el) closeOverlay(); } }, card2);
+    el.back = srow || card;
+    document.body.append(el);
+    const r = card2.getBoundingClientRect();
+    card2.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+    card2.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+    const f = card2.querySelector('button'); f && f.focus({ preventScroll: true });
+    return true;
+  }
+  document.addEventListener('contextmenu', (e) => {
+    if (!ctx.isOpen || !ctx.isOpen()) return;
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    if (contextMenu(e.target, e.clientX, e.clientY)) e.preventDefault();
+  });
 
   function pickPlaylist(trackIds) {
     overlay('pick', h('h2', {}, `Add ${plural(trackIds.length, 'song')} to…`),
@@ -996,6 +1161,8 @@ window.createParlor = function createParlor(ctx) {
       if (view !== 'home') { view = history.pop() || 'home'; if (view.startsWith('playlist:') && !P.playlists.some((p) => 'playlist:' + p.id === view)) view = 'home'; render(); return true; }
       return false;
     },
+    /** The menu for the highlighted song or album (the keyboard's menu key) */
+    menuFor(el) { const r = el.getBoundingClientRect(); return contextMenu(el, r.left + Math.min(40, r.width / 2), r.top + Math.min(r.height, 40)); },
     /** Which part of the screen the remote moves in (overlays first). */
     scope() {
       if ($('#poverlay')) return $('#poverlay');

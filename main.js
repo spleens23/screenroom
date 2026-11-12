@@ -28,9 +28,9 @@ if (process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance')) 
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
 }
 
-// Editions: the TV box runs everything in one app ("all"). On Heirloom (the tablet) films and music are two
-// apps of their own: `--edition=films` (Screenroom) and `--edition=music` (Parlor), each with its own settings,
-// profiles and library, and its own window class so the home screen shows them as two apps.
+// Editions: the TV box runs everything in one app ("all"). Films and music can also be two apps of their own:
+// `--edition=films` (Screenroom) and `--edition=music` (Parlor), each with its own settings, profiles and
+// library, and its own window class.
 // An installer made for one of them (Parlor for Windows) says which in resources/edition.txt.
 const EDITION = (() => {
   const a = process.argv.find((x) => x.startsWith('--edition='));
@@ -353,11 +353,9 @@ function battery() {
   } catch { return null; }
 }
 
-// Themes: '2020s' (Matinee, the default), 'heirloom' (glossy light blue, to match
-// the Heirloom tablet system, and the default there).
-const THEMES = ['2020s', 'heirloom'];
-const onHeirloom = (() => { try { return /^VARIANT_ID=heirloom$/m.test(fs.readFileSync('/etc/os-release', 'utf8')); } catch { return false; } })();
-const defaultTheme = () => (onHeirloom || process.env.SCREENROOM_HEIRLOOM === '1' ? 'heirloom' : '2020s');
+// The look: '2020s' (Matinee in Screenroom, Encore in Parlor) is the one theme.
+const THEMES = ['2020s'];
+const defaultTheme = () => '2020s';
 // The look: each profile picks its own theme, unless "same theme for every profile" is ticked.
 function themeNow() {
   if (config.themeAll) return { theme: THEMES.includes(config.theme) ? config.theme : defaultTheme(), fx: !!config.retroFx };
@@ -656,7 +654,7 @@ app.whenReady().then(async () => {
   if (isAppliance()) startKeys();
   const firstRun = !fs.existsSync(cfgFile());
   config = { ...defaults, ...readJson(cfgFile(), {}) };
-  // Screenroom on its own (e.g. on Heirloom): start with the Videos folder, if there is one.
+  // Screenroom on its own: start with the Videos folder, if there is one.
   if (firstRun && EDITION === 'films') { const v = path.join(os.homedir(), 'Videos'); try { if (fs.statSync(v).isDirectory()) config.dirs = [v]; } catch {} }
   profiles = new Profiles(dataDir());
   ratings = new Ratings(dataDir());
@@ -676,7 +674,7 @@ app.whenReady().then(async () => {
     soundDevice: async () => (await soundFor()).audioDevice || '', sound: async () => ({ ...(await soundFor()), truehdPassthrough: config.truehdPassthrough, dtsPassthrough: config.dtsPassthrough }), mediaRoot: () => mediaRoot, drives: () => drives,
     exclusiveAudio: isAppliance,
   });
-  // Parlor on its own (Windows, Heirloom): start with the Music folder, if there is one.
+  // Parlor on its own (Windows): start with the Music folder, if there is one.
   if (firstRun && EDITION === 'music') parlorApi.addFolder(path.join(os.homedir(), 'Music'));
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
   if (process.env.SCREENROOM_TEST_SCRIPT) selfTest(win);
@@ -1074,7 +1072,7 @@ app.whenReady().then(async () => {
     execFile('systemctl', [action], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
   }));
 
-  ipcMain.handle('play', async (_e, { id, audioTrack, fromStart }) => {
+  ipcMain.handle('play', async (_e, { id, audioTrack, fromStart, accent }) => {
     if (playing) return { ok: false, error: 'Something is already playing.' };
     if (parlorApi) parlorApi.pause(); // music stops for the film
     const item = library.find((i) => i.id === id);
@@ -1094,7 +1092,7 @@ app.whenReady().then(async () => {
     try {
       playing = true;
       const sound = await soundFor();
-      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath(), theme: themeNow().theme }, {
+      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath(), theme: themeNow().theme, accent: /^#?[0-9a-fA-F]{6}$/.test(accent || '') ? accent.replace('#', '').toUpperCase() : '' }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };

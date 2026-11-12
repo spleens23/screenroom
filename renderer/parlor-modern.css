@@ -1,9 +1,7 @@
 /* ==== Parlor, made calmer: covers only, an Apple Music–style Now Playing, and a roomy phone layout ====
-   Loaded after both themes (Encore/Matinee and Heirloom), so it applies to either. The selectors are written to
-   outrank the themes' own rules on purpose:
-     page rules        html body.parlor.parlor.parlor …   (beats "body.heir.parlor #nav" and friends)
-     Now Playing       html body:not(#_) #npfull …         (beats "body.heir #npfull …")
-   so the two themes keep their colours but share one calm layout. */
+   Loaded after the theme (Encore/Matinee). The selectors are written to outrank its own rules on purpose:
+     page rules        html body.parlor.parlor.parlor …
+     Now Playing       html body:not(#_) #npfull … */
 
 :root { --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
 .tab-ico { display: none; }
@@ -220,14 +218,11 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
     position: fixed; top: 0; left: 0; right: 0; height: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 10px;
     padding: calc(var(--sat) + 8px) 20px 12px; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; filter: none; }
   html body.mat.parlor.parlor.parlor #nav { background: linear-gradient(#f9f9f8, #dedcd8); border-bottom: 1px solid #b4b0a8; box-shadow: inset 0 -1px 0 rgba(255,255,255,.5); }
-  html body.heir.parlor.parlor.parlor #nav { background: linear-gradient(to bottom, #e3f0fb, #a9cdee); box-shadow: 0 1px 0 #87abd0, 0 2px 8px rgba(20,60,100,.15); border: 0; }
   html body.parlor.parlor.parlor #nav .brand { flex: 1 1 auto; order: 0; margin: 0; font-size: 26px; line-height: 40px; }
-  html body.heir.parlor.parlor.parlor #nav .brand { font-size: 22px; letter-spacing: 2px; color: #24527f; text-shadow: 0 1px rgba(255,255,255,.7); }
   html body.parlor.parlor.parlor .nav-right { display: contents; }
   html body.parlor.parlor.parlor #np-chip, html body.parlor.parlor.parlor #battery, html body.parlor.parlor.parlor #parlor-btn,
   html body.parlor.parlor.parlor #vote-btn { display: none !important; }
   html body.parlor.parlor.parlor #profile-btn, html body.parlor.parlor.parlor #settings-btn { order: 1; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; }
-  html body.heir.parlor.parlor.parlor #settings-btn { color: #24527f; text-shadow: none; background: rgba(255,255,255,.55); }
   html body.parlor.parlor.parlor #nav #search { display: block; order: 3; flex: 1 1 100%; width: 100%; max-width: none; height: 42px; margin: 0;
     padding: 0 14px; font-size: 16px; border-radius: 12px; }
 
@@ -236,12 +231,9 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body.parlor.parlor.parlor > #pnav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; gap: 0;
     padding: 6px 4px calc(var(--sab) + 4px); margin: 0; border-radius: 0; overflow: visible; box-shadow: none;
     background: rgba(250,249,247,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid #d3cfc8; }
-  html body.heir.parlor.parlor.parlor > #pnav { background: rgba(240,245,250,.95); border-top: 1px solid #b8c8d8; }
   html body.parlor.parlor.parlor > #pnav a { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; min-height: 46px;
     font-size: 10.5px; font-weight: 600; background: none; box-shadow: none; border-radius: 0; text-shadow: none; color: #8a837b; }
-  html body.heir.parlor.parlor.parlor > #pnav a { color: #6a7d90; }
   html body.parlor.parlor.parlor > #pnav a.active { background: none; box-shadow: none; color: var(--m-amber, #f0a73a); }
-  html body.heir.parlor.parlor.parlor > #pnav a.active { color: #2f74b5; }
   html body.parlor.parlor.parlor > #pnav .tab-ico { display: block; width: 25px; height: 25px; }
 
   /* -- pages: one 20px margin everywhere, two covers to a row, nothing squeezed -- */
@@ -271,7 +263,6 @@ html body:not(#_) #npfull .cover.huge img { animation: pm-cover .45s cubic-bezie
   html body.parlor.parlor.parlor #npbar { position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 64px); border: 0; border-radius: 14px; padding: 8px 10px; height: auto; gap: 10px;
     display: flex; align-items: center; background: rgba(48,40,34,.96); box-shadow: 0 10px 30px rgba(0,0,0,.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   html body.parlor.parlor.parlor #npbar[hidden] { display: none; }
-  html body.heir.parlor.parlor.parlor #npbar { background: rgba(252,253,255,.97); color: #24323f; box-shadow: 0 8px 26px rgba(20,60,100,.22); }
   html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="rew"], html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="fwd"],
   html body.parlor.parlor.parlor #npbar .npb-ctrl .npb[data-b="prev"] { display: none; }
   html body.parlor.parlor.parlor #npbar .npb-art { order: 0; flex: 0 0 auto; padding: 0; border: 0; background: none; box-shadow: none; }
@@ -458,8 +449,6 @@ body.mat.parlor .poverlay-card, body.mat.parlor #settings .settings-card { backg
   html body.parlor.parlor.parlor .modal-card.pmodal .close { width: 34px; height: 34px; font-size: 14px; }
 
 
-  /* -- Heirloom: its paper scrolls with the page (a "fixed" background makes iPhone scrolling stick) -- */
-  html body.heir.parlor.parlor.parlor { background-attachment: scroll; }
 }
 @media (pointer: coarse) { body.parlor { background-attachment: scroll !important; } }
 /* iPhone and iPad: the device's own buttons set the volume */
@@ -472,7 +461,6 @@ body.ios-app #npfull .npb.vol, body.ios-app #npfull .npf-vol, body.ios-app #npba
 /* iPad (and an iPhone on its side): the top bar starts below the clock and battery */
 @media (min-width: 601px) {
   html body.ios-app.parlor.parlor.parlor #nav, html body.ios-app.parlor.parlor.parlor #nav.solid { height: calc(78px + var(--sat)); padding-top: var(--sat); }
-  html body.ios-app.heir.parlor.parlor.parlor #nav, html body.ios-app.heir.parlor.parlor.parlor #nav.solid { height: calc(58px + var(--sat)); }
   html body.ios-app.parlor.parlor.parlor .ppage { padding-top: calc(92px + var(--sat)); }
 }
 @media (min-width: 601px) {
@@ -608,7 +596,7 @@ html body:not(#_) #npfull .qtop .qclear:active { background: rgba(255,255,255,.2
 @media (max-width: 600px), (pointer: coarse) and (orientation: portrait) {
   html body.parlor.ios-app #modal:not([hidden])::before { content: ''; position: fixed; z-index: 60; top: 0; left: 0; right: 0; height: var(--sat); pointer-events: none;
     background: rgba(24,24,24,.86); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); }
-  html body.parlor.ios-app.mat #modal:not([hidden])::before, html body.parlor.ios-app.heir #modal:not([hidden])::before { background: rgba(255,255,255,.86); }
+  html body.parlor.ios-app.mat #modal:not([hidden])::before { background: rgba(255,255,255,.86); }
 }
 
 /* -- surround songs: a small 5.1 / 7.1 tag in song lists; Now Playing says Spatial Audio when AirPods are spatializing -- */
@@ -636,3 +624,26 @@ html body.parlor.parlor.parlor table.songs tr.sizer td, table.songs tr.sizer td 
 /* track numbers: room for two digits (and three) after the left margin, never cut to "2…" */
 html body.parlor.parlor.parlor table.songs td.n, html body.parlor.parlor.parlor table.songs th.n,
 html body.parlor.parlor.parlor .palbum table.songs td.n { width: 60px; padding-left: 14px; padding-right: 10px; white-space: nowrap; overflow: visible; text-overflow: clip; text-align: right; font-variant-numeric: tabular-nums; }
+html body #pnav a[hidden] { display: none !important; }
+
+/* Pinned albums on Home (the Parlor app): tiny tiles, like apps on a home screen */
+html body.parlor .ptiles { display: grid; grid-template-columns: repeat(auto-fill, 76px); gap: 14px 12px; padding: 14px var(--m-gut, 4%) 18px; }
+html body.parlor .ptile { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 76px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; font: inherit; }
+html body.parlor .ptile .cover { width: 64px !important; height: 64px !important; min-width: 0; border-radius: 15px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+html body.parlor .ptile .cover img { width: 100%; height: 100%; object-fit: cover; }
+html body.parlor .ptile .ptile-t { max-width: 76px; font-size: 11px; line-height: 1.2; font-weight: 500; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body.parlor .ptile:focus-visible .cover, html body.parlor .ptile:hover .cover { outline: 3px solid var(--m-amber, #3CC4C4); outline-offset: 2px; }
+html body.parlor .ptile:active .cover { transform: scale(.94); }
+@media (max-width: 600px) { html body.parlor.parlor.parlor .ptiles { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); justify-items: center; padding: 0 14px 6px; } }
+
+/* Made for Today: the mix's name over its covers */
+html body.parlor .cover.mixcover { position: relative; }
+html body.parlor .cover.mixcover .mix-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; font-weight: 700; font-size: 15px; line-height: 1.15; color: #fff;
+  text-align: left; background: linear-gradient(transparent, rgba(0,0,0,.65)); text-shadow: 0 1px 2px rgba(0,0,0,.4); pointer-events: none; }
+
+/* the menu a right-click (or the menu key) opens on a song, album, mix or playlist */
+html body .poverlay.pmenu { background: transparent; display: block; }
+html body .pmenu-card { position: fixed; min-width: 200px; padding: 5px; border-radius: 10px; background: rgba(252,251,249,.97); color: #1e1a16;
+  box-shadow: 0 10px 34px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.08); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: flex; flex-direction: column; }
+html body .pmenu-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 7px 12px; border-radius: 6px; font-size: 14px; cursor: default; }
+html body .pmenu-item:hover, html body .pmenu-item:focus { background: var(--m-amber, #3CC4C4); color: #fff; outline: none; }

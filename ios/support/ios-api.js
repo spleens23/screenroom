@@ -64,7 +64,7 @@
   // ---- config --------------------------------------------------------------------------------------------
   const DEFAULTS = { preferredLang: 'eng', subLang: '', screensaverMin: 0, theme: '2020s', themeAll: false, retroFx: false };
   let config = null;
-  const THEMES = ['2020s', 'heirloom'];
+  const THEMES = ['2020s'];
 
   // ---- profiles (the same rules as lib/profiles.js) -------------------------------------------------------
   const COLORS = ['#b5523a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#eb5757'];
@@ -331,15 +331,17 @@
   const prof = () => pget(currentId) || { id: 'main', kids: false };
   const canManage = () => !prof().kids;
   const visibleAlbums = () => music.albums.filter((a) => canSee(prof().id, a));
-  function visibleTrackIds() { const s = new Set(); for (const a of visibleAlbums()) for (const t of a.tracks) s.add(t); return s; }
+  function visibleTrackIds() { const s = new Set(); for (const a of visibleAlbums()) for (const t of everyTrack(a)) s.add(t); return s; }
 
   function parlorState() {
     const me = prof();
     const albums = visibleAlbums();
     const owned = new Set(albums.filter((a) => owners(a).includes(me.id)).map((a) => a.key));
     const tracks = {};
+    // (both versions of an album there in stereo and in spatial audio: the Spatial Audio section lists its spatial songs
+    // whichever version the album plays)
     for (const a of albums) {
-      for (const id of a.tracks) {
+      for (const id of everyTrack(a)) {
         const t = music.tracks[id];
         if (t) tracks[id] = { id, title: t.title, artist: t.artist, album: t.album, albumKey: a.key, track: t.track, disc: t.disc,
           duration: t.duration, year: t.year, genre: t.genre, codec: t.codec, lossless: t.lossless, bitrate: t.bitrate, sampleRate: t.sampleRate, bitDepth: t.bitDepth, channels: t.channels || 0, atmos: t.atmos, playable: t.playable, explicit: t.explicit };
@@ -357,7 +359,7 @@
         key: a.key, title: a.title, artist: a.artist, year: a.year, genre: a.genre, art: a.art, motion: a.motion || null, added: a.added,
         tracks: a.tracks, duration: a.duration, lossless: a.lossless, various: a.various, mine: owned.has(a.key),
         // there in stereo and in spatial audio: which one plays
-        version: a.versions ? a.versions.current : null,
+        version: a.versions ? a.versions.current : null, spatial: a.versions ? a.versions.spatial : null,
         audience: canManage() ? audience(a) : [],
       })),
       tracks,

@@ -20,15 +20,10 @@ local ACCENT = bgr(o.accent)
 local WHITE, GRAY, BLACK, PANEL = 'FFFFFF', 'B3B3B3', '000000', '181818'
 local FONT = (o.font ~= '') and ('\\fn' .. o.font) or ''
 local TEXT_EDGE = '\\bord0\\shad1\\4c&H000000&\\4a&H90&'
--- Matinee (the standard theme) and Heirloom: the same layout; Matinee's ink-brown and cream, Heirloom's blues.
-local HEIR = (o.theme == 'heirloom')
-local SERIF = FONT
+-- Matinee: ink-brown and cream
 local CREAM, MUTED, EDGE, TRACK, INK = bgr('F3E9DC'), bgr('CDBDAC'), bgr('5A4636'), bgr('4A3B2F'), bgr('16110D')
-if HEIR then
-  CREAM, MUTED, EDGE, TRACK, INK = WHITE, bgr('B9C7D6'), bgr('3A4E66'), bgr('2A3A50'), bgr('0E1826')
-else
-  FONT, SERIF = '\\fnDM Sans', '\\fnFraunces'
-end
+FONT = '\\fnDM Sans'
+local SERIF = '\\fnFraunces'
 PANEL = INK
 
 -- ---------------------------------------------------------------- state
