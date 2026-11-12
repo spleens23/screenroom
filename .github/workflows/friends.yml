@@ -46,6 +46,20 @@ jobs:
         if: steps.cf.outputs.ready == 'yes'
         run: |
           set -euo pipefail
+          # (a space or line break pasted with a secret doesn't count)
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          echo "account id: ${#CLOUDFLARE_ACCOUNT_ID} characters$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -qE '^[0-9a-f]{32}$' && echo ', looks right' || echo ', not the 32 letters and numbers an Account ID has')"
+          # the accounts this token can use: if it's just one, that's the one
+          ACCTS=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50")
+          echo "accounts the token can use: $(echo "$ACCTS" | jq -c '{success, count: (.result | length), errors: [.errors[]?.message]}')"
+          if ! echo "$ACCTS" | jq -e --arg id "$CLOUDFLARE_ACCOUNT_ID" '.result[]? | select(.id == $id)' > /dev/null; then
+            if [ "$(echo "$ACCTS" | jq '.result | length')" = 1 ]; then
+              echo "::warning title=Friends::CLOUDFLARE_ACCOUNT_ID isn't the account this token is for; using the token's own account instead."
+              CLOUDFLARE_ACCOUNT_ID=$(echo "$ACCTS" | jq -r '.result[0].id')
+            fi
+          fi
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
           API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           H=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
           # the token works? (Cloudflare's own answer, without the token itself)
@@ -55,12 +69,10 @@ jobs:
             echo "::error title=Friends::Cloudflare didn't accept CLOUDFLARE_API_TOKEN. It should be an API Token (My Profile → API Tokens → Create Token → 'Edit Cloudflare Workers'), not the Global API Key, pasted with nothing before or after it."
             exit 1
           fi
-          A=$(curl -sS "${H[@]}" "$API")
-          echo "account check: $(echo "$A" | jq -c '{success, name: .result.name, errors: [.errors[]?.message]}')"
-          [ "$(echo "$A" | jq -r .success)" = true ] || { echo "::error title=Friends::The token works, but not with CLOUDFLARE_ACCOUNT_ID. Check the ID is the 32-character Account ID from Workers & Pages."; exit 1; }
           # the storage (made the first time)
           L=$(curl -sS "${H[@]}" "$API/storage/kv/namespaces?per_page=100")
           echo "storage check: $(echo "$L" | jq -c '{success, errors: [.errors[]?.message]}')"
+          [ "$(echo "$L" | jq -r .success)" = true ] || { echo "::error title=Friends::The token works, but can't use Workers storage in that account. Check CLOUDFLARE_ACCOUNT_ID (the 32-character Account ID from Workers & Pages) and that the token was made from the 'Edit Cloudflare Workers' template."; exit 1; }
           KV=$(echo "$L" | jq -r '.result[]? | select(.title == "parlor-friends") | .id' | head -1)
           if [ -z "$KV" ]; then
             C=$(curl -sS "${H[@]}" -X POST "$API/storage/kv/namespaces" -d '{"title":"parlor-friends"}')
