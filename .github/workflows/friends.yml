@@ -48,15 +48,31 @@ jobs:
           set -euo pipefail
           API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           H=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+          # the token works? (Cloudflare's own answer, without the token itself)
+          V=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          echo "token check: $(echo "$V" | jq -c '{success, status: .result.status, errors: [.errors[]?.message]}')"
+          if [ "$(echo "$V" | jq -r .success)" != true ]; then
+            echo "::error title=Friends::Cloudflare didn't accept CLOUDFLARE_API_TOKEN. It should be an API Token (My Profile → API Tokens → Create Token → 'Edit Cloudflare Workers'), not the Global API Key, pasted with nothing before or after it."
+            exit 1
+          fi
+          A=$(curl -sS "${H[@]}" "$API")
+          echo "account check: $(echo "$A" | jq -c '{success, name: .result.name, errors: [.errors[]?.message]}')"
+          [ "$(echo "$A" | jq -r .success)" = true ] || { echo "::error title=Friends::The token works, but not with CLOUDFLARE_ACCOUNT_ID. Check the ID is the 32-character Account ID from Workers & Pages."; exit 1; }
           # the storage (made the first time)
-          KV=$(curl -fsS "${H[@]}" "$API/storage/kv/namespaces?per_page=100" | jq -r '.result[] | select(.title == "parlor-friends") | .id' | head -1)
+          L=$(curl -sS "${H[@]}" "$API/storage/kv/namespaces?per_page=100")
+          echo "storage check: $(echo "$L" | jq -c '{success, errors: [.errors[]?.message]}')"
+          KV=$(echo "$L" | jq -r '.result[]? | select(.title == "parlor-friends") | .id' | head -1)
           if [ -z "$KV" ]; then
-            KV=$(curl -fsS "${H[@]}" -X POST "$API/storage/kv/namespaces" -d '{"title":"parlor-friends"}' | jq -r '.result.id')
+            C=$(curl -sS "${H[@]}" -X POST "$API/storage/kv/namespaces" -d '{"title":"parlor-friends"}')
+            echo "storage made: $(echo "$C" | jq -c '{success, errors: [.errors[]?.message]}')"
+            KV=$(echo "$C" | jq -r '.result.id // empty')
           fi
           [ -n "$KV" ] && [ "$KV" != null ] || { echo "::error::Couldn't make the storage. Does the token have Workers KV Storage: Edit?"; exit 1; }
           sed -i "s/KV_ID/$KV/" friends/wrangler.toml
           # the address: <name>.<your workers.dev subdomain>.workers.dev
-          SUB=$(curl -fsS "${H[@]}" "$API/workers/subdomain" | jq -r '.result.subdomain // empty')
+          SB=$(curl -sS "${H[@]}" "$API/workers/subdomain")
+          echo "address check: $(echo "$SB" | jq -c '{success, subdomain: .result.subdomain, errors: [.errors[]?.message]}')"
+          SUB=$(echo "$SB" | jq -r '.result.subdomain // empty')
           if [ -z "$SUB" ]; then
             echo "::error title=Friends::This Cloudflare account has no workers.dev address yet. Open Workers & Pages in the Cloudflare dashboard once (it sets one up), then run this again."
             exit 1
