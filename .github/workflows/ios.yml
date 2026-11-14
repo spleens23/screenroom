@@ -121,6 +121,7 @@ jobs:
           tail -60 ../shots/mpv-log.txt
       - name: Try it on a simulated iPhone
         continue-on-error: true
+        timeout-minutes: 15   # (a simulator that hangs starting up shouldn't hold up the upload)
         run: |
           mkdir -p shots
           exec > >(tee shots/iphone.txt) 2>&1
