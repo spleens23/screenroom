@@ -795,3 +795,29 @@ html body.pdark .accent-swatches .swatch { border-color: rgba(30,27,24,.9); box-
 html body.parlor .fr-setup .btn, html body.parlor .fr-addrow .btn { white-space: nowrap; flex: 0 0 auto; }
 html body.parlor .fr-addrow input { min-width: 0; text-transform: none !important; letter-spacing: 0 !important; }
 html body.parlor .fr-addrow input:not(:placeholder-shown) { text-transform: uppercase !important; letter-spacing: 1px !important; }
+
+/* round buttons stay round (the phone apps give every button a 40px minimum height for an easier tap) */
+html body.parlor .close, html body.parlor .np-close { min-height: 0 !important; aspect-ratio: 1; padding: 0; flex: 0 0 auto; }
+@media (max-width: 600px) { html body.parlor.parlor.parlor .modal-card.pmodal .close { width: 40px; height: 40px; font-size: 15px; } }
+
+/* Now Playing: the artist and album names are links to the album */
+html body:not(#_) #npfull .npf-link { all: unset; cursor: pointer; color: inherit; font: inherit; max-width: 100%; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; border-radius: 6px; }
+html body:not(#_) #npfull .npf-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+html body:not(#_) #npfull .npf-link:focus-visible { outline: 2px solid rgba(255,255,255,.8); outline-offset: 3px; }
+html body:not(#_) #npfull .npf-link:active { opacity: .6; }
+
+/* Now Playing on a speaker: its volume, a slim slider like the progress bar, between the controls and the tools */
+html body:not(#_) #npfull .npf-volrow { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; color: rgba(255,255,255,.7); }
+html body:not(#_) #npfull .npf-volrow[hidden] { display: none; }
+html body:not(#_) #npfull .npf-volico svg { width: 18px; height: 18px; display: block; }
+html body:not(#_) #npfull .npf-volin { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 28px; margin: 0; background: transparent; cursor: pointer; --v: 30%; }
+html body:not(#_) #npfull .npf-volin::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(255,255,255,.92) var(--v), rgba(255,255,255,.25) var(--v)); }
+html body:not(#_) #npfull .npf-volin::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+html body:not(#_) #npfull .npf-volin::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); }
+html body:not(#_) #npfull .npf-volin::-moz-range-progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,.92); }
+html body:not(#_) #npfull .npf-volin::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: #fff; }
+html body:not(#_) #npfull .npf-volin:focus-visible { outline: 2px solid rgba(255,255,255,.7); outline-offset: 4px; border-radius: 6px; }
+/* (on a speaker, the slider stands in for the − / + buttons a computer shows) */
+html body:not(#_) #npfull.on-speaker .npf-ctrl .npb.vol, html body:not(#_) #npfull.on-speaker .npf-ctrl .npf-vol { display: none; }
+/* the "Stereo · Downmixed" label */
+html body:not(#_) #npfull .npf-q.downmix { color: rgba(255,255,255,.8); }

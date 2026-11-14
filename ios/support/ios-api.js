@@ -377,7 +377,16 @@
     const t = music.tracks[id];
     if (!t) return null;
     const a = music.albums.find((x) => x.key === t.albumKey);
-    return { id, path: t.path, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: a && a.art, duration: t.duration };
+    const out = { id, path: t.path, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: a && a.art, duration: t.duration };
+    // a Dolby Atmos or surround song: for a speaker that only plays stereo, the album's stereo version of it when
+    // there is one (otherwise the phone makes a stereo copy itself)
+    if (t.atmos || (t.channels || 0) > 2) {
+      out.spatial = true; out.atmos = !!t.atmos; out.channels = t.channels || 0;
+      const twin = a && a.versions && a.versions.stereo.map((sid) => music.tracks[sid]).find((x) => x && x.id !== id && !x.atmos && (x.channels || 0) <= 2 && (x.disc || 1) === (t.disc || 1)
+        && ((t.track && x.track === t.track) || MediaCore.versionlessTitle(x.title || '').toLowerCase() === MediaCore.versionlessTitle(t.title || '').toLowerCase()));
+      if (twin && twin.path) out.stereoPath = twin.path;
+    }
+    return out;
   };
   function publicPlayer(s) {
     const strip = (id, i) => { const t = trackFor(id); return t && { id: t.id, title: t.title, artist: t.artist, album: t.album, albumKey: t.albumKey, art: t.art, duration: t.duration, queued: !!(s.queued && s.queued[i]) }; };

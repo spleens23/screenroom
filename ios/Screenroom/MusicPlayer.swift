@@ -90,7 +90,11 @@ final class MusicPlayer {
             // on a Sonos room: where the speaker is, its volume
             playing = index >= 0; paused = playing && l.paused
             pos = l.now; dur = l.dur; vol = l.volume; mute = l.muted
-            route = ["kind": "sonos", "name": l.room.name, "spatial": false, "channels": 0, "sonos": true, "atmos": l.room.atmos, "model": l.room.model]
+            // (downmix: this song is Dolby Atmos or surround and the speaker only plays stereo, so it gets a stereo version;
+            // twin: that's the album's own stereo version)
+            let down = current.map { l.stereoFor($0) } ?? false
+            route = ["kind": "sonos", "name": l.room.name, "spatial": false, "channels": 0, "sonos": true, "atmos": l.room.atmos, "model": l.room.model,
+                     "downmix": down, "twin": down && (current?["stereoPath"] as? String).map { FileManager.default.fileExists(atPath: $0) } == true]
         }
         if !dur.isFinite || dur <= 0 { dur = (current?["duration"] as? NSNumber)?.doubleValue ?? 0 }
         var output: Any = NSNull()

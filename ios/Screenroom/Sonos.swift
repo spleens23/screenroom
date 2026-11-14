@@ -1,10 +1,12 @@
 import AVFoundation
+import CryptoKit
 import Foundation
 import Network
 
 // Parlor playing on Sonos speakers. The speaker is told where each song is on the Wi-Fi (a small web server in
-// the app hands it the file exactly as it is on the phone: a Dolby Atmos song arrives as Dolby Atmos), and plays
-// it itself; Parlor keeps the queue, and its screen and the lock screen follow the speaker.
+// the app hands it the file exactly as it is on the phone: a Dolby Atmos song arrives as Dolby Atmos on a speaker
+// that plays Dolby Atmos; one that only plays stereo, like a Five, gets the album's stereo version of the song, or a
+// stereo copy the phone makes), and plays it itself; Parlor keeps the queue, and its screen and the lock screen follow the speaker.
 
 // ---- the files, on the Wi-Fi ---------------------------------------------------------------------------------
 
@@ -422,8 +424,7 @@ final class SonosLink {
         }
     }
 
-    private func didl(_ t: [String: Any], _ host: String) -> (String, String)? {
-        guard let path = t["path"] as? String else { return nil }
+    private func didl(_ t: [String: Any], _ path: String, _ host: String) -> (String, String)? {
         let uri = FileServer.shared.url(for: path, host: host)
         var art = ""
         if let a = t["art"] as? String, FileManager.default.fileExists(atPath: a) {
@@ -439,9 +440,27 @@ final class SonosLink {
         return (uri, meta)
     }
 
-    private func add(_ t: [String: Any], at position: Int = 0) async throws {
+    /// Whether a song goes to this speaker in stereo when it's Dolby Atmos or surround (a speaker that doesn't play
+    /// Dolby Atmos music plays nothing at all if sent it).
+    func stereoFor(_ t: [String: Any]) -> Bool { !room.atmos && (t["spatial"] as? Bool ?? false) }
+
+    /// The file the speaker gets for a song: the song itself, or for a stereo-only speaker the album's stereo
+    /// version of a Dolby Atmos / surround song, or a stereo copy made on the phone (kept for next time).
+    func source(_ t: [String: Any]) async -> String? {
+        guard let path = t["path"] as? String else { return nil }
+        guard stereoFor(t) else { return path }
+        if let twin = t["stereoPath"] as? String, FileManager.default.fileExists(atPath: twin) { return twin }
+        do { return try await Downmix.shared.stereo(of: path) } catch {
+            NSLog("Parlor on Sonos: no stereo copy of %@: %@", path, error.localizedDescription)
+            let name = t["title"] as? String ?? "A song"
+            await MainActor.run { self.onProblem?("\(name) couldn't be made into stereo for \(self.room.name), so it may not play there.") }
+            return path
+        }
+    }
+
+    private func add(_ t: [String: Any], path: String, at position: Int = 0) async throws {
         guard let host = FileServer.localAddress(toward: room.ip) else { throw ScreenroomError("This phone isn't on the speaker's Wi-Fi.") }
-        guard let d = didl(t, host) else { return }
+        guard let d = didl(t, path, host) else { return }
         try await room.av("AddURIToQueue", [("EnqueuedURI", d.0), ("EnqueuedURIMetaData", d.1),
                                            ("DesiredFirstTrackNumberEnqueued", String(position)), ("EnqueueAsNext", "0")])
     }
@@ -459,8 +478,11 @@ final class SonosLink {
         let first = list[i], id = room.id
         run("start") { [weak self] in
             guard let self else { return }
+            // (a stereo copy, if the speaker needs one, is made first: the speaker's told about the song once it's ready)
+            guard let path = await self.source(first) else { return }
+            guard await MainActor.run(body: { g == self.gen }) else { return }
             try await self.room.av("RemoveAllTracksFromQueue")
-            try await self.add(first)
+            try await self.add(first, path: path)
             await MainActor.run { if g == self.gen { self.filled = 1 } }
             try await self.room.av("SetAVTransportURI", [("CurrentURI", "x-rincon-queue:\(id)#0"), ("CurrentURIMetaData", "")])
             try await self.room.av("Seek", [("Unit", "TRACK_NR"), ("Target", "1")])
@@ -477,16 +499,31 @@ final class SonosLink {
         guard from < list.count else { return }
         let batch = Array(list[from..<min(list.count, from + 4)])
         filling = true
-        run("add songs") { [weak self] in
+        Task { [weak self] in
             guard let self else { return }
+            // the files first (stereo copies take a few seconds each), outside the line of speaker commands so
+            // Play / Pause don't wait for them; then onto the speaker
+            var ready: [([String: Any], String)] = []
             for t in batch {
                 guard await MainActor.run(body: { g == self.gen }) else { break }
-                try await self.add(t)
-                await MainActor.run { if g == self.gen { self.filled += 1 } }
+                guard let p = await self.source(t) else { break }
+                ready.append((t, p))
             }
             await MainActor.run {
-                // (a fill from before the queue was redone just stops: the new one has its own)
-                if g == self.gen { self.filling = false; self.fill(g) }
+                guard g == self.gen else { return }
+                guard !ready.isEmpty else { self.filling = false; return }
+                self.run("add songs") { [weak self] in
+                    guard let self else { return }
+                    for (t, p) in ready {
+                        guard await MainActor.run(body: { g == self.gen }) else { break }
+                        try await self.add(t, path: p)
+                        await MainActor.run { if g == self.gen { self.filled += 1 } }
+                    }
+                    await MainActor.run {
+                        // (a fill from before the queue was redone just stops: the new one has its own)
+                        if g == self.gen { self.filling = false; self.fill(g) }
+                    }
+                }
             }
         }
     }
@@ -544,6 +581,7 @@ final class SonosLink {
     }
     func setVolume(_ v: Int) {
         volume = max(0, min(100, v))
+        volumeSetAt = Date()
         let v = volume
         run("volume") { [weak self] in try await self?.room.group("SetGroupVolume", [("DesiredVolume", String(v))]) }
     }
@@ -574,15 +612,22 @@ final class SonosLink {
     }
 
     private var polling = false
+    private var polls = 0
+    private var volumeSetAt = Date.distantPast
     private func poll() {
         if polling { return }
         polling = true
+        polls += 1
+        let askVolume = polls % 3 == 0
         Task { [weak self] in
             guard let self else { return }
             let p = try? await self.room.av("GetPositionInfo")
             let t = try? await self.room.av("GetTransportInfo")
+            // (the volume too, every few seconds: it may have been changed in the Sonos app or on the speaker)
+            let vr = askVolume ? try? await self.room.group("GetGroupVolume") : nil
             await MainActor.run {
                 self.polling = false
+                if let vr, let v = Int(Sonos.tag("CurrentVolume", vr) ?? ""), Date().timeIntervalSince(self.volumeSetAt) > 3 { self.volume = v }
                 guard let p, let t else { return }
                 let state = Sonos.tag("CurrentTransportState", t) ?? ""
                 let track = Int(Sonos.tag("Track", p) ?? "") ?? 0
@@ -610,6 +655,113 @@ final class SonosLink {
                 }
             }
         }
+    }
+}
+
+// ---- stereo copies --------------------------------------------------------------------------------------------
+
+/// Stereo copies of Dolby Atmos and surround songs, for Sonos speakers that only play stereo (a Five, a One, a
+/// Move…): iOS decodes the song and mixes it down to two channels, saved as 256 kbps AAC in the app's caches
+/// (iOS may clear them when space is short; they're made again when needed). About 1.5 GB is kept at most.
+actor Downmix {
+    static let shared = Downmix()
+    private var jobs: [String: Task<String, Error>] = [:]
+    private let dir: URL = {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("stereo", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }()
+
+    func stereo(of path: String) async throws -> String {
+        let a = try FileManager.default.attributesOfItem(atPath: path)
+        let size = (a[.size] as? NSNumber)?.int64Value ?? 0
+        let mtime = Int((a[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
+        let key = SHA256.hash(data: Data("\(path)|\(size)|\(mtime)".utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        let out = dir.appendingPathComponent(key + ".m4a")
+        if FileManager.default.fileExists(atPath: out.path) {
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: out.path)
+            return out.path
+        }
+        if let j = jobs[key] { return try await j.value }
+        let src = URL(fileURLWithPath: path)
+        let j = Task.detached(priority: .userInitiated) { () throws -> String in
+            try await Downmix.convert(src, to: out)
+            return out.path
+        }
+        jobs[key] = j
+        defer { jobs[key] = nil }
+        let made = try await j.value
+        prune()
+        return made
+    }
+
+    /// The oldest copies go once there's more than about 1.5 GB of them.
+    private func prune() {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys) else { return }
+        var list = files.compactMap { u -> (URL, Date, Int)? in
+            guard let v = try? u.resourceValues(forKeys: Set(keys)) else { return nil }
+            return (u, v.contentModificationDate ?? .distantPast, v.fileSize ?? 0)
+        }.sorted { $0.1 > $1.1 }
+        var total = 0
+        list = list.filter { total += $0.2; return total > 1_500_000_000 }
+        for f in list { try? FileManager.default.removeItem(at: f.0) }
+    }
+
+    static func convert(_ src: URL, to out: URL) async throws {
+        let asset = AVURLAsset(url: src)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else { throw ScreenroomError("There's no sound in that file.") }
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+        let layoutData = Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 2, AVChannelLayoutKey: layoutData,
+            AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false])
+        guard reader.canAdd(output) else { throw ScreenroomError("This phone can't read that song.") }
+        reader.add(output)
+        let tmp = out.deletingLastPathComponent().appendingPathComponent("making-" + UUID().uuidString + ".m4a")
+        let writer = try AVAssetWriter(outputURL: tmp, fileType: .m4a)
+        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 2, AVChannelLayoutKey: layoutData, AVEncoderBitRateKey: 256_000])
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else { throw ScreenroomError("This phone can't make a stereo copy.") }
+        writer.add(input)
+        guard reader.startReading() else { throw reader.error ?? ScreenroomError("This phone can't read that song.") }
+        guard writer.startWriting() else { throw writer.error ?? ScreenroomError("This phone can't make a stereo copy.") }
+        writer.startSession(atSourceTime: .zero)
+        let q = DispatchQueue(label: "parlor.downmix")
+        do {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+                var done = false
+                input.requestMediaDataWhenReady(on: q) {
+                    while !done && input.isReadyForMoreMediaData {
+                        if let b = output.copyNextSampleBuffer() {
+                            if !input.append(b) {
+                                done = true; reader.cancelReading(); writer.cancelWriting()
+                                c.resume(throwing: writer.error ?? ScreenroomError("The stereo copy couldn't be saved.")); return
+                            }
+                        } else {
+                            done = true
+                            if reader.status == .failed {
+                                writer.cancelWriting()
+                                c.resume(throwing: reader.error ?? ScreenroomError("This phone can't read that song.")); return
+                            }
+                            input.markAsFinished()
+                            writer.finishWriting {
+                                if writer.status == .completed { c.resume() } else { c.resume(throwing: writer.error ?? ScreenroomError("The stereo copy couldn't be saved.")) }
+                            }
+                            return
+                        }
+                    }
+                }
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
+        try? FileManager.default.removeItem(at: out)
+        try FileManager.default.moveItem(at: tmp, to: out)
     }
 }
 

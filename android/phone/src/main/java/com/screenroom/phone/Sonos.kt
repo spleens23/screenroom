@@ -1,6 +1,12 @@
 package com.screenroom.phone
 
 import android.content.Context
+import android.media.AudioFormat
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
@@ -14,12 +20,15 @@ import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 // Parlor playing on Sonos speakers (as on the iPhone, Sonos.swift). The speaker is told where each song is on the
 // Wi-Fi (a small web server in the app hands it the file exactly as it is on the phone: a Dolby Atmos song arrives
-// as Dolby Atmos), and plays it itself; Parlor keeps the queue, and its screen and the lock screen follow the speaker.
+// as Dolby Atmos on a speaker that plays it; a stereo-only one, like a Five, gets the album's stereo version of the
+// song, or a stereo copy the phone makes), and plays it itself; Parlor keeps the queue, and its screen and the lock screen follow the speaker.
 
 // ---- the files, on the Wi-Fi ---------------------------------------------------------------------------------
 object FileServer {
@@ -244,6 +253,8 @@ object Sonos {
 class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, Any?>>) {
     var onUpdate: ((Int?, Boolean) -> Unit)? = null
     var onProblem: ((String) -> Unit)? = null
+    /** (on the main thread) the speaker's volume changed: here, or in the Sonos app */
+    var onVolume: (() -> Unit)? = null
 
     var pos = 0.0; private set
     var dur = 0.0; private set
@@ -279,8 +290,7 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
         }
     }
 
-    private fun didl(t: Map<String, Any?>, host: String): Pair<String, String>? {
-        val path = t["path"] as? String ?: return null
+    private fun didl(t: Map<String, Any?>, path: String, host: String): Pair<String, String>? {
         val uri = FileServer.url(path, host)
         val art = (t["art"] as? String)?.takeIf { File(it).exists() }?.let { "<upnp:albumArtURI>${Sonos.esc(FileServer.url(it, host))}</upnp:albumArtURI>" } ?: ""
         val d = t["duration"].asNum() ?: 0.0
@@ -293,9 +303,28 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
         return uri to meta
     }
 
-    private fun add(t: Map<String, Any?>) {
+    /** Whether a Dolby Atmos or surround song goes to this speaker in stereo (one that doesn't play Dolby Atmos music
+     *  plays nothing at all if sent it). */
+    fun stereoFor(t: Map<String, Any?>): Boolean = !room.atmos && t["spatial"] == true
+
+    /** The file the speaker gets: the song, or for a stereo-only speaker the album's stereo version of a Dolby Atmos /
+     *  surround song, or a stereo copy made on the phone (kept for next time). */
+    private fun source(t: Map<String, Any?>): String? {
+        val path = t["path"] as? String ?: return null
+        if (!stereoFor(t)) return path
+        (t["stereoPath"] as? String)?.takeIf { File(it).exists() }?.let { return it }
+        return try { Downmix.stereo(path) } catch (e: Exception) {
+            android.util.Log.w("Parlor", "no stereo copy of $path", e)
+            val name = t["title"] as? String ?: "A song"
+            ui { onProblem?.invoke("$name couldn't be made into stereo for ${room.name}, so it may not play there.") }
+            path
+        }
+    }
+    private val prep = Executors.newSingleThreadExecutor()
+
+    private fun add(t: Map<String, Any?>, path: String) {
         val host = FileServer.localAddress(room.ip) ?: throw ParlorError("This phone isn't on the speaker's Wi-Fi.")
-        val (uri, meta) = didl(t, host) ?: return
+        val (uri, meta) = didl(t, path, host) ?: return
         room.av("AddURIToQueue", "EnqueuedURI" to uri, "EnqueuedURIMetaData" to meta, "DesiredFirstTrackNumberEnqueued" to "0", "EnqueueAsNext" to "0")
     }
 
@@ -310,8 +339,11 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
         val first = list[i]
         run("start") {
             FileServer.ensureRunning()
+            // (a stereo copy, if the speaker needs one, is made first)
+            val path = source(first) ?: return@run
+            if (!onMain { g == gen }) return@run
             room.av("RemoveAllTracksFromQueue")
-            add(first)
+            add(first, path)
             onMain { if (g == gen) filled = 1 }
             room.av("SetAVTransportURI", "CurrentURI" to "x-rincon-queue:${room.id}#0", "CurrentURIMetaData" to "")
             room.av("Seek", "Unit" to "TRACK_NR", "Target" to "1")
@@ -328,15 +360,28 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
         if (from >= list.size) return
         val batch = list.subList(from, minOf(list.size, from + 4)).toList()
         filling = true
-        run("add songs") {
-            try {
-                for (t in batch) {
-                    if (!onMain { g == gen }) break
-                    add(t)
-                    onMain { if (g == gen) filled++ }
+        // the files first (stereo copies take a few seconds each), apart from the speaker commands so Play / Pause
+        // don't wait for them; then onto the speaker
+        prep.execute {
+            val ready = ArrayList<Pair<Map<String, Any?>, String>>()
+            for (t in batch) {
+                if (!onMain { g == gen }) break
+                ready.add(t to (source(t) ?: break))
+            }
+            ui {
+                if (g != gen) return@ui
+                if (ready.isEmpty()) { filling = false; return@ui }
+                run("add songs") {
+                    try {
+                        for ((t, p) in ready) {
+                            if (!onMain { g == gen }) break
+                            add(t, p)
+                            onMain { if (g == gen) filled++ }
+                        }
+                    } finally {
+                        ui { if (g == gen) { filling = false; fill(g) } }
+                    }
                 }
-            } finally {
-                ui { if (g == gen) { filling = false; fill(g) } }
             }
         }
     }
@@ -373,12 +418,14 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
     fun play() { pos = now; at = System.currentTimeMillis(); paused = false; holdUntil = at + 3000; run("play") { room.av("Play", "Speed" to "1") } }
     fun pause() { pos = now; at = System.currentTimeMillis(); paused = true; holdUntil = at + 3000; run("pause") { room.av("Pause") } }
     fun seek(s: Double) { pos = s; at = System.currentTimeMillis(); holdUntil = at + 3000; run("seek") { room.av("Seek", "Unit" to "REL_TIME", "Target" to Sonos.hms(s)) } }
-    fun setVolume(v: Int) { volume = v.coerceIn(0, 100); val x = volume; run("volume") { room.group("SetGroupVolume", "DesiredVolume" to x.toString()) } }
+    private var volumeSetAt = 0L
+    private var pollCount = 0
+    fun setVolume(v: Int) { volume = v.coerceIn(0, 100); volumeSetAt = System.currentTimeMillis(); onVolume?.invoke(); val x = volume; run("volume") { room.group("SetGroupVolume", "DesiredVolume" to x.toString()) } }
     fun setMuted(m: Boolean) { muted = m; run("mute") { room.group("SetGroupMute", "DesiredMute" to if (m) "1" else "0") } }
     fun repeatOne(on: Boolean) { run("repeat") { room.av("SetPlayMode", "NewPlayMode" to if (on) "REPEAT_ONE" else "NORMAL") } }
 
     fun start() {
-        polls.execute { try { Sonos.tag("CurrentVolume", room.group("GetGroupVolume"))?.toIntOrNull()?.let { v -> ui { volume = v } } } catch (_: Exception) {} }
+        polls.execute { try { Sonos.tag("CurrentVolume", room.group("GetGroupVolume"))?.toIntOrNull()?.let { v -> ui { volume = v; onVolume?.invoke() } } } catch (_: Exception) {} }
         schedule()
     }
 
@@ -394,11 +441,15 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
     private fun poll() {
         if (polling) return
         polling = true
+        val askVolume = ++pollCount % 3 == 0
         polls.execute {
             val p = try { room.av("GetPositionInfo") } catch (_: Exception) { null }
             val t = try { room.av("GetTransportInfo") } catch (_: Exception) { null }
+            // (the volume too, every few seconds: it may have been changed in the Sonos app or on the speaker)
+            val v = if (askVolume) try { Sonos.tag("CurrentVolume", room.group("GetGroupVolume"))?.toIntOrNull() } catch (_: Exception) { null } else null
             ui {
                 polling = false
+                if (v != null && v != volume && System.currentTimeMillis() - volumeSetAt > 3000) { volume = v; onVolume?.invoke() }
                 if (p == null || t == null || !alive) return@ui
                 val state = Sonos.tag("CurrentTransportState", t) ?: ""
                 val track = Sonos.tag("Track", p)?.toIntOrNull() ?: 0
@@ -417,5 +468,171 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
                 if (state != "STOPPED" && track in 1..filled) onUpdate?.invoke(base + track - 1, false) else onUpdate?.invoke(null, false)
             }
         }
+    }
+}
+
+
+// ---- stereo copies ------------------------------------------------------------------------------------------------
+
+/**
+ * Stereo copies of Dolby Atmos and surround songs, for Sonos speakers that only play stereo (a Five, a One, a Move…):
+ * the phone decodes the song, mixes it down to two channels and saves it as 256 kbps AAC in the app's cache (about
+ * 1.5 GB kept at most). Needs a decoder for the song's format on the phone (Dolby Atmos needs a Dolby Digital Plus
+ * one, which many phones have; without one the song goes as it is).
+ */
+object Downmix {
+    @Volatile var dir: File? = null
+    private val locks = ConcurrentHashMap<String, Any>()
+
+    fun stereo(path: String): String {
+        val src = File(path)
+        val d = dir ?: throw ParlorError("There's nowhere to keep a stereo copy.")
+        d.mkdirs()
+        val key = java.security.MessageDigest.getInstance("SHA-256").digest("$path|${src.length()}|${src.lastModified()}".toByteArray())
+            .take(12).joinToString("") { "%02x".format(it) }
+        val out = File(d, "$key.m4a")
+        synchronized(locks.getOrPut(key) { Any() }) {
+            if (out.exists() && out.length() > 0) { out.setLastModified(System.currentTimeMillis()); return out.path }
+            val tmp = File(d, "making-$key.m4a")
+            try { convert(path, tmp) } catch (e: Exception) { tmp.delete(); throw e }
+            if (!tmp.renameTo(out)) { tmp.delete(); throw ParlorError("The stereo copy couldn't be saved.") }
+            prune(d)
+            return out.path
+        }
+    }
+
+    private fun prune(d: File) {
+        var total = 0L
+        (d.listFiles() ?: return).sortedByDescending { it.lastModified() }.forEach { f -> total += f.length(); if (total > 1_500_000_000L) f.delete() }
+    }
+
+    private fun convert(path: String, out: File) {
+        val ex = MediaExtractor()
+        ex.setDataSource(path)
+        val ti = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+            ?: run { ex.release(); throw ParlorError("There's no sound in that file.") }
+        ex.selectTrack(ti)
+        val inFmt = ex.getTrackFormat(ti)
+        val mime = inFmt.getString(MediaFormat.KEY_MIME) ?: ""
+        val dec = try { MediaCodec.createDecoderByType(mime).also { it.configure(inFmt, null, null, 0); it.start() } }
+            catch (e: Exception) { ex.release(); throw ParlorError("This phone can't decode $mime.") }
+        var rate = inFmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        var ch = inFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        var float = false
+        var enc: MediaCodec? = null
+        var mux: MediaMuxer? = null
+        var muxTrack = -1
+        var muxStarted = false
+        val info = MediaCodec.BufferInfo()
+        var inDone = false; var decDone = false; var encDone = false; var eosSent = false
+        val pending = java.util.ArrayDeque<ShortArray>()   // stereo samples waiting for the encoder
+        var off = 0
+        var frames = 0L
+        val until = System.currentTimeMillis() + 5 * 60_000
+        try {
+            while (!encDone) {
+                if (System.currentTimeMillis() > until) throw ParlorError("Making the stereo copy took too long.")
+                // the song into the decoder
+                if (!inDone) {
+                    val i = dec.dequeueInputBuffer(2000)
+                    if (i >= 0) {
+                        val buf = dec.getInputBuffer(i)!!
+                        val n = ex.readSampleData(buf, 0)
+                        if (n < 0) { dec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inDone = true }
+                        else { dec.queueInputBuffer(i, 0, n, ex.sampleTime, 0); ex.advance() }
+                    }
+                }
+                // its sound out, mixed down to stereo
+                if (!decDone && pending.size < 8) {
+                    val o = dec.dequeueOutputBuffer(info, 2000)
+                    if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        val f = dec.outputFormat
+                        rate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE); ch = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        float = f.containsKey(MediaFormat.KEY_PCM_ENCODING) && f.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
+                    } else if (o >= 0) {
+                        val b = dec.getOutputBuffer(o)!!
+                        if (info.size > 0) { b.position(info.offset); b.limit(info.offset + info.size); pending.add(mix(b.slice().order(ByteOrder.nativeOrder()), ch, float)) }
+                        dec.releaseOutputBuffer(o, false)
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) decDone = true
+                    }
+                }
+                // the encoder (once the decoder's said what it makes)
+                if (enc == null) {
+                    if (pending.isEmpty() && !decDone) continue
+                    val f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, 2)
+                    f.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                    f.setInteger(MediaFormat.KEY_BIT_RATE, 256_000)
+                    f.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 64 * 1024)
+                    enc = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).also { it.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE); it.start() }
+                    mux = MediaMuxer(out.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                }
+                val e = enc!!
+                if (!eosSent) {
+                    if (pending.isNotEmpty()) {
+                        val i = e.dequeueInputBuffer(2000)
+                        if (i >= 0) {
+                            val buf = e.getInputBuffer(i)!!.order(ByteOrder.nativeOrder())
+                            buf.clear()
+                            val cur = pending.first()
+                            val space = buf.remaining() / 2
+                            val n = minOf(space - space % 2, cur.size - off)
+                            buf.asShortBuffer().put(cur, off, n)
+                            off += n
+                            if (off >= cur.size) { pending.removeFirst(); off = 0 }
+                            e.queueInputBuffer(i, 0, n * 2, frames * 1_000_000L / rate, 0)
+                            frames += n / 2
+                        }
+                    } else if (decDone) {
+                        val i = e.dequeueInputBuffer(2000)
+                        if (i >= 0) { e.queueInputBuffer(i, 0, 0, frames * 1_000_000L / rate, MediaCodec.BUFFER_FLAG_END_OF_STREAM); eosSent = true }
+                    }
+                }
+                val o = e.dequeueOutputBuffer(info, if (eosSent) 10_000 else 0)
+                if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    muxTrack = mux!!.addTrack(e.outputFormat); mux.start(); muxStarted = true
+                } else if (o >= 0) {
+                    val b = e.getOutputBuffer(o)!!
+                    if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) info.size = 0
+                    if (info.size > 0 && muxStarted) { b.position(info.offset); b.limit(info.offset + info.size); mux!!.writeSampleData(muxTrack, b, info) }
+                    e.releaseOutputBuffer(o, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) encDone = true
+                }
+            }
+        } finally {
+            try { dec.stop() } catch (_: Exception) {}
+            dec.release()
+            enc?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
+            mux?.let { try { if (muxStarted) it.stop() } catch (_: Exception) {}; it.release() }
+            ex.release()
+        }
+    }
+
+    /** Some decoded sound (16-bit or float, in Android's usual channel order: front L/R, centre, LFE, back L/R, side
+     *  L/R) as 16-bit stereo: the centre and the surrounds folded into each side at -3 dB, the LFE left out. */
+    private fun mix(b: ByteBuffer, ch: Int, float: Boolean): ShortArray {
+        val n = maxOf(1, ch)
+        val count = (if (float) b.remaining() / 4 else b.remaining() / 2) / n
+        val out = ShortArray(count * 2)
+        val fb = if (float) b.asFloatBuffer() else null
+        val sb = if (float) null else b.asShortBuffer()
+        val s = FloatArray(n)
+        val c = 0.7071f
+        for (f in 0 until count) {
+            for (k in 0 until n) s[k] = fb?.get() ?: (sb!!.get() / 32768f)
+            var l: Float; var r: Float
+            when {
+                n == 1 -> { l = s[0]; r = s[0] }
+                n == 2 -> { l = s[0]; r = s[1] }
+                n == 3 -> { l = s[0] + c * s[2]; r = s[1] + c * s[2] }
+                n == 4 -> { l = s[0] + c * s[2]; r = s[1] + c * s[3] }
+                n == 5 -> { l = s[0] + c * s[2] + c * s[3]; r = s[1] + c * s[2] + c * s[4] }
+                n < 8 -> { l = s[0] + c * s[2] + c * s[4]; r = s[1] + c * s[2] + c * s[5] }
+                else -> { l = s[0] + c * s[2] + c * s[4] + c * s[6]; r = s[1] + c * s[2] + c * s[5] + c * s[7] }
+            }
+            val g = if (n <= 2) 1f else 0.6f
+            out[f * 2] = (l * g * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            out[f * 2 + 1] = (r * g * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+        return out
     }
 }

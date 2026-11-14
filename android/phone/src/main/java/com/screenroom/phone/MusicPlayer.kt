@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.DeviceInfo
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -48,6 +49,7 @@ object MusicPlayer {
     fun init(ctx: Context) {
         if (::exo.isInitialized) return
         app = ctx.applicationContext
+        Downmix.dir = File(app.cacheDir, "stereo")
         silence = File(app.cacheDir, "silence.wav").also { if (!it.exists()) it.writeBytes(silentWav()) }
         val renderers = DefaultRenderersFactory(app).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         exo = ExoPlayer.Builder(app, renderers)
@@ -101,7 +103,12 @@ object MusicPlayer {
         link?.let { l ->
             playing = index >= 0; paused = playing && l.paused
             pos = l.now; dur = l.dur; vol = l.volume; mute = l.muted
-            route = mapOf("kind" to "sonos", "name" to l.room.name, "spatial" to false, "channels" to 0, "sonos" to true, "atmos" to l.room.atmos, "model" to l.room.model)
+            // (downmix: the song is Dolby Atmos or surround and the speaker only plays stereo, so it gets a stereo
+            // version; twin: that's the album's own stereo version)
+            val down = current?.let { l.stereoFor(it) } ?: false
+            val twin = down && (current?.get("stereoPath") as? String)?.let { File(it).exists() } == true
+            route = mapOf("kind" to "sonos", "name" to l.room.name, "spatial" to false, "channels" to 0, "sonos" to true, "atmos" to l.room.atmos, "model" to l.room.model,
+                "downmix" to down, "twin" to twin)
             output = mapOf("id" to l.room.id, "name" to l.room.name, "atmos" to l.room.atmos)
         }
         if (dur <= 0) dur = current?.get("duration").asNum() ?: 0.0
@@ -250,6 +257,7 @@ object MusicPlayer {
             val l = SonosLink(room) { queue }
             l.onUpdate = { i, ended -> sonosMoved(i, ended) }
             l.onProblem = { m -> bridge?.emit("notice", m) }
+            l.onVolume = { (sessionPlayer as? SessionPlayer)?.remoteChanged(); emit(throttled = true) }
             link = l
             l.start()
             if (repeatMode == "one") l.repeatOne(true)
@@ -266,6 +274,7 @@ object MusicPlayer {
                 if (wasPlaying) exo.play()
             }
         }
+        (sessionPlayer as? SessionPlayer)?.remoteChanged()
         emit()
     }
 
@@ -317,6 +326,31 @@ object MusicPlayer {
 class SessionPlayer(p: Player) : ForwardingPlayer(p) {
     private val sonos get() = MusicPlayer.sonosId != null
     private fun snap() = MusicPlayer.snapshot()
+
+    // On a speaker the volume is the speaker's: the phone's volume buttons (and the volume in the notification
+    // shade) turn it up and down, as they do for a Cast speaker.
+    private val listeners = java.util.concurrent.CopyOnWriteArraySet<Player.Listener>()
+    override fun addListener(listener: Player.Listener) { super.addListener(listener); listeners.add(listener) }
+    override fun removeListener(listener: Player.Listener) { super.removeListener(listener); listeners.remove(listener) }
+    private val remote = DeviceInfo.Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE).setMinVolume(0).setMaxVolume(100).build()
+    /** The speaker was picked or let go, or its volume changed: the session hears about it. */
+    fun remoteChanged() {
+        val d = deviceInfo; val v = deviceVolume; val m = isDeviceMuted; val c = availableCommands
+        listeners.forEach { it.onDeviceInfoChanged(d); it.onDeviceVolumeChanged(v, m); it.onAvailableCommandsChanged(c) }
+    }
+    private fun vol() = (snap()["volume"] as? Number)?.toInt() ?: 0
+    override fun getDeviceInfo(): DeviceInfo = if (sonos) remote else super.getDeviceInfo()
+    override fun getDeviceVolume(): Int = if (sonos) vol() else super.getDeviceVolume()
+    override fun isDeviceMuted(): Boolean = if (sonos) snap()["muted"] == true else super.isDeviceMuted()
+    override fun setDeviceVolume(volume: Int, flags: Int) { if (sonos) MusicPlayer.command("volume", volume.toDouble()) else super.setDeviceVolume(volume, flags) }
+    @Deprecated("Deprecated in Java") override fun setDeviceVolume(volume: Int) { if (sonos) MusicPlayer.command("volume", volume.toDouble()) else @Suppress("DEPRECATION") super.setDeviceVolume(volume) }
+    override fun increaseDeviceVolume(flags: Int) { if (sonos) MusicPlayer.command("volume", (vol() + 2).toDouble()) else super.increaseDeviceVolume(flags) }
+    @Deprecated("Deprecated in Java") override fun increaseDeviceVolume() { if (sonos) MusicPlayer.command("volume", (vol() + 2).toDouble()) else @Suppress("DEPRECATION") super.increaseDeviceVolume() }
+    override fun decreaseDeviceVolume(flags: Int) { if (sonos) MusicPlayer.command("volume", (vol() - 2).toDouble()) else super.decreaseDeviceVolume(flags) }
+    @Deprecated("Deprecated in Java") override fun decreaseDeviceVolume() { if (sonos) MusicPlayer.command("volume", (vol() - 2).toDouble()) else @Suppress("DEPRECATION") super.decreaseDeviceVolume() }
+    override fun setDeviceMuted(muted: Boolean, flags: Int) { if (sonos) { if (muted != isDeviceMuted) MusicPlayer.command("mute", null) } else super.setDeviceMuted(muted, flags) }
+    private val volumeCommands = intArrayOf(Player.COMMAND_GET_DEVICE_VOLUME, Player.COMMAND_SET_DEVICE_VOLUME, Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
+        Player.COMMAND_ADJUST_DEVICE_VOLUME, Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS)
     override fun play() { MusicPlayer.command("play", null) }
     override fun pause() { MusicPlayer.command("pause", null) }
     override fun setPlayWhenReady(playWhenReady: Boolean) { MusicPlayer.command(if (playWhenReady) "play" else "pause", null) }
@@ -334,7 +368,8 @@ class SessionPlayer(p: Player) : ForwardingPlayer(p) {
     override fun getContentDuration(): Long = duration
     override fun isCommandAvailable(command: Int): Boolean =
         command == Player.COMMAND_SEEK_TO_NEXT || command == Player.COMMAND_SEEK_TO_PREVIOUS || command == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
-            command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM || super.isCommandAvailable(command)
+            command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM || (sonos && command in volumeCommands) || super.isCommandAvailable(command)
     override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
-        .addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM).build()
+        .addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        .apply { if (sonos) addAll(*volumeCommands) }.build()
 }

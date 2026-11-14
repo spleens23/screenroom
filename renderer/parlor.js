@@ -1020,7 +1020,10 @@ window.createParlor = function createParlor(ctx) {
   const F = {
     bg: h('div', { class: 'npf-bg' }),
     stage: h('button', { class: 'npf-stage', 'data-b': 'stage', title: window.S_IOS ? '' : 'Big cover', onclick: () => { if (!window.S_IOS) setBig(!full.classList.contains('big')); } }),
-    from: h('div', { class: 'npf-from' }), title: h('h1', {}), artist: h('h2', {}), album: h('h3', {}),
+    from: h('div', { class: 'npf-from' }), title: h('h1', {}),
+    // (the artist and the album: either one opens the album the song is from)
+    artist: h('h2', {}, h('button', { class: 'npf-link', 'data-b': 'to-album', title: 'Go to the album', onclick: () => goToAlbum() })),
+    album: h('h3', {}, h('button', { class: 'npf-link', 'data-b': 'to-album2', title: 'Go to the album', onclick: () => goToAlbum() })),
     pos: h('span', {}), left: h('span', {}), fill: h('div', {}),
     vol: h('span', { class: 'npf-vol' }),
     caption: h('div', { class: 'npf-caption' }),
@@ -1084,11 +1087,21 @@ window.createParlor = function createParlor(ctx) {
   // Where the music plays: this device, or a Sonos room on the Wi-Fi (Parlor on an iPhone or iPad)
   F.out = api.sonosRooms ? h('button', { class: 'npt', 'data-b': 'output', title: 'Play on a speaker', 'aria-pressed': 'false', onclick: () => showOutputs() }, svg(ICON.speaker)) : null;
   F.where = h('div', { class: 'npf-where', hidden: true });
+  // On a speaker: its volume, as a slider (the phone's own volume buttons work the phone, not the speaker)
+  let volSent = 0, volTimer = null, volDragging = false;
+  const sendVol = (v) => { clearTimeout(volTimer); const now = Date.now(); const go = () => { volSent = Date.now(); api.musicCmd('volume', v); };
+    if (now - volSent > 150) go(); else volTimer = setTimeout(go, 150 - (now - volSent)); };
+  F.volIn = h('input', { type: 'range', min: '0', max: '100', step: '1', class: 'npf-volin', 'aria-label': 'Speaker volume', 'data-b': 'volume',
+    oninput: (e) => { volDragging = true; F.volIn.style.setProperty('--v', e.target.value + '%'); sendVol(Number(e.target.value)); },
+    onchange: (e) => { sendVol(Number(e.target.value)); setTimeout(() => { volDragging = false; }, 1500); },
+    onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation(); } });
+  const volIco = (w) => { const sp = h('span', { class: 'npf-volico', 'aria-hidden': 'true' }); sp.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${w ? '<path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/>' : ''}</svg>`; return sp; };
+  F.volRow = h('div', { class: 'npf-volrow', hidden: true }, volIco(false), F.volIn, volIco(true));
   F.tools = h('div', { class: 'npf-tools', 'data-navrow': '1' }, F.shuf, F.qbtn, F.out, F.rep);
   F.queue = h('div', { class: 'npf-queue', hidden: true });
   F.body = h('div', { class: 'npf' }, F.stage, F.queue,
       h('div', { class: 'npf-side' }, F.from, F.title, F.artist, F.album,
-        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.tools, F.where));
+        h('div', { class: 'npf-prog' }, F.scrub, F.pos, F.quality, F.left), F.ctrl, F.volRow, F.tools, F.where));
   // (the big-cover button is for a TV or computer; on an iPhone or iPad it's just the close button)
   F.melt = h('div', { class: 'npf-melt', 'aria-hidden': 'true' });
   full.append(F.bg, F.melt, F.grab, h('div', { class: 'npf-top', 'data-navrow': '1' }, window.S_IOS ? null : F.bigBtn, F.close), F.body, F.caption, F.qsheet);
@@ -1170,13 +1183,23 @@ window.createParlor = function createParlor(ctx) {
     // a surround mix (5.1, 7.1): AirPods and Beats play it as Spatial Audio, everything else gets it in stereo
     const route = (P && P.player && P.player.route) || null;
     const spatial = !!(route && route.spatial);
+    if (route && route.sonos && route.downmix && (t.atmos || t.channels > 2)) {
+      const what = t.atmos ? 'Dolby Atmos' : `${chLabel(t.channels)} surround`;
+      return {
+        t, kind: 'stereo downmix',
+        name: 'Stereo', spec: route.twin ? 'Stereo version' : 'Downmixed',
+        about: route.twin
+          ? `This song is ${what}, which ${route.model ? 'a Sonos ' + route.model : 'this speaker'} doesn't play, so ${route.name} is playing the album's stereo version of it instead.`
+          : `This song is ${what}, which ${route.model ? 'a Sonos ' + route.model : 'this speaker'} doesn't play, so this device mixed it down to stereo for ${route.name} (the first time takes a few seconds; the stereo copy is kept for next time). On an Arc, Arc Ultra, Beam (Gen 2) or Era 300 it plays in Dolby Atmos.`,
+      };
+    }
     if (route && route.sonos && t.atmos) {
       return {
         t, kind: 'surround atmos',
         name: 'Dolby Atmos', spec: route.atmos ? 'Sonos' : '',
         about: route.atmos
           ? `Dolby Atmos, sent to ${route.name} exactly as it is on this device: the speaker plays it in Dolby Atmos itself (the Sonos app shows Dolby Atmos while it does).`
-          : `Dolby Atmos, sent to ${route.name} as it is. ${route.model || 'This speaker'} isn't one of the Sonos speakers that play Dolby Atmos music (Arc, Arc Ultra, Beam (Gen 2), Era 300), so it may play a stereo version, or not play it at all.`,
+          : `Dolby Atmos, sent to ${route.name} as it is.`,
       };
     }
     if (t.atmos) {
@@ -1227,6 +1250,7 @@ window.createParlor = function createParlor(ctx) {
       h('p', {}, q.about),
       row('Format', q.t.codec),
       row('Channels', q.t.channels ? `${chLabel(q.t.channels)}${q.t.channels > 2 ? ' surround' : ''}` : ''),
+      P.player && P.player.route && P.player.route.downmix ? row('Sent as', P.player.route.twin ? 'The album’s stereo version' : 'Stereo, mixed down on this device') : null,
       P.player && P.player.route && P.player.route.sonos ? row('Playing on', P.player.route.name) : null,
       row('Spatial Audio', P.player && P.player.route && !P.player.route.sonos ? (P.player.route.spatial ? `On (${P.player.route.name || 'headphones'})`
         : q.t.channels > 2 ? 'Off: needs AirPods or Beats that support it' : '') : ''),
@@ -1326,6 +1350,14 @@ window.createParlor = function createParlor(ctx) {
     }
     drawFull(true); F.play.focus({ preventScroll: true }); wakeFull();
   }
+  /** The album the playing song is from (the artist or album name on the Now Playing screen) */
+  function goToAlbum() {
+    const t = P && P.player && P.player.track;
+    if (!t || !album(t.albumKey)) return;
+    closeFull();
+    if (ctx.closeModal) ctx.closeModal();
+    setTimeout(() => openAlbum(t.albumKey), matchMedia('(pointer: coarse)').matches ? 180 : 0);
+  }
   function closeFull() {
     fullOpen = false; clearTimeout(idle); F.qsheet.hidden = true;
     document.documentElement.classList.remove('np-open');
@@ -1363,7 +1395,7 @@ window.createParlor = function createParlor(ctx) {
     if (rebuild) {
       F.from.textContent = s.context && s.context.name
         ? `Playing from ${s.context.kind === 'album' ? 'the album' : s.context.kind === 'playlist' ? 'the playlist' : s.context.kind === 'artist' ? 'the artist' : ''} ${s.context.name}`.replace(/\s+/g, ' ') : '';
-      F.title.textContent = t.title; F.artist.textContent = t.artist; F.album.textContent = t.album;
+      F.title.textContent = t.title; F.artist.firstChild.textContent = t.artist; F.album.firstChild.textContent = t.album;
       F.caption.replaceChildren(h('b', {}, t.title), h('span', {}, `${t.artist} — ${t.album}`));
     }
     const qlook = [t.id, s.route && s.route.spatial, s.route && s.route.name].join('|');
@@ -1374,6 +1406,8 @@ window.createParlor = function createParlor(ctx) {
     const out = s.output && s.output.name;
     if (F.out) { F.out.classList.toggle('on', !!out); F.out.setAttribute('aria-pressed', String(!!out)); F.out.title = out ? `Playing on ${out}` : 'Play on a speaker'; }
     F.where.hidden = !out; if (out && F.where.textContent !== `Playing on ${out}`) F.where.textContent = `Playing on ${out}`;
+    F.volRow.hidden = !out; full.classList.toggle('on-speaker', !!out);
+    if (out && !volDragging && document.activeElement !== F.volIn) { F.volIn.value = String(s.volume); F.volIn.style.setProperty('--v', s.volume + '%'); }
     const r = s.repeat || 'off';
     F.rep.classList.toggle('on', r !== 'off'); F.rep.setAttribute('aria-pressed', String(r !== 'off'));
     F.rep.title = r === 'one' ? 'Repeating this song' : r === 'all' ? 'Repeating the queue' : 'Repeat';
