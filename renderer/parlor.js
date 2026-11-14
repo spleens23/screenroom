@@ -246,8 +246,18 @@ window.createParlor = function createParlor(ctx) {
   let mixCache = null;
   function dailyMixes() {
     const day = todayKey();
-    const sig = `${day}|${P.profile}|${P.albums.length}|${(P.recent || []).join(',')}`;
-    if (mixCache && mixCache.sig === sig) return mixCache.mixes;
+    // Made once a day and kept (playing songs changes what's been on lately, which would otherwise remake the
+    // mixes after every song); only made again the next day, or if the library was still loading last time.
+    const key = 'parlor-mixes:' + P.profile;
+    const keep = (m) => m.map((x) => ({ ...x, ids: x.ids.filter((id) => track(id)) })).filter((x) => x.ids.length >= 5);
+    if (mixCache && mixCache.day === day && mixCache.key === key && mixCache.count >= P.albums.length * 0.9) return keep(mixCache.mixes);
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || 'null');
+      if (saved && saved.day === day && saved.count >= P.albums.length * 0.9 && Array.isArray(saved.mixes)) {
+        mixCache = { day, key, count: saved.count, mixes: saved.mixes };
+        return keep(saved.mixes);
+      }
+    } catch {}
     const mixes = [];
     const R = (id) => seeded(`${day}|${P.profile}|${id}`);
     const recent = (P.recent || []).map(album).filter(Boolean);
@@ -285,7 +295,8 @@ window.createParlor = function createParlor(ctx) {
       const ids = pickFrom([...byAlbum.entries()].map(([key, t]) => ({ key, tracks: t })), 20, R('spatial'), 3);
       mixes.push({ id: 'spatial', name: 'Spatial Mix', blurb: 'Dolby Atmos and surround', ids });
     }
-    mixCache = { sig, mixes };
+    mixCache = { day, key, count: P.albums.length, mixes };
+    if (P.albums.length >= 3) try { localStorage.setItem(key, JSON.stringify({ day, count: P.albums.length, mixes })); } catch {}
     return mixes;
   }
   function mixCard(m) {
@@ -1095,6 +1106,20 @@ window.createParlor = function createParlor(ctx) {
     oninput: (e) => { volDragging = true; F.volIn.style.setProperty('--v', e.target.value + '%'); sendVol(Number(e.target.value)); },
     onchange: (e) => { sendVol(Number(e.target.value)); setTimeout(() => { volDragging = false; }, 1500); },
     onkeydown: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation(); } });
+  // drag anywhere along it (a touch doesn't have to start on the knob)
+  let volDrag = null;
+  const volAt = (e) => { const r = F.volIn.getBoundingClientRect(); const k = 11; // half the knob
+    const v = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left - k) / Math.max(1, r.width - 2 * k))) * 100);
+    F.volIn.value = String(v); F.volIn.style.setProperty('--v', v + '%'); sendVol(v); };
+  F.volIn.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    e.preventDefault(); e.stopPropagation();
+    try { F.volIn.setPointerCapture(e.pointerId); } catch {}
+    volDrag = e.pointerId; volDragging = true; volAt(e);
+  });
+  F.volIn.addEventListener('pointermove', (e) => { if (volDrag === e.pointerId) { e.preventDefault(); volAt(e); } });
+  const volEnd = (e) => { if (volDrag !== e.pointerId) return; volDrag = null; setTimeout(() => { volDragging = false; }, 1500); };
+  F.volIn.addEventListener('pointerup', volEnd); F.volIn.addEventListener('pointercancel', volEnd);
   const volIco = (w) => { const sp = h('span', { class: 'npf-volico', 'aria-hidden': 'true' }); sp.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${w ? '<path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/>' : ''}</svg>`; return sp; };
   F.volRow = h('div', { class: 'npf-volrow', hidden: true }, volIco(false), F.volIn, volIco(true));
   F.tools = h('div', { class: 'npf-tools', 'data-navrow': '1' }, F.shuf, F.qbtn, F.out, F.rep);
@@ -1306,7 +1331,7 @@ window.createParlor = function createParlor(ctx) {
   // past a third of the way, or on a quick flick.
   let pull = null;
   full.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1 || scrubbing || !F.qsheet.hidden || e.target.closest('.npf-scrub, .npf-qsheet')) { pull = null; return; }
+    if (e.touches.length !== 1 || scrubbing || !F.qsheet.hidden || e.target.closest('.npf-scrub, .npf-qsheet, .npf-volrow')) { pull = null; return; }
     if (queueOpen && F.queue.contains(e.target) && F.queue.scrollTop > 0) { pull = null; return; } // scrolling the queue
     const t = e.touches[0];
     pull = { y: t.clientY, x: t.clientX, t: Date.now(), dy: 0, on: false };

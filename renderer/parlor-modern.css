@@ -810,7 +810,7 @@ html body:not(#_) #npfull .npf-link:active { opacity: .6; }
 html body:not(#_) #npfull .npf-volrow { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; color: rgba(255,255,255,.7); }
 html body:not(#_) #npfull .npf-volrow[hidden] { display: none; }
 html body:not(#_) #npfull .npf-volico svg { width: 18px; height: 18px; display: block; }
-html body:not(#_) #npfull .npf-volin { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 28px; margin: 0; background: transparent; cursor: pointer; --v: 30%; }
+html body:not(#_) #npfull .npf-volin { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 28px; margin: 0; background: transparent; cursor: pointer; --v: 30%; touch-action: none; }
 html body:not(#_) #npfull .npf-volin::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(255,255,255,.92) var(--v), rgba(255,255,255,.25) var(--v)); }
 html body:not(#_) #npfull .npf-volin::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 html body:not(#_) #npfull .npf-volin::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); }
