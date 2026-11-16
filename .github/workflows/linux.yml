@@ -36,6 +36,10 @@ jobs:
           set +e
           docker run --rm -v "$PWD:/w" debian:trixie bash -c '
             set -e
+            # Debian's Docker image only lists "main"; a real install (preseed) also has non-free-firmware, which is
+            # where the Wi-Fi firmware lives. Without this the stick had no Wi-Fi firmware, so Wi-Fi never worked
+            # until a network cable let an update download it.
+            sed -i -E "s/^Components:.*/Components: main contrib non-free non-free-firmware/" /etc/apt/sources.list.d/debian.sources
             apt-get update -qq && apt-get install -y -qq adduser sudo >/dev/null
             # like a fresh install from the USB stick: the stick is still listed as a package source
             echo "deb cdrom:[Debian GNU/Linux 13 _Trixie_ - Official amd64 NETINST]/ trixie main" >> /etc/apt/sources.list
@@ -52,6 +56,8 @@ jobs:
             apt-get install -y -qq apt-utils >/dev/null
             apt-ftparchive packages . > Packages && apt-ftparchive release . > Release
             echo "pool: $(ls *.deb | wc -l) packages, $(du -sh . | cut -f1)"
+            # The stick must be able to bring up Wi-Fi with no cable: fail the build if the firmware isn't on it.
+            for f in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree; do ls ${f}_*.deb >/dev/null 2>&1 || { echo "E: Wi-Fi firmware $f is not on the installer stick"; exit 1; }; done
           ' > container-setup.log 2>&1
           code=$?
           set -e

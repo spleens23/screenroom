@@ -57,7 +57,7 @@ bios_fix() {
 # ---- 2. firmware for the card ------------------------------------------------------------------------------
 fw_install() {
   local pkgs=() p
-  for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree linux-firmware; do
+  for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-mediatek firmware-misc-nonfree linux-firmware; do
     apt-cache show "$p" >/dev/null 2>&1 && ! dpkg -s "$p" >/dev/null 2>&1 && pkgs+=("$p")
   done
   if [ "${#pkgs[@]}" -eq 0 ]; then
@@ -70,7 +70,7 @@ fw_install() {
       sed -i -E 's/^(deb\s+\S*debian\S*\s+\S+\s+main)(.*)$/\1 contrib non-free non-free-firmware/' /etc/apt/sources.list; changed=1
     fi
     apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true
-    for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree linux-firmware; do
+    for p in firmware-iwlwifi firmware-realtek firmware-atheros firmware-mediatek firmware-misc-nonfree linux-firmware; do
       apt-cache show "$p" >/dev/null 2>&1 && ! dpkg -s "$p" >/dev/null 2>&1 && pkgs+=("$p")
     done
     [ "$changed" = 1 ] && log "added Debian's non-free-firmware section"
