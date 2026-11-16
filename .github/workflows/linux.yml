@@ -36,7 +36,7 @@ jobs:
           set +e
           docker run --rm -v "$PWD:/w" debian:trixie bash -c '
             set -e
-            # Debian's Docker image only lists "main"; a real install (preseed) also has non-free-firmware, which is
+            # The Debian Docker image only lists "main"; a real install (preseed) also has non-free-firmware, which is
             # where the Wi-Fi firmware lives. Without this the stick had no Wi-Fi firmware, so Wi-Fi never worked
             # until a network cable let an update download it.
             sed -i -E "s/^Components:.*/Components: main contrib non-free non-free-firmware/" /etc/apt/sources.list.d/debian.sources
