@@ -1631,7 +1631,9 @@ window.createParlor = function createParlor(ctx) {
           e.target.textContent = 'Reading every song…'; e.target.disabled = true;
           const before = P.albums.length;
           P = await api.parlorRescan(); draw(); render(); drawBar(true);
-          ctx.flash(`Rescanned: ${plural(P.albums.length, 'album')}${P.albums.length !== before ? ` (${P.albums.length > before ? '+' : ''}${P.albums.length - before})` : ''}`);
+          let mc = '';
+          try { if (api.parlorMotionReport) { const rep = await api.parlorMotionReport(); mc = `, ${rep.length === 1 ? '1 moving cover' : rep.length + ' moving covers'}`; } } catch (err) { mc = ', moving covers not checked'; }
+          ctx.flash(`Rescanned: ${plural(P.albums.length, 'album')}${P.albums.length !== before ? ` (${P.albums.length > before ? '+' : ''}${P.albums.length - before})` : ''}${mc}`);
         } }, 'Rescan music') : null));
       // what the last scan found, so it's clear whether it saw a new file (and why a file was left out)
       if (api.parlorScanReport) {
@@ -1655,7 +1657,8 @@ window.createParlor = function createParlor(ctx) {
             h('li', {}, h('b', {}, `${x.folder} / ${x.file}`), ` ${why[x.why] || x.why}`, x.why === 'unplayable' && /truehd/i.test(x.codec || '') ? h('span', { class: 'mr-d' }, ' · Dolby TrueHD: save it as Dolby Digital Plus (E-AC-3) Atmos instead') : x.codec ? h('span', { class: 'mr-d' }, ` · ${x.codec}`) : null))));
         }
       }
-      if (api.parlorMotionReport) {
+      if (api.parlorMotionReport) try {
+        box.append(h('h4', {}, 'Moving covers'));
         const rep = await api.parlorMotionReport();
         const here = window.S_IOS ? 'the phone' : 'this computer';
         const say = { plays: 'plays', fixed: `plays (Parlor made a copy ${here} can play)`, unplayable: `can't be played on ${here}`,
@@ -1665,7 +1668,7 @@ window.createParlor = function createParlor(ctx) {
         if (rep.length) box.append(h('ul', { class: 'motion-report' }, rep.map((r) =>
           h('li', {}, h('b', {}, `${r.album} / ${r.file}`), ` ${say[r.status] || r.status}`, r.window ? `${win[r.window] || ''}` : '', r.detail ? h('span', { class: 'mr-d' }, ` · ${r.detail}`) : null,
             r.windowDetail ? h('span', { class: 'mr-d' }, ` · ${r.windowDetail}`) : null))));
-      }
+      } catch (err) { box.append(h('p', { class: 'am-hint' }, `Couldn't check the moving covers: ${(err && err.message) || err}`)); }
       const noArt = P.albums.filter((a) => !a.art).length;
       if (noArt && api.parlorCoversAuto) {
         box.append(h('p', { class: 'am-hint' }, `${noArt} album${noArt === 1 ? ' has' : 's have'} no cover. Screenroom can look them up online (needs an internet connection) and save each as cover.jpg in the album's folder; or pick one on the album's page.`),
@@ -1677,7 +1680,7 @@ window.createParlor = function createParlor(ctx) {
           } }, 'Find missing covers')));
       }
     };
-    draw().catch(() => {});
+    draw().catch((err) => { box.append(h('p', { class: 'am-hint' }, `Something went wrong showing this: ${(err && err.message) || err}`)); });
     return box;
   }
 };
