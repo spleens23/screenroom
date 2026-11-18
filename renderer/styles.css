@@ -1011,3 +1011,5 @@ body.tv ::-webkit-scrollbar { display: none; }
 /* Using the remote: the mouse pointer (often parked in the middle of the screen) mustn't highlight a second
    film. Nothing under it reacts until the mouse really moves again (that ends the remote mode). */
 body.navmode:not(.touch) * { pointer-events: none !important; }
+/* (and pages never scroll sideways on the TV) */
+html:has(> body.tv), body.tv, body.tv #modal, body.tv #settings { overflow-x: hidden; }

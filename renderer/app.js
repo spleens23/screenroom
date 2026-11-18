@@ -2402,7 +2402,12 @@
     }
     // the big feature at the top of Home, and the menu bar: show the page from the very top (nothing cut off)
     if (el.closest('.hero') || (el.closest('#nav') && window.scrollY > 0 && window.scrollY < innerHeight)) { window.scrollTo({ top: 0, behavior }); return; }
-    if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior });
+    if (el.closest('#nav, #npbar, #npfull, .poverlay')) return;
+    // sideways only within a row of posters: a page itself never slides sideways (a film's page that's a touch
+    // wider than the screen would otherwise shift right when the remote reaches its top)
+    const strip = el.closest('.strip');
+    el.scrollIntoView({ block: 'center', inline: strip ? 'center' : 'nearest', behavior });
+    for (const box of [el.closest('#modal'), document.scrollingElement, document.body]) if (box && box.scrollLeft) box.scrollLeft = 0;
   }
   function defaultFocus(els) {
     return els.find((e) => e.matches('.rw-first, .rw-row.cur')) || els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card, .rw-row')) || els[0];
