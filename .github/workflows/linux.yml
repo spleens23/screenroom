@@ -57,7 +57,7 @@ jobs:
             apt-ftparchive packages . > Packages && apt-ftparchive release . > Release
             echo "pool: $(ls *.deb | wc -l) packages, $(du -sh . | cut -f1)"
             # The stick must be able to bring up Wi-Fi with no cable: fail the build if the firmware is missing.
-            for f in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree; do ls ${f}_*.deb >/dev/null 2>&1 || { echo "E: Wi-Fi firmware $f is not on the installer stick"; exit 1; }; done
+            for f in firmware-iwlwifi firmware-realtek firmware-atheros firmware-misc-nonfree wpasupplicant wireless-regdb; do ls ${f}_*.deb >/dev/null 2>&1 || { echo "E: Wi-Fi firmware $f is not on the installer stick"; exit 1; }; done
           ' > container-setup.log 2>&1
           code=$?
           set -e

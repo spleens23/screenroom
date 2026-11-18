@@ -92,7 +92,7 @@ apt-get install -y --no-install-recommends \
   mesa-va-drivers vainfo \
   udisks2 udiskie exfatprogs ntfs-3g dosfstools \
   samba avahi-daemon libnss-mdns \
-  network-manager bluez polkitd \
+  network-manager wpasupplicant wireless-regdb iw bluez polkitd \
   plymouth plymouth-themes \
   unattended-upgrades openssh-server \
   ca-certificates curl jq pciutils

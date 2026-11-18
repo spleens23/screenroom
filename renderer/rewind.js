@@ -87,6 +87,8 @@
       const out = [['all', 'ALL', all.slice().sort((a, b) => sortName(a.name).localeCompare(sortName(b.name)))]];
       const cont = ctx.continueList(all).map((c) => c.entry);
       if (cont.length) out.push(['resume', 'RESUME', cont]);
+      const later = ctx.laterList(all);
+      if (later.length) out.push(['later', 'LATER', later]);
       // the holidays coming up (Christmas films from November, …)
       for (const [name, list] of ctx.holidayRows(all)) {
         const seen = new Set();
@@ -206,6 +208,12 @@
     };
     const copyName = (v) => { const q = window.MediaCore ? MediaCore.qualityOf(v) : ''; const vid = v.video || {}; return q === '4K' ? '4K' : q === 'HD' ? `HD ${up(vid.res || '')}`.trim() : `SD ${vid.height ? vid.height + 'P' : ''}`.trim(); };
 
+    // + Watch later / take it off again
+    const laterOpt = (e) => h('button', { class: 'rw-opt', 'data-rwopt': 'later', onclick: async () => {
+      await ctx.toggleLater(e); ctx.renderModal(); ctx.render();
+      const b = document.querySelector('.rw-opt[data-rwopt="later"]'); b && ctx.focus(b);
+    } }, h('span', { class: 'rw-mark' }, '▶'), ctx.inLater(e) ? 'TAKE OFF WATCH LATER' : 'WATCH LATER');
+
     function movieMenu(e, open) {
       const vs = e.versions || [e.item];
       const item = (open.version && vs.find((v) => v.id === open.version)) || e.item;
@@ -220,6 +228,7 @@
       if (resumable) opts.push(h('button', { class: 'rw-opt rw-first', onclick: () => ctx.start(item.id, dp.audio) }, h('span', { class: 'rw-mark' }, '▶'), 'RESUME'));
       opts.push(h('button', { class: 'rw-opt' + (resumable ? '' : ' rw-first'), onclick: () => ctx.start(item.id, dp.audio, true) }, h('span', { class: 'rw-mark' }, '▶'), resumable ? 'PLAY FROM BEGIN' : 'PLAY'));
       opts.push(h('button', { class: 'rw-opt', onclick: () => ctx.setWatched(vs.map((v) => v.id), !(p && p.done)) }, h('span', { class: 'rw-mark' }, '▶'), p && p.done ? 'MARK UNWATCHED' : 'MARK WATCHED'));
+      if (!(p && p.done)) opts.push(laterOpt(e));
       const picks = [];
       if (item.audio.length > 1) picks.push(pickRow('AUDIO', item.audio.slice(0, 5).map((a) => h('button', {
         class: 'rw-pick' + (a.n === dp.audio ? ' on' : ''), title: a.label,
@@ -257,6 +266,7 @@
       const main = n.mode === 'resume' ? `RESUME ${epShort(n.ep)}` : n.mode === 'next' ? `PLAY ${epShort(n.ep)}` : `PLAY ${epShort(n.ep)}`;
       const opts = [h('button', { class: 'rw-opt rw-first', onclick: () => ctx.playEntry(e) }, h('span', { class: 'rw-mark' }, '▶'), main)];
       if (n.mode === 'resume') opts.push(h('button', { class: 'rw-opt', onclick: () => ctx.start(n.ep.id, null, true) }, h('span', { class: 'rw-mark' }, '▶'), `${epShort(n.ep)} FROM BEGIN`));
+      opts.push(laterOpt(e));
       const seasonRow = seasons.length > 1 ? pickRow('SEASON', seasons.map((s) => h('button', {
         class: 'rw-pick' + (s === open.season ? ' on' : ''), 'data-season': s,
         onclick: () => { open.season = s; open.focusEp = null; ctx.renderModal(); const b = document.querySelector(`.rw-pick[data-season="${s}"]`); b && ctx.focus(b); },
@@ -278,9 +288,8 @@
       if (focusEp) setTimeout(() => { const el = document.querySelector(`.rw-ep[data-ep="${CSS.escape(focusEp.id)}"]`); if (el) { el.scrollIntoView({ block: 'center' }); ctx.focus(el); } }, 30);
       return stage('rw-film rw-series',
         banner(up(e.name), [yrs ? h('span', {}, yrs) : null, clock()]),
-        h('div', { class: 'rw-opts' }, opts),
-        seasonRow ? h('div', { class: 'rw-pickset' }, seasonRow) : null,
-        box, side,
+        h('div', { class: 'rw-left' }, h('div', { class: 'rw-opts' }, opts), seasonRow ? h('div', { class: 'rw-pickset' }, seasonRow) : null, box),
+        side,
         foot(['SELECT WITH (▲▼) AND ', okBox()], ['PRESS (BACK) FOR THE TITLE MENU']));
     }
 

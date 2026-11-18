@@ -32,7 +32,9 @@
   const rwOn = () => rwTheme() && mode !== 'parlor';
   // Parlor light or dark: following the phone's or computer's own setting unless one's been picked here
   const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-  const getAppearance = () => { try { return localStorage.getItem('parlor-appearance') || 'auto'; } catch { return 'auto'; } };
+  // (Linux, the TV box above all: dark unless light is picked; elsewhere the device's own setting)
+  const DEF_LOOK = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent) ? 'dark' : 'auto';
+  const getAppearance = () => { try { return localStorage.getItem('parlor-appearance') || DEF_LOOK; } catch { return DEF_LOOK; } };
   const isDark = () => { const a = getAppearance(); return a === 'dark' || (a === 'auto' && !!(darkMQ && darkMQ.matches)); };
   const applyAppearance = () => {
     if (!document.body) return;
@@ -176,6 +178,34 @@
 
   // ---- star ratings (shared by every profile) ----------------------------------------------------------
   const rkey = (e) => (window.MediaCore && MediaCore.ratingKey ? MediaCore.ratingKey(e) : '');
+
+  // ---- Watch Later: each profile's own list (config.watchLater: { <profile id>: [<title key>, …] }, newest first).
+  // A film drops off once it's been watched; a series stays until it's taken off.
+  const wlId = () => (S.profile && S.profile.id) || 'all';
+  const wlKeys = () => ((S.config && S.config.watchLater) || {})[wlId()] || [];
+  const inLater = (e) => { const k = rkey(e); return !!k && wlKeys().includes(k); };
+  async function toggleLater(e) {
+    const k = rkey(e);
+    if (!k || !api.setConfig) return;
+    const all = { ...((S.config && S.config.watchLater) || {}) };
+    const was = inLater(e);
+    const list = (all[wlId()] || []).filter((x) => x !== k);
+    if (!was) list.unshift(k);
+    all[wlId()] = list;
+    S = await api.setConfig({ watchLater: all });
+  }
+  function laterList(all) {
+    const by = new Map(all.map((e) => [rkey(e), e]));
+    return wlKeys().map((k) => by.get(k)).filter((e) => e && !(e.kind === 'movie' && (e.versions || [e.item]).some((v) => isDone(v.id))));
+  }
+  function laterButton(e) {
+    if (!rkey(e) || !api.setConfig) return null;
+    const on = inLater(e);
+    return h('button', { class: 'btn secondary later-btn', title: on ? 'Take off Watch Later' : 'Save to watch later', onclick: async () => {
+      await toggleLater(e); renderModal(); render();
+      const b = $('#modal .later-btn'); b && b.focus({ preventScroll: true });
+    } }, on ? '✓ Watch Later' : '+ Watch Later');
+  }
 
   // ---- holiday films (MediaCore.HOLIDAYS): found from titles, descriptions and genres, or set by hand on the
   // film's page (kept for the whole house in config.holidayTags: { <title key>: ['christmas'] | [] = none }) --
@@ -619,6 +649,8 @@
     const recd = recommendedEntries(all);
     if (recd.length) rows.push(['Recommended for You', recd]);
     if (cont.length) rows.push(['Continue Watching', cont]);
+    const later = laterList(all);
+    if (later.length) rows.push(['Watch Later', later]);
     // Christmas films from November, Halloween ones from late September, …
     rows.push(...holidayRows(all));
     rows.push(['Recently Added', [...all].sort((a, b) => b.mtime - a.mtime).slice(0, 20)]);
@@ -928,7 +960,7 @@
         if (v === 'auto') delete next[key]; else next[key] = v === 'none' ? [] : [v];
         S = await api.setConfig({ holidayTags: next });
         renderModal(); render();
-        const sel = $('#modal .holiday-pick select'); sel && sel.focus();
+        const sel = $('#modal .holiday-pick select'); sel && sel.focus({ preventScroll: true });
       } },
       h('option', { value: 'auto', selected: cur === 'auto' }, found.length ? `${found.map(holName).join(' & ')} (found automatically)` : 'None (automatic)'),
       HOL().map((x) => h('option', { value: x.id, selected: cur === x.id }, x.name)),
@@ -960,6 +992,7 @@
             resumable ? h('button', { class: 'btn secondary', onclick: () => start(item.id, selectedAudio, true) }, '↺ From start') : null,
             h('button', { class: 'btn secondary', title: p && p.done ? 'Mark as unwatched' : 'Mark as watched',
               onclick: async () => { S = await api.setWatched(vs.map((v) => v.id), !(p && p.done)); renderModal(); render(); } }, p && p.done ? '✓ Watched' : '+ Mark watched'),
+            p && p.done ? null : laterButton(e),
             (() => { const b = recommendButton(e); if (b) b.classList.add('rec-btn'); return b; })()),
           vs.length > 1 ? h('label', { class: 'quality' }, h('span', {}, 'Quality'),
             h('select', { class: 'dev-select', onchange: (ev) => { open.version = ev.target.value; renderModal(); const s = $('#modal .quality select'); s && s.focus(); } },
@@ -1018,6 +1051,7 @@
     const n = nextUp(e);
     const resumeBtn = [n.mode === 'resume'
       ? h('button', { class: 'btn secondary', onclick: () => start(n.ep.id, null, true) }, '↺ From start') : null,
+      laterButton(e),
       (() => { const b = recommendButton(e); if (b) b.classList.add('rec-btn'); return b; })()];
 
     const node = [
@@ -2803,6 +2837,7 @@
 
   // Focus rings show while navigating with remote/keyboard/gamepad, and hide again when the mouse is used.
   window.addEventListener('mousedown', () => document.body.classList.remove('navmode'));
+  window.addEventListener('wheel', () => document.body.classList.remove('navmode'), { passive: true });
   // a mouse's own Back button
   window.addEventListener('mouseup', (e) => { if (e.button === 3 && !S.tv) { e.preventDefault(); goBack(); } });
   window.addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) document.body.classList.remove('navmode'); });
@@ -2950,6 +2985,7 @@
       openSettings, toggleMode, hasMusic: () => !!parlorUI,
       switchProfile: async () => { S = await api.showProfilePicker(); render(); },
       active: () => rwOn(),
+      laterList, inLater, toggleLater,
     });
   }
   document.body.classList.toggle('ed-films', EDITION === 'films');

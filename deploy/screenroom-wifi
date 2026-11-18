@@ -117,6 +117,21 @@ powersave_off() {
   RESTART_NM=1
 }
 
+# ---- 4. the helper NetworkManager needs for Wi-Fi ---------------------------------------------------------------
+# wpa_supplicant is only "recommended" by Debian's NetworkManager, so an install without recommended packages
+# doesn't have it: the card then shows up but NetworkManager can never scan ("can't hear any networks").
+supplicant_ok() { command -v wpa_supplicant >/dev/null 2>&1 || [ -x /usr/sbin/wpa_supplicant ] || [ -x /sbin/wpa_supplicant ]; }
+supplicant_install() {
+  supplicant_ok && return 0
+  local pkgs=(wpasupplicant wireless-regdb iw)
+  if ! apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends install "${pkgs[@]}" >/dev/null 2>&1; then
+    apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true
+    apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends install "${pkgs[@]}" >/dev/null 2>&1 || true
+  fi
+  if supplicant_ok; then log "installed wpa_supplicant"; DID+=("installed the Wi-Fi helper (wpa_supplicant)"); RESTART_NM=1; fi
+}
+nm_state() { nmcli -t -f DEVICE,STATE device 2>/dev/null | awk -F: -v i="$1" '$1==i{print $2; exit}'; }
+
 # ---- run ------------------------------------------------------------------------------------------------------
 BIOS_CHANGED=""; BIOS_LOCKED=""; RESTART_NM=0
 bios_fix
@@ -128,13 +143,24 @@ if [ "$MODE" != "--boot" ] && [ -n "$(card_line)" ]; then
     unblock
   fi
 fi
+[ "$MODE" != "--boot" ] && [ -n "$(wifi_iface)" ] && supplicant_install
 [ "$RESTART_NM" = 1 ] && systemctl try-restart NetworkManager >/dev/null 2>&1 && sleep 3
+# NetworkManager leaving the card alone ("unmanaged", e.g. listed in an old network settings file): hand it over
+WIF="$(wifi_iface)"
+if [ -n "$WIF" ] && command -v nmcli >/dev/null && [ "$(nm_state "$WIF")" = unmanaged ]; then
+  nmcli device set "$WIF" managed yes >/dev/null 2>&1 && { log "NetworkManager now manages $WIF"; DID+=("let NetworkManager use the Wi-Fi card"); sleep 3; }
+fi
+# (just after a restart the card can be "unavailable" for a few seconds before it can scan)
+if [ -n "$WIF" ] && command -v nmcli >/dev/null; then
+  for _ in $(seq 1 15); do [ "$(nm_state "$WIF")" = unavailable ] || break; sleep 1; done
+fi
 
 # ---- the report -----------------------------------------------------------------------------------------------
 CARD="$(card_name)"; DRV="$(card_driver)"; IF="$(wifi_iface)"; FWERR="$(fw_errors | tail -1)"
 HARD="no"; command -v rfkill >/dev/null && rfkill list wifi 2>/dev/null | grep -q 'Hard blocked: yes' && HARD="yes"
 SOFT="no"; command -v rfkill >/dev/null && rfkill list wifi 2>/dev/null | grep -q 'Soft blocked: yes' && SOFT="yes"
 NETS=0
+NMST="$( [ -n "$IF" ] && command -v nmcli >/dev/null && nm_state "$IF" )"
 if [ -n "$IF" ] && command -v nmcli >/dev/null; then
   NETS="$(nmcli -t -f SSID device wifi list ifname "$IF" --rescan yes 2>/dev/null | grep -c . || true)"
 fi
@@ -152,6 +178,12 @@ elif [ -z "$DRV" ] || [ -z "$IF" ]; then
   MSG="The Wi-Fi card ($CARD) was found, but its software (firmware) couldn't be loaded. Keep the network cable plugged in and use Check for updates, or restart the box; Screenroom will install it."
 elif [ "$SOFT" = yes ]; then
   STATE=blocked; MSG="Wi-Fi is switched off. Screenroom will switch it back on at the next start."
+elif ! supplicant_ok; then
+  STATE=no-helper
+  MSG="The Wi-Fi card ($CARD) works, but a piece of Wi-Fi software (wpa_supplicant) is missing, so it can't look for networks. Plug in the network cable and use Check for updates: Screenroom installs it."
+elif [ "$NMST" = unmanaged ] || [ "$NMST" = unavailable ]; then
+  STATE=not-ready
+  MSG="The Wi-Fi card ($CARD) works, but the network settings can't use it yet ($NMST). Restart the box; if this stays, plug in the network cable and use Check for updates."
 elif [ "$NETS" = 0 ]; then
   STATE=no-networks; MSG="The Wi-Fi card ($CARD) works, but it can't hear any networks. Check that the two thin antenna wires are clipped onto the card."
 else

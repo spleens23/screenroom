@@ -196,3 +196,10 @@ body.rw:not(.parlor) #scan-status { background: var(--rw-grey); color: var(--rw-
 /* no Matinee focus rings on the VCR screens: the highlight is the reversed line itself */
 body.rw:not(.parlor) .rw-stage :focus, body.rw:not(.parlor) .rw-stage :focus-visible { outline: none !important; box-shadow: none !important; }
 .rw-saver svg { width: calc(150px * var(--rwk)); height: auto; }
+
+/* a series' page: options, seasons and episodes in one column, the episodes taking what's left */
+.rw-left { position: absolute; left: 80px; top: 150px; width: 740px; height: 432px; display: flex; flex-direction: column; gap: 14px; }
+.rw-left > .rw-opts, .rw-left > .rw-pickset, .rw-left > .rw-eps { position: static; width: auto; height: auto; top: auto; left: auto; }
+.rw-left > .rw-pickset { padding-left: 16px; flex: none; }
+.rw-left > .rw-eps { flex: 1; min-height: 0; }
+.rw-left .rw-opt { height: 46px; font-size: 26px; }

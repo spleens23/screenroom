@@ -1002,3 +1002,12 @@ body .poverlay input.pname-input::placeholder { color: inherit; opacity: .5; -we
 /* a pinned album's button */
 .palbum .pin-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; }
 .palbum .pin-btn.on svg { fill: currentColor; }
+
+/* TV: no scroll bars anywhere (nobody drags them with a remote), so nothing slides sideways when a page's
+   height changes, e.g. after a choice redraws the page behind a film's page */
+html:has(> body.tv), body.tv, body.tv * { scrollbar-width: none; }
+body.tv ::-webkit-scrollbar { display: none; }
+
+/* Using the remote: the mouse pointer (often parked in the middle of the screen) mustn't highlight a second
+   film. Nothing under it reacts until the mouse really moves again (that ends the remote mode). */
+body.navmode:not(.touch) * { pointer-events: none !important; }
