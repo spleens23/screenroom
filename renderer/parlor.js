@@ -74,6 +74,25 @@ window.createParlor = function createParlor(ctx) {
   }
   // (Linux: moving covers play whatever "reduce motion" says; a TV box with no desktop can report it by accident)
   if (/Linux/.test(navigator.platform || navigator.userAgent) && !/Android/.test(navigator.userAgent)) document.body.classList.add('motion-always');
+  // After a scan: each moving cover is played once, out of sight and muted, and whether it played is noted for
+  // Settings → Parlor (so a cover that won't play here says why, without opening every album).
+  if (api.onParlorMotionProbe) api.onParlorMotionProbe(async (list) => {
+    for (const it of list) {
+      await new Promise((done) => {
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'auto';
+        v.style.cssText = 'position:fixed;left:-9999px;top:0;width:64px;height:64px;opacity:0;pointer-events:none';
+        let over = false;
+        const end = (st, d) => { if (over) return; over = true; clearTimeout(tm); try { api.parlorMotionSeen(it.key, st, d); } catch {} v.removeAttribute('src'); try { v.load(); } catch {} v.remove(); done(); };
+        const tm = setTimeout(() => end('error', `didn’t start within 10 s (ready state ${v.readyState})`), 10000);
+        v.addEventListener('playing', () => end('playing'));
+        v.addEventListener('error', () => { const e = v.error || {}; end('error', `error ${e.code || '?'}${e.message ? ': ' + e.message : ''}`); });
+        v.src = fileUrl(it.file);
+        document.body.append(v);
+        const p = v.play(); if (p && p.catch) p.catch((e) => end('error', `play() refused: ${e && e.name}`));
+      });
+    }
+  });
   function motion(a) {
     const v = h('video', { class: 'motion', src: fileUrl(a.motion), loop: '', playsinline: '', 'webkit-playsinline': '', preload: 'auto', disablepictureinpicture: '', 'aria-hidden': 'true' });
     v.muted = true; v.defaultMuted = true; v.autoplay = true;

@@ -269,7 +269,8 @@
       albums.push({
         key, title: v.versions ? MediaCore.versionlessTitle(first.album) : first.album, versions: v.versions, artist: first.compilation ? 'Various Artists' : first.albumArtist,
         various: first.compilation || artists.size > 2, year: years.length ? Math.min(...years) : null, genre: first.genre,
-        art, motion: list.map((t) => t.folderMotion).find(Boolean) || null,
+        // (one moving cover for the whole album: found beside the stereo songs or the spatial ones, it's both versions')
+        art, motion: list.map((t) => t.folderMotion).find(Boolean) || all.map((t) => t.folderMotion).find(Boolean) || null,
         added: Math.max(...list.map((t) => t.mtime || 0)), tracks: list.map((t) => t.id),
         duration: list.reduce((s, t) => s + (t.duration || 0), 0), lossless: list.every((t) => t.lossless),
         dirs: [...new Set(all.map((t) => dirOf(t.path)))],

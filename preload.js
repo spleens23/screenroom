@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('api', {
   sonosUse: (id) => ipcRenderer.invoke('sonos-use', id || ''),
   parlorMotionReport: () => ipcRenderer.invoke('parlor-motion-report'),
   parlorMotionSeen: (key, status, detail) => ipcRenderer.invoke('parlor-motion-seen', key, status, detail),
+  onParlorMotionProbe: (cb) => ipcRenderer.on('parlor-motion-probe', (_e, list) => cb(list)),
   onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
   // voice control (the Linux box)
   voiceStatus: () => ipcRenderer.invoke('voice-status'),

@@ -344,7 +344,8 @@ function battery() {
       const rd = (f) => { try { return fs.readFileSync(path.join(dir, b, f), 'utf8').trim(); } catch { return ''; } };
       const cap = Number(rd('capacity'));
       const st = rd('status');
-      if (/Charging|Full/i.test(st)) charging = true;
+      // (exactly: "Discharging" and "Not charging" have the word in them too)
+      if (/^(Charging|Full)$/i.test(st)) charging = true;
       const en = Number(rd('energy_now') || rd('charge_now')), ef = Number(rd('energy_full') || rd('charge_full'));
       if (en && ef) { now += en; full += ef; } else if (!Number.isNaN(cap)) pct = cap;
     }
