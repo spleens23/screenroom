@@ -29,7 +29,7 @@
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
+	<true/>
 	<!-- Music keeps playing with the screen off; films can go picture-in-picture. -->
 	<key>UIBackgroundModes</key>
 	<array>

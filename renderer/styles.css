@@ -1040,3 +1040,12 @@ html body.big #voice-pill { font-size: 26px; padding: 16px 30px; }
 .voice-card .voice-help ul { margin: 4px 0 8px 18px; padding: 0; line-height: 1.6; }
 .voice-card .voice-try { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .voice-card .voice-try input { flex: 1 1 260px; min-width: 0; }
+
+/* The top bar's buttons on the right (search, music, settings) always fit: the tabs give way first, and scroll
+   sideways if there's no room at all (a phone turned upright). */
+#nav .brand { flex-shrink: 0; }
+#nav .nav-right { flex-shrink: 0; }
+#nav > nav { min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+#nav > nav::-webkit-scrollbar { display: none; }
+#nav > nav a { flex-shrink: 0; white-space: nowrap; }
+html:has(body.ios-app), body.ios-app { overflow-x: hidden; }

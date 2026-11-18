@@ -121,10 +121,14 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             st.unlink(arg(a, 0) ?? "")
             return true
         case "showInFiles":
-            // the Files app, opened at this app's own folder (On My iPad › Parlor)
-            let path = Storage.shared.docs.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? Storage.shared.docs.path
-            guard let url = URL(string: "shareddocuments://" + path) else { return false }
-            return await UIApplication.shared.open(url)
+            // the Files app, opened at this app's own folder (On My iPad › Parlor). Files wants the folder's real path
+            // (/private/var/…, with the slash at the end); the plain one is tried after it.
+            let docs = Storage.shared.docs
+            for p in [docs.resolvingSymlinksInPath().path, docs.path] {
+                let enc = (p.hasSuffix("/") ? p : p + "/").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? p
+                if let url = URL(string: "shareddocuments://" + enc), await UIApplication.shared.open(url) { return true }
+            }
+            return false
         case "playVideo":
             guard let opts: [String: Any] = arg(a, 0), let host else { throw ScreenroomError("Nothing to play.") }
             PlayerScreen.accent = PlayerScreen.color(hex: opts["accent"] as? String ?? "")

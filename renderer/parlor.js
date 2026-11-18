@@ -708,7 +708,7 @@ window.createParlor = function createParlor(ctx) {
         h('div', { class: 'palbum-info' },
           h('h1', {}, a.title),
           h('button', { class: 'linkish partist', onclick: () => { ctx.closeModal(); go('artist:' + a.artist); } }, a.artist),
-          h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless ? 'Lossless' : fmt.codec,
+          h('div', { class: 'pmeta' }, [a.genre, a.year, plural(ids.length, 'song'), longDur(a.duration), a.lossless || /^(flac|alac|apple lossless|wav|aiff)/i.test(fmt.codec || '') ? 'Lossless' : fmt.codec,
             ids.some((id) => (P.tracks[id] || {}).atmos) ? 'Dolby Atmos' : ids.some((id) => (P.tracks[id] || {}).channels > 2) ? 'Surround' : ''].filter(Boolean).join(' · ')),
           versionPicker(a),
           h('div', { class: 'btns' },
@@ -1264,6 +1264,8 @@ window.createParlor = function createParlor(ctx) {
   const khz = (r) => (r % 1000 ? (r / 1000).toFixed(1) : String(r / 1000)) + ' kHz';
   function quality(t) {
     t = { ...t, ...((P && P.tracks && P.tracks[t.id]) || {}) }; // the library has the file's details
+    // (FLAC, Apple Lossless, WAV and AIFF are never lossy, whatever the scan said)
+    if (/^(flac|alac|apple lossless|wav|aiff|wav \/ aiff|pcm)/i.test(t.codec || '')) t.lossless = true;
     const hi = t.lossless && (t.sampleRate > 48000 || t.bitDepth > 24);
     const spec = t.lossless
       ? [t.bitDepth ? `${t.bitDepth}-bit` : '', t.sampleRate ? khz(t.sampleRate) : ''].filter(Boolean).join(' / ')
@@ -1355,7 +1357,8 @@ window.createParlor = function createParlor(ctx) {
   // The song carries on from where it was; on a Sonos speaker it's the file itself that plays (a Dolby Atmos song
   // stays Dolby Atmos on the speakers that play it).
   const ios = /iPad|iPhone/.test(navigator.userAgent);
-  const deviceName = /iPad/.test(navigator.userAgent) ? 'This iPad' : /iPhone/.test(navigator.userAgent) ? 'This iPhone' : window.S_ANDROID ? 'This phone'
+  // (an iPad tells web pages it's a Mac, so the iPhone / iPad app just says "This device")
+  const deviceName = window.S_IOS ? 'This device' : window.S_ANDROID ? 'This phone'
     : document.body.classList.contains('tv') ? 'The TV' : 'This computer';
   let outRooms = null;
   async function showOutputs() {

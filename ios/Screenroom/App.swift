@@ -92,6 +92,10 @@ final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInte
         v.scrollView.backgroundColor = .black
         v.scrollView.contentInsetAdjustmentBehavior = .never
         v.scrollView.bounces = false
+        // (the page is laid out for the screen's width: no zooming, so turning the device never leaves it zoomed in
+        // or pushed sideways)
+        v.scrollView.minimumZoomScale = 1
+        v.scrollView.maximumZoomScale = 1
         v.allowsBackForwardNavigationGestures = false
         v.navigationDelegate = self
         #if DEBUG
@@ -109,6 +113,17 @@ final class ScreenController: UIViewController, WKNavigationDelegate, UIDropInte
         root.addSubview(v)
         root.addInteraction(UIDropInteraction(delegate: self))
         view = root
+    }
+
+    // Turned between landscape and portrait: back to full size at the left edge, and the page lays itself out again.
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            guard let v = self?.web else { return }
+            v.scrollView.setZoomScale(1, animated: false)
+            if v.scrollView.contentOffset.x != 0 { v.scrollView.contentOffset.x = 0 }
+            v.evaluateJavaScript("window.scrollTo(0, window.scrollY); window.dispatchEvent(new Event('resize'));", completionHandler: nil)
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {

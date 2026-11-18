@@ -657,7 +657,7 @@
     // Rated 4 stars or more by the people in this house (best first)
     const faves = all.map((e) => ({ e, r: avgRating(e) })).filter((x) => x.r && x.r.avg >= 4)
       .sort((a, b) => (b.r.avg - a.r.avg) || (b.r.count - a.r.count)).map((x) => x.e);
-    if (faves.length) rows.push(['House Favourites', faves.slice(0, 20)]);
+    if (faves.length) rows.push(['House Favorites', faves.slice(0, 20)]);
     const shows = all.filter((e) => e.kind === 'series');
     const movies = all.filter((e) => e.kind === 'movie');
     if (shows.length && movies.length) { rows.push(['TV Shows', shows]); rows.push(['Movies', movies]); }
@@ -1286,7 +1286,7 @@
     const r = await api.copyDrive(d.mount, only, kind);
     copyState = null; drawCopy();
     if (r.error) flash(r.error);
-    else flash(r.cancelled ? 'Copy cancelled' : `Copied ${r.copied} file${r.copied === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} were already there)` : ''}${r.music ? ' into your music (Parlor)' : ''}`);
+    else flash(r.cancelled ? 'Copy canceled' : `Copied ${r.copied} file${r.copied === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} were already there)` : ''}${r.music ? ' into your music (Parlor)' : ''}`);
     S = await api.state(); render();
     if (!$('#settings').hidden) renderSettings();
   }
@@ -2048,7 +2048,7 @@
     layer.replaceChildren(h('div', { class: 'who-inner' },
       h('div', { class: 'brand who-brand' }, EDITION === 'music' ? 'Parlor' : 'Screenroom'),
       h('h1', {}, 'Take a seat'),
-      h('p', { class: 'who-sub' }, EDITION === 'music' ? 'Everyone gets their own albums, playlists and favourites.' : 'Everyone gets their own list and their own place in every film.'),
+      h('p', { class: 'who-sub' }, EDITION === 'music' ? 'Everyone gets their own albums, playlists and favorites.' : 'Everyone gets their own list and their own place in every film.'),
       h('div', { class: 'who-list' }, (S.profiles || []).map((p) =>
         h('button', { class: 'who-tile', 'data-profile': p.id, onclick: () => chooseProfile(p) },
           avatar(p, true),
@@ -2204,7 +2204,7 @@
       rw ? rwSet('Scanlines', 'The faint lines and darker corners of an old TV.', 'rwScan', [['true', 'On'], ['false', 'Off']], c.rwScan !== false) : null,
       rw ? rwSet('Menu sounds', 'A short beep as you move about the menus.', 'rwSounds', [['true', 'On'], ['false', 'Off']], c.rwSounds !== false) : null,
       rw ? rwSet('Clock', 'The clock in the top corner.', 'rwClock', [['12', '12 hour'], ['24', '24 hour']], c.rwClock === '24' ? '24' : '12') : null,
-      h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The colour of the buttons and highlights' : 'The colour of the buttons, highlights and the playing song, for films and music'}.`)),
+      h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent color', h('small', {}, `${EDITION === 'music' ? 'The color of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The color of the buttons and highlights' : 'The color of the buttons, highlights and the playing song, for films and music'}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
           style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))),
       h('label', { class: 'row-set' }, h('span', {}, 'Appearance', h('small', {}, EDITION === 'music' ? 'Light, dark, or the same as this device.' : 'For the music side: light, dark, or the same as this device.')),
@@ -2335,8 +2335,9 @@
       films ? (isIOS() ? iosAddPanel('films') : addMediaPanel()) : null,
       films && api.subsPlan && S.platform !== 'android' ? h('h3', {}, 'Subtitles') : null,
       films && api.subsPlan && S.platform !== 'android' ? subsBlock() : null,
-      S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? h('h3', {}, 'Free up space') : null,
-      S.canDelete && api.deleteList && !(S.profile && S.profile.kids) ? freeSpaceBlock() : null,
+      // (not on iPhone / iPad: files are deleted in the Files app there)
+      S.canDelete && api.deleteList && !isIOS() && !(S.profile && S.profile.kids) ? h('h3', {}, 'Free up space') : null,
+      S.canDelete && api.deleteList && !isIOS() && !(S.profile && S.profile.kids) ? freeSpaceBlock() : null,
       films && !isIOS() ? h('h3', {}, 'Library folders') : null,
       !films || isIOS() ? null : h('div', { class: 'dirs' }, (S.config.dirs || []).map((d) =>
         h('div', { class: 'dir' }, prettyPath(d), h('button', { onclick: async () => { setScanning(true); S = await api.removeDir(d); setScanning(false); renderSettings(); render(); } }, 'Remove')))),

@@ -602,7 +602,7 @@ final class Scanner {
             if let t = try await asset.loadTracks(withMediaType: .audio).first {
                 let fds = (try? await t.load(.formatDescriptions)) ?? []
                 let sub = fds.first.map { fourCC(CMFormatDescriptionGetMediaSubType($0)) } ?? ""
-                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "Dolby Digital", "ec-3": "Dolby Digital Plus", "ec+3": "Dolby Digital Plus", "mlpa": "Dolby TrueHD", "ac-4": "Dolby AC-4", "opus": "Opus"][sub] ?? sub.uppercased()
+                let codec = ["aac ": "AAC", "mp4a": "AAC", ".mp3": "MP3", "alac": "Apple Lossless", "fLaC": "FLAC", "flac": "FLAC", "lpcm": "WAV / AIFF", "ac-3": "Dolby Digital", "ec-3": "Dolby Digital Plus", "ec+3": "Dolby Digital Plus", "mlpa": "Dolby TrueHD", "ac-4": "Dolby AC-4", "opus": "Opus"][sub] ?? sub.uppercased()
                 if sub == "ec+3" { entry["atmos"] = true } // (Apple's name for Dolby Digital Plus with Atmos)
                 // Dolby sound in an .m4a: FFmpeg tells whether it's Atmos
                 if ff == nil, sub == "ec-3" || sub == "ec+3", let f = FFProbe.read(url) {
@@ -610,13 +610,13 @@ final class Scanner {
                     if let a = f.streams.first(where: { ($0["codec_type"] as? String) == "audio" }), (a["profile"] as? String ?? "").lowercased().contains("atmos") { entry["atmos"] = true }
                 }
                 entry["codec"] = codec
-                entry["lossless"] = ["alac", "fLaC", "lpcm"].contains(sub)
+                entry["lossless"] = ["alac", "flac", "lpcm"].contains(sub.lowercased()) // (FLAC is "flac" in a .flac file, "fLaC" in an .mp4)
                 if let fd = fds.first, let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee {
                     entry["sampleRate"] = Int(asbd.mSampleRate)
                     if Int(asbd.mChannelsPerFrame) > 0 { entry["channels"] = Int(asbd.mChannelsPerFrame) } // 6 = 5.1, 8 = 7.1
                     // PCM says its bit depth outright; Apple Lossless and FLAC keep it in the format flags (1 = 16-bit … 4 = 32-bit)
                     if asbd.mBitsPerChannel > 0 { entry["bitDepth"] = Int(asbd.mBitsPerChannel) }
-                    else if sub == "alac" || sub == "fLaC", let d = [1: 16, 2: 20, 3: 24, 4: 32][Int(asbd.mFormatFlags)] { entry["bitDepth"] = d }
+                    else if sub == "alac" || sub.lowercased() == "flac", let d = [1: 16, 2: 20, 3: 24, 4: 32][Int(asbd.mFormatFlags)] { entry["bitDepth"] = d }
                 }
                 let rate = (try? await t.load(.estimatedDataRate)) ?? 0
                 entry["bitrate"] = Int(rate / 1000)
