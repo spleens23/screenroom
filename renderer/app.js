@@ -1754,7 +1754,16 @@
         box.append(h('p', { class: 'am-hint' }, rep ? rep.message : 'Wi-Fi isn\'t available on this computer.'));
         return;
       }
-      if (st.report && st.report.state === 'no-networks' && !st.wifiConnected) box.append(h('p', { class: 'am-hint' }, st.report.message));
+      if (st.report && st.report.state !== 'ok' && !st.wifiConnected) box.append(h('p', { class: 'am-hint' }, st.report.message));
+      // (the details, for working out what's wrong)
+      if (!st.wifiConnected) {
+        const r = st.report || {};
+        box.append(h('p', { class: 'am-hint wifi-details' }, [
+          r.card ? `Card: ${r.card}` : '', r.driver ? `driver ${r.driver}` : '',
+          `state: ${st.wifiState || '?'}`, `Wi-Fi helper: ${st.helper ? 'installed' : 'missing'}`,
+          r.at ? `checked ${new Date(r.at).toLocaleString()}` : 'not checked yet',
+        ].filter(Boolean).join(' · ')));
+      }
       box.append(h('div', { class: 'btns' }, h('button', { class: 'btn secondary', onclick: async (e) => {
         e.target.textContent = 'Searching…';
         want = { sel: '.wifi-join input, .drives button' };
@@ -1763,6 +1772,7 @@
         draw(r.networks);
       } }, networks ? 'Search again' : 'Find Wi-Fi networks')));
       if (!networks) return;
+      if (!networks.length) { box.append(h('p', { class: 'am-hint' }, st.helper ? 'No Wi-Fi networks were found.' : 'No Wi-Fi networks were found: the Wi-Fi helper (wpa_supplicant) is missing, so the card can\'t search.')); return; }
       const list = h('div', { class: 'drives' });
       for (const n of networks.slice(0, 12)) {
         const row = h('div', { class: 'drive' },

@@ -23,6 +23,17 @@ jobs:
           node-version: '22'
 
       # ---- 1. the Screenroom app as a .deb -------------------------------------------------------
+      # the Wi-Fi helper NetworkManager needs, carried inside the app: a box that only ever updates from a USB
+      # stick has no internet to fetch it (Debian 13's own packages; only what a box may be missing)
+      - name: Wi-Fi helper packages for offline boxes
+        run: |
+          mkdir -p deploy/wifi-debs
+          docker run --rm -v "$PWD/deploy/wifi-debs:/out" debian:trixie bash -c '
+            set -e; apt-get update -qq; cd /out
+            apt-get download -qq wpasupplicant wireless-regdb iw libnl-3-200 libnl-genl-3-200 libnl-route-3-200 libpcsclite1'
+          ls -la deploy/wifi-debs
+          for p in wpasupplicant wireless-regdb iw libnl-genl-3-200 libpcsclite1; do ls deploy/wifi-debs/${p}_*.deb >/dev/null || { echo "::error::$p missing"; exit 1; }; done
+
       - name: Build the Linux app (.deb)
         run: |
           npm ci
@@ -202,6 +213,9 @@ jobs:
           sleep 45
           { echo "=== refresh after update"; $SSH "sudo tail -n 40 /var/log/screenroom-refresh.log"; } >> screens-diag.txt 2>&1 || true
           check "update refreshes the box setup"       "$SSH grep -q 'box refresh done' /var/log/screenroom-refresh.log"
+          check "Wi-Fi helper installed"               "$SSH test -x /usr/sbin/wpa_supplicant"
+          # (a box that only updates from a USB stick: the helper comes from the copy inside the app, no internet)
+          check "Wi-Fi helper reinstalls from Screenroom's own copy" "$SSH 'sudo apt-get remove -y wpasupplicant >/dev/null 2>&1; ! test -x /usr/sbin/wpa_supplicant && sudo SCREENROOM_WIFI_FORCE=1 /usr/local/sbin/screenroom-wifi --boot >/dev/null 2>&1; test -x /usr/sbin/wpa_supplicant'"
           echo "---- disks log";   $SSH sudo cat /var/log/screenroom-disks.log || true
           echo "---- install log (tail)"; $SSH sudo tail -n 40 /var/log/screenroom-install.log || true
           echo "screendump $PWD/final.ppm" | socat - UNIX-CONNECT:$PWD/mon2.sock; sleep 2; convert final.ppm screens-final.png || true

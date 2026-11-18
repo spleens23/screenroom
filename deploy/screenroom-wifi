@@ -123,6 +123,23 @@ powersave_off() {
 supplicant_ok() { command -v wpa_supplicant >/dev/null 2>&1 || [ -x /usr/sbin/wpa_supplicant ] || [ -x /sbin/wpa_supplicant ]; }
 supplicant_install() {
   supplicant_ok && return 0
+  # first from the copies that come with Screenroom (no internet needed: boxes updated from a USB stick)
+  local dir f p files=()
+  for dir in /opt/Screenroom/resources/deploy/wifi-debs "$(dirname "$(readlink -f "$0")")/wifi-debs"; do
+    [ -d "$dir" ] || continue
+    for f in "$dir"/*.deb; do
+      [ -f "$f" ] || continue
+      p="$(dpkg-deb -f "$f" Package 2>/dev/null)" || continue
+      dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || files+=("$f")
+    done
+    break
+  done
+  if [ ${#files[@]} -gt 0 ]; then
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends --no-download install "${files[@]}" >/var/log/screenroom-wifi-apt.log 2>&1 \
+      || DEBIAN_FRONTEND=noninteractive dpkg -i "${files[@]}" >>/var/log/screenroom-wifi-apt.log 2>&1 || true
+  fi
+  if supplicant_ok; then log "installed wpa_supplicant (from Screenroom's copy)"; DID+=("installed the Wi-Fi helper (wpa_supplicant)"); RESTART_NM=1; return 0; fi
+  [ "$MODE" = "--boot" ] && return 0   # (from the internet only when asked: after an update, Check for updates)
   local pkgs=(wpasupplicant wireless-regdb iw)
   if ! apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends install "${pkgs[@]}" >/dev/null 2>&1; then
     apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true
@@ -143,7 +160,7 @@ if [ "$MODE" != "--boot" ] && [ -n "$(card_line)" ]; then
     unblock
   fi
 fi
-[ "$MODE" != "--boot" ] && [ -n "$(wifi_iface)" ] && supplicant_install
+{ [ -n "$(wifi_iface)" ] || [ -n "${SCREENROOM_WIFI_FORCE:-}" ]; } && supplicant_install
 [ "$RESTART_NM" = 1 ] && systemctl try-restart NetworkManager >/dev/null 2>&1 && sleep 3
 # NetworkManager leaving the card alone ("unmanaged", e.g. listed in an old network settings file): hand it over
 WIF="$(wifi_iface)"
@@ -180,7 +197,7 @@ elif [ "$SOFT" = yes ]; then
   STATE=blocked; MSG="Wi-Fi is switched off. Screenroom will switch it back on at the next start."
 elif ! supplicant_ok; then
   STATE=no-helper
-  MSG="The Wi-Fi card ($CARD) works, but a piece of Wi-Fi software (wpa_supplicant) is missing, so it can't look for networks. Plug in the network cable and use Check for updates: Screenroom installs it."
+  MSG="The Wi-Fi card ($CARD) works, but a piece of Wi-Fi software (wpa_supplicant) is missing, so it can't look for networks, and installing it didn't work (see /var/log/screenroom-wifi-apt.log)."
 elif [ "$NMST" = unmanaged ] || [ "$NMST" = unavailable ]; then
   STATE=not-ready
   MSG="The Wi-Fi card ($CARD) works, but the network settings can't use it yet ($NMST). Restart the box; if this stays, plug in the network cable and use Check for updates."
