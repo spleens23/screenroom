@@ -329,6 +329,8 @@ if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active
     ufw allow from $net to any port "$PORT" proto tcp || true
     ufw allow from $net to any port 445 proto tcp || true
     ufw allow from $net to any port 5353 proto udp || true
+    ufw allow from $net to any port 51400 proto tcp || true   # (Sonos speakers fetching Parlor's songs)
+    ufw allow from $net to any port 1900 proto udp || true    # (Sonos speakers answering "who's there?")
   done
 fi
 

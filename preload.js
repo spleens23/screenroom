@@ -89,6 +89,9 @@ contextBridge.exposeInMainWorld('api', {
   playlistDelete: (id) => ipcRenderer.invoke('playlist-delete', id),
   musicPlay: (req) => ipcRenderer.invoke('music-play', req),
   musicCmd: (cmd, arg) => ipcRenderer.invoke('music-cmd', cmd, arg),
+  // Parlor on Sonos speakers (the box and the desktop app, as the phone apps)
+  sonosRooms: () => ipcRenderer.invoke('sonos-rooms'),
+  sonosUse: (id) => ipcRenderer.invoke('sonos-use', id || ''),
   onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
   onParlorUpdated: (cb) => ipcRenderer.on('parlor-updated', () => cb()),
 });
