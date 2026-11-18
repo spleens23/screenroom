@@ -1557,6 +1557,13 @@
     const list = h('div', { class: 'fpick' });
     const total = () => [...picked.values()].reduce((n, x) => n + x, 0);
     const delBtn = h('button', { class: 'btn primary danger', onclick: () => go() });
+    // everything in the list at once (it still asks before deleting)
+    const everything = () => (music
+      ? [...new Set(res.albums.map((a) => a.artist))].map((ar) => ['r:' + ar, res.albums.filter((a) => a.artist === ar).reduce((x, a) => x + a.size, 0)])
+      : [...res.shows.map((sh) => ['s:' + sh.series, sh.size]), ...res.films.map((f) => ['f:' + f.id, f.size])]);
+    const allBtn = h('button', { class: 'btn secondary danger', 'data-key': 'del-all', onclick: () => { picked.clear(); for (const [k, n] of everything()) picked.set(k, n); draw(); go(true); } },
+      music ? 'Delete all music…' : 'Delete all films & shows…');
+    if (!(music ? res.albums.length : res.shows.length + res.films.length)) allBtn.hidden = true;
     const drawFoot = () => { delBtn.textContent = picked.size ? `Delete ${picked.size} selected (${fmtBytes(total())})` : 'Delete selected'; delBtn.disabled = !picked.size; };
     const tick = (key, size, children) => {
       if (picked.has(key)) picked.delete(key);
@@ -1601,7 +1608,7 @@
       const f = focusKey && list.querySelector(focusOpen ? `[data-open="${CSS.escape(focusKey)}"]` : `[data-k="${CSS.escape(focusKey)}"]`);
       if (f) focusEl(f); else if (!focusKey) { const first = list.querySelector('.fpick-main'); if (first) { document.body.classList.add('navmode'); focusEl(first); } }
     }
-    async function go() {
+    async function go(all) {
       if (!picked.size) return;
       const keys = [...picked.keys()];
       const what = { films: [], shows: [], albums: [] };
@@ -1616,9 +1623,9 @@
           if (season != null && sh.seasons) sh.seasons.push(Number(season));
         }
       }
-      const ok = await askConfirm(`Delete ${picked.size} ${picked.size === 1 ? 'thing' : 'things'} (${fmtBytes(total())})?`,
+      const ok = await askConfirm(all ? `Delete all ${music ? 'music' : 'films and shows'} (${fmtBytes(total())})?` : `Delete ${picked.size} ${picked.size === 1 ? 'thing' : 'things'} (${fmtBytes(total())})?`,
         `They’re deleted from ${here()} for good (with their subtitles and covers). Copies on USB drives or other computers stay where they are.`, 'Delete', 'Cancel', true);
-      if (!ok) { delBtn.focus(); return; }
+      if (!ok) { if (all) { picked.clear(); draw(); } delBtn.focus(); return; }
       closeSheet(true);
       flash('Deleting…');
       const r = await api.deleteMedia(what);
@@ -1631,7 +1638,7 @@
     sheet('files', h('h2', {}, music ? 'Delete music' : 'Delete films & shows'),
       h('p', { class: 'am-hint' }, `${res.free != null ? fmtBytes(res.free) + ' free now. ' : ''}OK ticks something to delete${music ? ' (an artist ticks all their albums)' : ' (a show ticks every season)'}; “${music ? 'Albums' : 'Seasons'} ›” shows what’s inside.`),
       list,
-      h('div', { class: 'btns sheet-foot' }, delBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
+      h('div', { class: 'btns sheet-foot' }, delBtn, allBtn, h('button', { class: 'btn secondary', onclick: () => closeSheet() }, 'Cancel')));
     draw();
   }
 
@@ -1763,7 +1770,7 @@
         if (cards.length > 1 || st.device) {
           box.append(h('label', { class: 'row-set' }, h('span', {}, 'Microphone'),
             h('select', { class: 'dev-select', 'data-key': 'v-dev', onchange: async (e) => draw(await api.voiceSet({ device: e.target.value })) },
-              h('option', { value: '' }, 'Automatic (a USB microphone)'),
+              h('option', { value: '' }, 'Automatic (a USB microphone if there is one)'),
               ...cards.map((c) => h('option', { value: c.device, selected: st.device && c.device === st.device }, c.name)))));
         }
         box.append(h('label', { class: 'row-set' }, h('span', {}, 'Music plays on', h('small', {}, 'When you don’t say where (“…in the kitchen”). Music already playing stays where it is.')),

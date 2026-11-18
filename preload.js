@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('api', {
   // Parlor on Sonos speakers (the box and the desktop app, as the phone apps)
   sonosRooms: () => ipcRenderer.invoke('sonos-rooms'),
   sonosUse: (id) => ipcRenderer.invoke('sonos-use', id || ''),
+  parlorMotionReport: () => ipcRenderer.invoke('parlor-motion-report'),
+  parlorMotionSeen: (key, status, detail) => ipcRenderer.invoke('parlor-motion-seen', key, status, detail),
   onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
   // voice control (the Linux box)
   voiceStatus: () => ipcRenderer.invoke('voice-status'),

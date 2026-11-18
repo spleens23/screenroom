@@ -72,11 +72,21 @@ window.createParlor = function createParlor(ctx) {
     box.append(h('div', { class: 'gloss' }));
     return box;
   }
+  // (Linux: moving covers play whatever "reduce motion" says; a TV box with no desktop can report it by accident)
+  if (/Linux/.test(navigator.platform || navigator.userAgent) && !/Android/.test(navigator.userAgent)) document.body.classList.add('motion-always');
   function motion(a) {
     const v = h('video', { class: 'motion', src: fileUrl(a.motion), loop: '', playsinline: '', 'webkit-playsinline': '', preload: 'auto', disablepictureinpicture: '', 'aria-hidden': 'true' });
     v.muted = true; v.defaultMuted = true; v.autoplay = true;
-    v.addEventListener('playing', () => v.classList.add('on'));
-    v.addEventListener('error', () => v.remove());
+    const seen = (st, d) => { try { if (api.parlorMotionSeen && a.key) api.parlorMotionSeen(a.key, st, d); } catch {} };
+    v.addEventListener('playing', () => { v.classList.add('on'); if (!v.dataset.told) { v.dataset.told = '1'; seen('playing'); } });
+    v.addEventListener('error', () => {
+      const e = v.error || {};
+      seen('error', `error ${e.code || '?'}${e.message ? ': ' + e.message : ''}`);
+      // (once more after a moment: a busy graphics chip can turn the first try down)
+      if (!v.dataset.retried) { v.dataset.retried = '1'; setTimeout(() => { if (v.isConnected) { v.load(); const p2 = v.play(); if (p2 && p2.catch) p2.catch(() => {}); } }, 1500); return; }
+      v.remove();
+    });
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches && !document.body.classList.contains('motion-always')) seen('hidden', 'the computer is set to reduce motion');
     // Ask to play straight away too: this runs inside the tap that opened the album, and a tap lets a video
     // start even when the phone holds back autoplay (Low Power Mode). Then again once it's in the page.
     try { const p0 = v.play(); if (p0 && p0.catch) p0.catch(() => {}); } catch {}
@@ -1625,11 +1635,14 @@ window.createParlor = function createParlor(ctx) {
       }
       if (api.parlorMotionReport) {
         const rep = await api.parlorMotionReport();
-        const say = { plays: 'plays', fixed: 'plays (Parlor made a copy the phone can play)', unplayable: "can't be played on this phone",
+        const here = window.S_IOS ? 'the phone' : 'this computer';
+        const say = { plays: 'plays', fixed: `plays (Parlor made a copy ${here} can play)`, unplayable: `can't be played on ${here}`,
           unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover' };
+        const win = { playing: ' · played on screen ✓', error: ' · the screen couldn\'t play it', hidden: ' · not shown' };
         box.append(h('p', { class: 'am-hint' }, rep.length ? 'Moving covers found in the last scan:' : 'No moving covers found in the last scan. Put a video called cover.mp4 in an album\'s folder, next to its songs, then tap Rescan music.'));
         if (rep.length) box.append(h('ul', { class: 'motion-report' }, rep.map((r) =>
-          h('li', {}, h('b', {}, `${r.album} / ${r.file}`), ` ${say[r.status] || r.status}`, r.detail ? h('span', { class: 'mr-d' }, ` · ${r.detail}`) : null))));
+          h('li', {}, h('b', {}, `${r.album} / ${r.file}`), ` ${say[r.status] || r.status}`, r.window ? `${win[r.window] || ''}` : '', r.detail ? h('span', { class: 'mr-d' }, ` · ${r.detail}`) : null,
+            r.windowDetail ? h('span', { class: 'mr-d' }, ` · ${r.windowDetail}`) : null))));
       }
       const noArt = P.albums.filter((a) => !a.art).length;
       if (noArt && api.parlorCoversAuto) {

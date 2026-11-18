@@ -21,7 +21,7 @@ html body:not(#_) #npfull .npf-bg.gen { filter: blur(40px) brightness(.8); }
 html body:not(#_) #npfull .npf-motion { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
   opacity: 0; transition: opacity .8s ease; filter: brightness(.38) saturate(.9) blur(2px); transform: scale(1.03); }
 html body:not(#_) #npfull .npf-motion.on { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { html body:not(#_) #npfull .npf-motion { display: none; } }
+@media (prefers-reduced-motion: reduce) { html body:not(#_):not(.motion-always) #npfull .npf-motion { display: none; } }
 
 html body:not(#_) #npfull .npf { grid-template-columns: minmax(0, min(62vh, 560px)) minmax(0, 540px); justify-content: center; gap: 6vw; padding: 7vh 6vw; }
 html body:not(#_) #npfull .npf-stage { justify-content: center; perspective: none; }
