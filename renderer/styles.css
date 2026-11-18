@@ -1013,3 +1013,8 @@ body.tv ::-webkit-scrollbar { display: none; }
 body.navmode:not(.touch) * { pointer-events: none !important; }
 /* (and pages never scroll sideways on the TV) */
 html:has(> body.tv), body.tv, body.tv #modal, body.tv #settings { overflow-x: hidden; }
+
+/* a film's holiday: a small dropdown that fits beside the other details (never wider than the column) */
+.holiday-pick { flex-wrap: nowrap; min-width: 0; max-width: 100%; }
+html body .holiday-pick select.hol-select { font-size: 13px; padding: 4px 8px; width: auto; max-width: 180px; min-width: 0; border-radius: 8px; }
+html body.big .holiday-pick select.hol-select { font-size: 15px; padding: 6px 10px; max-width: 220px; }

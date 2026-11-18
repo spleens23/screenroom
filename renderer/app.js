@@ -954,7 +954,7 @@
     const cur = manual ? (manual[0] || 'none') : 'auto';
     const key = rkey(e);
     return h('label', { class: 'holiday-pick' }, h('b', {}, 'Holiday: '),
-      h('select', { class: 'dev-select', onchange: async (ev) => {
+      h('select', { class: 'dev-select hol-select', onchange: async (ev) => {
         const v = ev.target.value;
         const next = { ...holTags() };
         if (v === 'auto') delete next[key]; else next[key] = v === 'none' ? [] : [v];
@@ -962,9 +962,9 @@
         renderModal(); render();
         const sel = $('#modal .holiday-pick select'); sel && sel.focus({ preventScroll: true });
       } },
-      h('option', { value: 'auto', selected: cur === 'auto' }, found.length ? `${found.map(holName).join(' & ')} (found automatically)` : 'None (automatic)'),
+      h('option', { value: 'auto', selected: cur === 'auto' }, found.length ? `${found.map(holName).join(' & ')} (auto)` : 'None (auto)'),
       HOL().map((x) => h('option', { value: x.id, selected: cur === x.id }, x.name)),
-      h('option', { value: 'none', selected: cur === 'none' }, 'Not a holiday film')));
+      h('option', { value: 'none', selected: cur === 'none' }, 'Not a holiday')));
   }
 
   function movieDetail(e) {
@@ -1250,6 +1250,9 @@
   setInterval(() => {
     const mins = S && S.config && S.config.screensaverMin != null ? Number(S.config.screensaverMin) : 5;
     if (!mins || filmPlaying || saver) return;
+    // (not over Parlor's Now Playing: its big cover is a picture of its own, meant to stay on)
+    const np = document.getElementById('npfull');
+    if (np && !np.hidden) return;
     if (Date.now() - lastInput > mins * 60000) showSaver();
   }, 5000);
 

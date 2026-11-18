@@ -337,6 +337,7 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
         pos = start; at = System.currentTimeMillis(); dur = list[i]["duration"].asNum() ?: 0.0
         paused = !play; holdUntil = System.currentTimeMillis() + 3000
         val first = list[i]
+        val mode = playMode
         run("start") {
             FileServer.ensureRunning()
             // (a stereo copy, if the speaker needs one, is made first)
@@ -346,6 +347,8 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
             add(first, path)
             onMain { if (g == gen) filled = 1 }
             room.av("SetAVTransportURI", "CurrentURI" to "x-rincon-queue:${room.id}#0", "CurrentURIMetaData" to "")
+            // in Parlor's order: a room left on shuffle (in the Sonos app) would otherwise play the queue at random
+            try { room.av("SetPlayMode", "NewPlayMode" to mode) } catch (_: Exception) {}
             room.av("Seek", "Unit" to "TRACK_NR", "Target" to "1")
             if (start > 1) try { room.av("Seek", "Unit" to "REL_TIME", "Target" to Sonos.hms(start)) } catch (_: Exception) {}
             if (play) room.av("Play", "Speed" to "1")
@@ -422,7 +425,9 @@ class SonosLink(val room: SonosRoom, private val tracks: () -> List<Map<String, 
     private var pollCount = 0
     fun setVolume(v: Int) { volume = v.coerceIn(0, 100); volumeSetAt = System.currentTimeMillis(); onVolume?.invoke(); val x = volume; run("volume") { room.group("SetGroupVolume", "DesiredVolume" to x.toString()) } }
     fun setMuted(m: Boolean) { muted = m; run("mute") { room.group("SetGroupMute", "DesiredMute" to if (m) "1" else "0") } }
-    fun repeatOne(on: Boolean) { run("repeat") { room.av("SetPlayMode", "NewPlayMode" to if (on) "REPEAT_ONE" else "NORMAL") } }
+    /** The speaker's play mode: always in order (Parlor does its own shuffling); repeat-one when asked. */
+    private var playMode = "NORMAL"
+    fun repeatOne(on: Boolean) { playMode = if (on) "REPEAT_ONE" else "NORMAL"; run("repeat") { room.av("SetPlayMode", "NewPlayMode" to if (on) "REPEAT_ONE" else "NORMAL") } }
 
     fun start() {
         polls.execute { try { Sonos.tag("CurrentVolume", room.group("GetGroupVolume"))?.toIntOrNull()?.let { v -> ui { volume = v; onVolume?.invoke() } } } catch (_: Exception) {} }

@@ -926,13 +926,13 @@ window.createParlor = function createParlor(ctx) {
   let lastPlay = { key: '', at: 0 };
   // the phone's clock and battery: white over Now Playing (dark), dark over the light pages
   const statusBar = () => { if (api.setStatusBar) api.setStatusBar(fullOpen || (ctx.isDark && ctx.isDark()) ? 'light' : 'dark'); };
-  let openOnPlay = null; // the song whose Now Playing opens as soon as it starts (touch screens)
+  let openOnPlay = null; // the song whose Now Playing opens as soon as it starts
   async function playIds(ids, start, context) {
     // a double-click on a song is one request, not two
     const key = `${ids[start]}|${ids.length}`;
     if (key === lastPlay.key && Date.now() - lastPlay.at < 700) return;
     lastPlay = { key, at: Date.now() };
-    if (matchMedia('(pointer: coarse)').matches) openOnPlay = ids[start];
+    openOnPlay = ids[start]; // (Now Playing opens as soon as it starts: no backing out and picking it again)
     const r = await api.musicPlay({ trackIds: ids, start, context });
     if (!r.ok) { openOnPlay = null; ctx.flash(r.error || 'Could not play that'); }
   }
@@ -1134,10 +1134,44 @@ window.createParlor = function createParlor(ctx) {
 
   let idle = null;
   const BIG_AFTER = 25000;
-  function setBig(on) {
-    full.classList.toggle('big', !!on);
-    if (on) { F.stage.focus({ preventScroll: true }); } else wakeFull();
+  // The cover glides from beside the controls to the middle of the screen (a little bigger), and back again: the
+  // page's layout changes at once, and the cover is moved from where it was to where it's going.
+  const coverBox = () => F.stage.querySelector('.cover, .turntable, .vinyl') || F.stage;
+  function bigTarget() {
+    const r = F.stage.getBoundingClientRect();
+    const c = coverBox().getBoundingClientRect();
+    if (!r.width || !c.height) return '';
+    const k = Math.max(0.6, Math.min(1.35, (innerHeight * 0.74) / c.height));
+    const dx = innerWidth / 2 - (c.left + c.width / 2), dy = innerHeight * 0.44 - (c.top + c.height / 2);
+    // (scaled about the cover's own centre)
+    const ox = c.left + c.width / 2 - r.left, oy = c.top + c.height / 2 - r.top;
+    F.stage.style.transformOrigin = `${ox}px ${oy}px`;
+    return `translate(${dx}px, ${dy}px) scale(${k})`;
   }
+  function setBig(on) {
+    on = !!on;
+    if (full.classList.contains('big') === on) { if (on) F.stage.focus({ preventScroll: true }); else wakeFull(); return; }
+    const st = F.stage;
+    const before = coverBox().getBoundingClientRect();
+    st.style.transition = 'none'; st.style.transform = '';
+    full.classList.toggle('big', on);
+    const target = on ? bigTarget() : '';
+    if (!on) st.style.transformOrigin = '';
+    // from where the cover was …
+    const now = coverBox().getBoundingClientRect();
+    if (before.width && now.width) {
+      const s0 = before.width / now.width;
+      const ox = now.left + now.width / 2 - st.getBoundingClientRect().left, oy = now.top + now.height / 2 - st.getBoundingClientRect().top;
+      st.style.transformOrigin = `${ox}px ${oy}px`;
+      st.style.transform = `translate(${before.left + before.width / 2 - (now.left + now.width / 2)}px, ${before.top + before.height / 2 - (now.top + now.height / 2)}px) scale(${s0})`;
+      void st.offsetWidth;
+    }
+    // … to where it's going
+    st.style.transition = 'transform .8s cubic-bezier(.2, .7, .2, 1)';
+    st.style.transform = target;
+    if (on) { st.focus({ preventScroll: true }); } else wakeFull();
+  }
+  addEventListener('resize', () => { if (full.classList.contains('big')) { F.stage.style.transition = 'none'; F.stage.style.transform = ''; F.stage.style.transform = bigTarget(); } });
   function wakeFull() {
     clearTimeout(idle);
     if (fullOpen && !window.S_IOS) idle = setTimeout(() => { if (fullOpen && !full.contains(document.querySelector('.poverlay'))) setBig(true); }, BIG_AFTER);
@@ -1368,7 +1402,7 @@ window.createParlor = function createParlor(ctx) {
   function openFull() {
     clearTimeout(leaving); full.classList.remove('leaving'); full.style.transform = '';
     fullFrom = document.activeElement;
-    fullOpen = true; full.hidden = false; full.classList.remove('big');
+    fullOpen = true; full.hidden = false; full.classList.remove('big'); F.stage.style.transform = ''; F.stage.style.transition = '';
     document.documentElement.classList.add('np-open');
     statusBar();
     if (matchMedia('(pointer: coarse)').matches) { // slide up from the bottom

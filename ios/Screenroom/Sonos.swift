@@ -475,7 +475,7 @@ final class SonosLink {
         base = i; filled = 0; filling = false
         pos = start; at = Date(); dur = (list[i]["duration"] as? NSNumber)?.doubleValue ?? 0
         paused = !play; holdUntil = Date().addingTimeInterval(3)
-        let first = list[i], id = room.id
+        let first = list[i], id = room.id, mode = playMode
         run("start") { [weak self] in
             guard let self else { return }
             // (a stereo copy, if the speaker needs one, is made first: the speaker's told about the song once it's ready)
@@ -485,6 +485,8 @@ final class SonosLink {
             try await self.add(first, path: path)
             await MainActor.run { if g == self.gen { self.filled = 1 } }
             try await self.room.av("SetAVTransportURI", [("CurrentURI", "x-rincon-queue:\(id)#0"), ("CurrentURIMetaData", "")])
+            // in Parlor's order: a room left on shuffle (in the Sonos app) would otherwise play the queue at random
+            try? await self.room.av("SetPlayMode", [("NewPlayMode", mode)])
             try await self.room.av("Seek", [("Unit", "TRACK_NR"), ("Target", "1")])
             if start > 1 { try? await self.room.av("Seek", [("Unit", "REL_TIME"), ("Target", Sonos.hms(start))]) }
             if play { try await self.room.av("Play", [("Speed", "1")]) }
@@ -589,7 +591,10 @@ final class SonosLink {
         muted = m
         run("mute") { [weak self] in try await self?.room.group("SetGroupMute", [("DesiredMute", m ? "1" : "0")]) }
     }
+    /// The speaker's play mode: always in order (Parlor does its own shuffling); repeat-one when asked.
+    private var playMode = "NORMAL"
     func repeatOne(_ on: Bool) {
+        playMode = on ? "REPEAT_ONE" : "NORMAL"
         run("repeat") { [weak self] in try await self?.room.av("SetPlayMode", [("NewPlayMode", on ? "REPEAT_ONE" : "NORMAL")]) }
     }
 
