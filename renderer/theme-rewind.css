@@ -1,0 +1,198 @@
+/* ======================================================================================================
+   Rewind: the VCR theme for the Screenroom box (rewind.js draws the screens). A blue screen, blocky white
+   letters with a slight glow, grey bars with blue lettering, the highlighted line in reverse, faint scanlines.
+   Everything here is under body.rw:not(.parlor), so Parlor (music) keeps its own look.
+   ====================================================================================================== */
+@font-face { font-family: 'Rewind Pixel'; font-weight: 400; src: url(fonts/rewind/RewindPixel-Regular.ttf) format('truetype'); }
+@font-face { font-family: 'Rewind Pixel'; font-weight: 700; src: url(fonts/rewind/RewindPixel-Bold.ttf) format('truetype'); }
+@font-face { font-family: 'Michroma'; src: url(fonts/rewind/Michroma-Regular.ttf) format('truetype'); }
+
+:root { --rwk: 1; }
+body.rw {
+  --rw-blue: #1730B8; --rw-deep: #0E1F8A; --rw-white: #F4F4F4; --rw-grey: #DADADA; --rw-dim: #A9B6E8;
+  --rw-font: 'Rewind Pixel', 'DejaVu Sans Mono', monospace;
+}
+body.rw:not(.parlor) { background: var(--rw-blue); color: var(--rw-white); font-family: var(--rw-font); }
+html:has(> body.rw:not(.parlor)) { background: #1730B8; }
+body.rw:not(.parlor) #nav, body.rw:not(.parlor) #npbar, body.rw:not(.parlor) #np-chip { display: none !important; }
+body.rw:not(.parlor) #main { padding: 0; }
+
+/* ---- the 1280×720 screen ---- */
+.rw-stage { z-index: 2; position: fixed; left: 50%; top: 50%; width: 1280px; height: 720px; transform: translate(-50%, -50%) scale(var(--rwk));
+  color: var(--rw-white); font-family: var(--rw-font); text-transform: uppercase; text-shadow: 0 0 2px rgba(255,255,255,.55);
+  -webkit-font-smoothing: none; font-smooth: never; }
+:where(.rw-stage) button { all: unset; box-sizing: border-box; cursor: pointer; font-family: var(--rw-font); }
+:where(.rw-stage) button:focus-visible { outline: none; }
+
+/* grey bars, top and bottom */
+.rw-ban { position: absolute; left: 80px; right: 80px; background: var(--rw-grey); color: var(--rw-blue); text-shadow: none; box-sizing: border-box; padding: 0 28px; }
+.rw-top { top: 48px; height: 76px; display: flex; align-items: center; justify-content: space-between; font-size: 40px; gap: 24px; }
+.rw-ban-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rw-ban-r { display: flex; align-items: center; gap: 22px; flex: none; }
+.rw-foot { top: 596px; height: 86px; padding: 8px 28px; display: flex; flex-direction: column; justify-content: center; gap: 6px; font-size: 24px; }
+.rw-okbox { display: inline-block; border: 3px solid currentColor; border-radius: 9px; padding: 2px 8px 0; line-height: 1; }
+.rw-key { font-size: 22px !important; border: 3px solid var(--rw-blue) !important; border-radius: 9px; padding: 4px 10px 1px !important; line-height: 1; color: var(--rw-blue); }
+body:not(.navmode) .rw-key:hover, .rw-key:focus { background: var(--rw-blue); color: var(--rw-white); }
+
+/* the list choices along the top: ALL  RESUME  MOVIES  TV  4K */
+.rw-cats { position: absolute; left: 96px; right: 96px; top: 140px; display: flex; gap: 30px; font-size: 24px; }
+.rw-cat { padding: 4px 8px 1px !important; border: 3px solid transparent !important; }
+.rw-cat.on { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-cat:focus, body:not(.navmode) .rw-cat:hover { border-color: var(--rw-white) !important; }
+
+/* the titles */
+.rw-list { position: absolute; left: 80px; top: 188px; width: 740px; height: 392px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 2px; }
+.rw-list::-webkit-scrollbar { display: none; }
+.rw-menu:not(:has(.rw-cats)) .rw-list { top: 152px; height: 428px; }
+.rw-row { flex: none; display: flex !important; align-items: center; height: 48px; padding: 0 16px !important; font-size: 28px; width: 100%; }
+.rw-mark { width: 40px; flex: none; font-size: 22px; visibility: hidden; }
+.rw-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rw-row.cur, body:not(.navmode) .rw-row:hover { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-row.cur .rw-mark, .rw-row:focus .rw-mark { visibility: visible; }
+.rw-row:focus { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-none { font-size: 28px; padding: 12px 16px; }
+.rw-more { position: absolute; left: 700px; font-size: 16px; opacity: 0; }
+.rw-more.on { opacity: .85; }
+.rw-more.up { top: 170px; } .rw-more.dn { top: 580px; }
+
+/* the right-hand panel: year, length, where you're up to, BEGIN ▼ END */
+.rw-side { position: absolute; left: 872px; top: 196px; width: 328px; font-size: 24px; display: flex; flex-direction: column; gap: 10px; }
+.rw-info { display: flex; flex-direction: column; gap: 10px; }
+.rw-status { margin-top: 18px; }
+.rw-counter { font-size: 34px; }
+.rw-tags { font-size: 18px; margin-top: 6px; opacity: .9; }
+.rw-pos { margin-top: 30px; }
+.rw-pos-mark { position: relative; font-size: 22px; height: 26px; width: 26px; text-align: center; }
+.rw-pos-bar { position: relative; height: 30px; box-sizing: border-box; border: 4px solid var(--rw-white); display: grid; grid-template-columns: repeat(6, 1fr); }
+.rw-pos-bar i { grid-row: 1; border-left: 3px solid var(--rw-white); height: 10px; align-self: end; }
+.rw-pos-bar i:nth-child(1) { grid-column: 2; } .rw-pos-bar i:nth-child(2) { grid-column: 3; } .rw-pos-bar i:nth-child(3) { grid-column: 4; }
+.rw-pos-bar i:nth-child(4) { grid-column: 5; } .rw-pos-bar i:nth-child(5) { grid-column: 6; }
+.rw-pos-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--rw-white); }
+.rw-pos-lab { display: flex; justify-content: space-between; font-size: 18px; margin-top: 8px; }
+.rw-desc { margin: 14px 0 0; font-size: 16px; line-height: 1.5; text-transform: none; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; opacity: .92; }
+.rw-desc.short { -webkit-line-clamp: 5; }
+.rw-epname { font-size: 22px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* a film's menu */
+.rw-opts { position: absolute; left: 80px; top: 158px; width: 640px; display: flex; flex-direction: column; gap: 4px; }
+.rw-opt { display: flex !important; align-items: center; height: 52px; padding: 0 16px !important; font-size: 30px; }
+.rw-opt:focus, body:not(.navmode) .rw-opt:hover { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-opt:focus .rw-mark { visibility: visible; }
+.rw-pickset { position: absolute; left: 96px; top: 362px; width: 720px; display: flex; flex-direction: column; gap: 24px; }
+.rw-series .rw-pickset { top: 270px; }
+.rw-pickrow { display: flex; align-items: center; gap: 20px; font-size: 26px; }
+.rw-picklab { width: 200px; flex: none; }
+.rw-picks { display: flex; flex-wrap: wrap; gap: 14px; }
+.rw-pick { padding: 3px 9px 0 !important; border: 3px solid transparent !important; }
+.rw-pick.on { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-pick:focus, body:not(.navmode) .rw-pick:hover { border-color: var(--rw-white) !important; }
+.rw-film .rw-side { top: 160px; }
+
+/* a series' episodes */
+.rw-eps { position: absolute; left: 80px; top: 330px; width: 740px; height: 250px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 2px; }
+.rw-series:not(:has(.rw-pickset)) .rw-eps { top: 280px; height: 300px; }
+.rw-eps::-webkit-scrollbar { display: none; }
+.rw-ep { flex: none; display: flex !important; align-items: center; gap: 14px; height: 44px; padding: 0 16px !important; font-size: 24px; }
+.rw-ep .rw-mark { width: 28px; font-size: 18px; }
+.rw-epn { flex: none; width: 60px; }
+.rw-ep .rw-t { flex: 1; }
+.rw-done { flex: none; width: 30px; text-align: right; }
+.rw-ep:focus, body:not(.navmode) .rw-ep:hover { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-ep:focus .rw-mark { visibility: visible; }
+
+/* title search */
+.rw-entry { position: absolute; left: 80px; right: 80px; top: 150px; display: flex; align-items: center; gap: 20px; font-size: 34px; }
+.rw-field { display: flex; align-items: center; min-width: 560px; border-bottom: 4px solid var(--rw-white); padding-bottom: 6px; white-space: pre; }
+.rw-cursor { display: inline-block; width: 24px; height: 32px; background: var(--rw-white); margin-left: 4px; animation: rw-blink 1s steps(1) infinite; }
+.rw-keys { position: absolute; left: 80px; top: 232px; width: 600px; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.rw-k { height: 48px; display: flex !important; align-items: center; justify-content: center; font-size: 24px; border: 3px solid transparent !important; }
+.rw-k.wide4 { grid-column: span 4; } .rw-k.wide3 { grid-column: span 3; }
+.rw-k:focus, body:not(.navmode) .rw-k:hover { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+.rw-results { position: absolute; left: 740px; right: 80px; top: 232px; height: 350px; display: flex; flex-direction: column; }
+.rw-count { font-size: 22px; margin: 0 0 10px 14px; }
+.rw-reslist { flex: 1; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 2px; }
+.rw-reslist::-webkit-scrollbar { display: none; }
+.rw-res { flex: none; display: block !important; height: 44px; line-height: 46px; padding: 0 14px !important; font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rw-res:focus, body:not(.navmode) .rw-res:hover { background: var(--rw-white); color: var(--rw-blue); text-shadow: none; }
+
+@keyframes rw-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.rw-blink { animation: rw-blink 1s steps(1) infinite; }
+
+/* start-up */
+#rw-boot { position: fixed; inset: 0; z-index: 200; background: var(--rw-blue, #1730B8); transition: opacity .25s; }
+#rw-boot.out { opacity: 0; }
+.rw-boot-clock { position: absolute; right: 96px; top: 56px; font-size: 40px; }
+.rw-boot-name { position: absolute; left: 260px; right: 260px; top: 250px; height: 120px; display: flex; align-items: center; justify-content: center;
+  background: var(--rw-grey); color: var(--rw-blue); text-shadow: none; font-size: 64px; font-weight: 700; letter-spacing: .06em; }
+.rw-boot-sub { position: absolute; left: 0; right: 0; top: 394px; text-align: center; font-size: 26px; letter-spacing: .12em; }
+.rw-boot-load { position: absolute; left: 340px; right: 340px; top: 500px; display: flex; flex-direction: column; gap: 12px; font-size: 22px; }
+.rw-segs { display: flex; gap: 6px; align-items: flex-end; height: 26px; }
+.rw-segs i { width: 14px; height: 4px; background: var(--rw-white); animation: rw-seg .01s steps(1) forwards; }
+@keyframes rw-seg { to { height: 26px; } }
+
+/* the film's page and Setup cover the whole screen, in blue */
+body.rw:not(.parlor) #modal { background: var(--rw-blue); padding: 0; }
+body.rw:not(.parlor) #modal .modal-card { background: transparent; box-shadow: none; border: 0; max-width: none; width: auto; margin: 0; }
+body.rw:not(.parlor) #modal:has(.rw-stage) #modal-close { display: none; }
+
+/* scanlines and the darker corners of an old set */
+body.rw-scan:not(.parlor)::after { content: ""; position: fixed; inset: 0; z-index: 300; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.13) 0px, rgba(0,0,0,.13) 2px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 4px),
+    radial-gradient(ellipse at center, rgba(0,0,0,0) 62%, rgba(0,0,0,.42) 100%); }
+
+/* pixel snow */
+#rw-snow { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+body.parlor #rw-snow { display: none; }
+#rw-snow i { position: absolute; top: -12px; width: calc(6px * var(--rwk)); height: calc(6px * var(--rwk)); background: #F4F4F4; opacity: .8; animation-name: rw-fall; animation-iteration-count: infinite; }
+@keyframes rw-fall { from { transform: translateY(0); } to { transform: translateY(105vh); } }
+
+/* the screensaver: a disc and the name, bouncing about a black screen */
+.rw-saver { display: flex; flex-direction: column; align-items: center; gap: calc(6px * var(--rwk)); font-family: "Michroma", sans-serif !important; font-size: calc(26px * var(--rwk)) !important;
+  letter-spacing: .28em !important; font-style: normal !important; font-weight: 400 !important; text-transform: uppercase; }
+.rw-saver::after { display: none !important; }
+
+/* ---- everything else on the film side: Setup, questions, pop-ups, the keyboard, the PIN pad, Who's watching ---- */
+body.rw:not(.parlor) :is(#settings, .dlg, .sheet, .pinpad, .who) { font-family: var(--rw-font); }
+body.rw:not(.parlor) #settings { background: var(--rw-blue); }
+body.rw:not(.parlor) #settings .modal-card { background: var(--rw-blue); color: var(--rw-white); border: 0; box-shadow: none; border-radius: 0; width: min(1000px, 90vw); max-width: none; }
+body.rw:not(.parlor) #settings { scrollbar-width: none; }
+body.rw:not(.parlor) #settings::-webkit-scrollbar { display: none; }
+body.rw:not(.parlor) #settings-body h2 { background: var(--rw-grey); color: var(--rw-blue); font-size: 0; padding: 18px 26px; margin: 0 0 22px; border-radius: 0; }
+body.rw:not(.parlor) #settings-body h2::before { content: 'SETUP MENU'; font-size: 40px; font-family: var(--rw-font); font-weight: 400; font-style: normal; }
+body.rw:not(.parlor) #settings-body h3 { display: inline-block; background: var(--rw-white); color: var(--rw-blue); text-transform: uppercase; padding: 6px 12px 3px; letter-spacing: .04em; font-size: 22px; border-radius: 0; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card, .pin-card) :is(small, .am-hint, p, .hint) { color: var(--rw-dim); }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) :is(.am-card, .row-set, .remote-box, .drive, .srow, .choice, .lic-row) { background: transparent !important; border-color: rgba(244,244,244,.35) !important; border-radius: 0 !important; color: var(--rw-white); }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card, .pin-card, .osk, .who) :is(button, .btn, select, input:not([type=checkbox]):not([type=range]), .chip, .swatch, .osk-key, .pin-key, .choice) { border-radius: 0 !important; font-family: var(--rw-font) !important; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card, .pin-card) :is(.btn, button.btn) { background: var(--rw-grey) !important; color: var(--rw-blue) !important; border: 3px solid var(--rw-grey) !important; text-transform: uppercase; box-shadow: none !important; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card, .pin-card) :is(.btn, button.btn):is(:focus, :hover) { background: var(--rw-white) !important; border-color: var(--rw-white) !important; outline: 4px solid var(--rw-white) !important; outline-offset: 3px; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) :is(select, input:not([type=checkbox]):not([type=range])) { background: var(--rw-white) !important; color: var(--rw-blue) !important; border: 3px solid var(--rw-white) !important; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) :is(select, input):focus { outline: 4px solid var(--rw-white) !important; outline-offset: 3px; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; border: 4px solid var(--rw-white) !important; background: transparent !important; border-radius: 0 !important; position: relative; flex: none; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) input[type=checkbox]::before, body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) input[type=checkbox]::after { display: none !important; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) input[type=checkbox]:checked { background: var(--rw-white) !important; box-shadow: inset 0 0 0 5px var(--rw-blue) !important; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) input[type=checkbox]:focus { outline: 4px solid var(--rw-white); outline-offset: 4px; }
+body.rw:not(.parlor) #settings :is(a, .link, button.link) { color: var(--rw-white) !important; }
+body.rw:not(.parlor) #settings .close, body.rw:not(.parlor) .sheet .close { background: var(--rw-grey) !important; color: var(--rw-blue) !important; border-radius: 0 !important; box-shadow: none !important; outline: none !important; border: 3px solid var(--rw-grey) !important; }
+body.rw:not(.parlor) #settings .close:focus, body.rw:not(.parlor) .sheet .close:focus { background: var(--rw-white) !important; outline: 4px solid var(--rw-white) !important; outline-offset: 3px; }
+body.rw:not(.parlor) :is(#settings, .dlg-card, .sheet-card) :focus { --m-amber: #F4F4F4; }
+body.rw:not(.parlor) #settings .warn { background: var(--rw-white); color: var(--rw-blue); border-radius: 0; }
+body.rw:not(.parlor) .dlg { background: rgba(10, 20, 90, .75); }
+body.rw:not(.parlor) :is(.dlg-card, .sheet-card, .pin-card) { background: var(--rw-blue) !important; color: var(--rw-white) !important; border: 4px solid var(--rw-grey) !important; border-radius: 0 !important; box-shadow: 0 0 0 9999px rgba(8, 16, 80, .55) !important; }
+body.rw:not(.parlor) :is(.dlg-card, .sheet-card, .pin-card) :is(h2, h3) { text-transform: uppercase; }
+body.rw:not(.parlor) .osk { background: var(--rw-blue); border-top: 4px solid var(--rw-grey); }
+body.rw:not(.parlor) .osk-field { background: var(--rw-white); color: var(--rw-blue); border-radius: 0; border: 0; font-family: var(--rw-font); }
+body.rw:not(.parlor) .osk-caret { background: var(--rw-blue); width: 14px; }
+body.rw:not(.parlor) .osk-key { background: transparent; color: var(--rw-white); border: 3px solid rgba(244,244,244,.4) !important; text-transform: uppercase; }
+body.rw:not(.parlor) .osk-key.done { background: var(--rw-grey); color: var(--rw-blue); }
+body.rw:not(.parlor) .osk-key:is(:focus, :hover) { background: var(--rw-white) !important; color: var(--rw-blue) !important; border-color: var(--rw-white) !important; }
+body.rw:not(.parlor) .pin-key { background: transparent; color: var(--rw-white); border: 3px solid rgba(244,244,244,.4); }
+body.rw:not(.parlor) .pin-key:is(:focus, :hover) { background: var(--rw-white); color: var(--rw-blue); }
+body.rw:not(.parlor) .pin-dots span { border-radius: 0; border-color: var(--rw-white); }
+body.rw:not(.parlor) .who { background: var(--rw-blue); }
+body.rw:not(.parlor) .who h1 { font-family: var(--rw-font); text-transform: uppercase; background: var(--rw-grey); color: var(--rw-blue); padding: 14px 30px; font-size: 40px; }
+body.rw:not(.parlor) :is(.who-opt, .who-tile) { font-family: var(--rw-font); text-transform: uppercase; color: var(--rw-white); }
+body.rw:not(.parlor) #scan-status { background: var(--rw-grey); color: var(--rw-blue); border-radius: 0; font-family: var(--rw-font); text-transform: uppercase; }
+
+/* no Matinee focus rings on the VCR screens: the highlight is the reversed line itself */
+body.rw:not(.parlor) .rw-stage :focus, body.rw:not(.parlor) .rw-stage :focus-visible { outline: none !important; box-shadow: none !important; }
+.rw-saver svg { width: calc(150px * var(--rwk)); height: auto; }

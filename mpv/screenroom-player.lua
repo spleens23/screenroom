@@ -25,6 +25,18 @@ local CREAM, MUTED, EDGE, TRACK, INK = bgr('F3E9DC'), bgr('CDBDAC'), bgr('5A4636
 FONT = '\\fnDM Sans'
 local SERIF = '\\fnFraunces'
 PANEL = INK
+-- Rewind (the box's VCR theme): blocky white letters with a hard shadow over the film, blue square boxes for the
+-- menus, the highlighted choice in reverse. The pixel font (mpv/fonts) has the ▶ ‖ ■ ◀ ▼ symbols.
+local RW = (o.theme == 'rewind')
+local RWBLUE, RWGREY = bgr('1730B8'), bgr('DADADA')
+local RW_SH = '\\bord0\\shad4\\4c&H000000&\\4a&H30&'
+if RW then
+  INK, PANEL = RWBLUE, RWBLUE
+  CREAM, MUTED, EDGE, TRACK = bgr('F4F4F4'), bgr('C9D2F2'), bgr('F4F4F4'), bgr('0E1F8A')
+  ACCENT, GRAY = bgr('F4F4F4'), bgr('C9D2F2')
+  FONT = '\\fnRewind Pixel'; SERIF = FONT
+  TEXT_EDGE = RW_SH
+end
 
 -- ---------------------------------------------------------------- state
 local W, H = 1920, 1080     -- virtual ASS canvas (height fixed at 1080, width follows window aspect)
@@ -100,6 +112,7 @@ end
 
 -- a rounded rectangle (cubic corners)
 local function rrect(x, y, w, h, r)
+  if RW then r = 0 end
   r = math.min(r, w / 2, h / 2)
   local k = 0.5523 * r
   return string.format('m %.1f %.1f l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f l %.1f %.1f b %.1f %.1f %.1f %.1f %.1f %.1f '
@@ -113,6 +126,7 @@ local function esc(s) return (tostring(s or ''):gsub('[\\{}]', ''):gsub('\n', ' 
 
 local function text(x, y, str, fs, color, op, an, bold, extra)
   if op <= 0.003 or str == '' then return end
+  if RW then str = tostring(str):upper() end
   add(string.format('{\\an%d\\pos(%.1f,%.1f)%s\\fs%d%s\\1c&H%s&\\1a%s\\3a%s\\b%d%s}%s',
     an or 7, x, y, FONT, fs, TEXT_EDGE, color or WHITE, alpha(op), alpha(op), bold and 1 or 0, extra or '', esc(str)))
 end
@@ -390,9 +404,10 @@ local function draw_menu(k)
       local spec = { onclick = function() S.col, S.row = ci, idx; apply_entry(ci, e) end, menu_item = { ci, idx } }
       hit(cx, ry, colw, rowh - 4, spec)
       local hovered = in_rect(spec, S.mx, S.my)
-      if focused or hovered then shape(rrect(cx - 12, ry, colw + 24, rowh - 4, 14), CREAM, (focused and 0.16 or 0.09) * k) end
-      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, ACCENT, k) end
-      text(cx + 54, ry + (rowh - 4) / 2, trunc(e.label, 22), 30, e.selected and WHITE or GRAY, k, 4, e.selected)
+      local inv = RW and focused
+      if focused or hovered then shape(rrect(cx - 12, ry, colw + 24, rowh - 4, 14), CREAM, (inv and 1 or focused and 0.16 or 0.09) * k) end
+      if e.selected then icon_check(cx + 14, ry + (rowh - 4) / 2, 26, inv and INK or ACCENT, k) end
+      text(cx + 54, ry + (rowh - 4) / 2, trunc(e.label, 22), RW and 26 or 30, inv and INK or (e.selected and WHITE or GRAY), k, 4, e.selected, inv and '\\bord0\\shad0' or nil)
       if e.sub ~= '' then text(cx + colw, ry + (rowh - 4) / 2, trunc(e.sub, 26), 22, GRAY, k * 0.8, 6, false) end
     end
   end
@@ -435,6 +450,13 @@ local function badge_list()
 end
 
 local function text_w(s, fs)
+  if RW then -- the pixel font: (nearly) every capital is the same width
+    local w = 0
+    for c in tostring(s):upper():gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+      w = w + ((c == ' ' or c == ':' or c == '.' or c == ',' or c == "'" or c == 'I') and 0.5 or 0.75)
+    end
+    return math.floor(w * fs + 0.5)
+  end
   local w = 0
   for c in s:gmatch('.') do
     if c:match('[A-Z0-9]') then w = w + 0.6 elseif c:match('[a-z]') then w = w + 0.45
@@ -636,6 +658,103 @@ local function draw_controls(k)
   if S.menu then draw_menu(k) end
 end
 
+-- Rewind: PLAY ▶ / PAUSE ‖ top left, the tape counter top right, the title, BEGIN ▼ END, and a row of choices
+-- along the bottom (the highlighted one in reverse). Same controls and remote keys as the standard look.
+local function hms(t)
+  t = math.max(0, math.floor(t or 0))
+  return string.format('%d:%02d:%02d', math.floor(t / 3600), math.floor(t % 3600 / 60), t % 60)
+end
+local function rw_choice(x, y, label, fs, key, onclick)
+  local w, hgt = text_w(label, fs) + 30, fs + 20
+  local spec = { onclick = onclick }
+  hit(x, y, w, hgt, spec)
+  local lit = in_rect(spec, S.mx, S.my) or (S.kbnav and S.focus == key)
+  return w, function(k)
+    if lit then shape(rect(x, y, w, hgt), WHITE, k) end
+    text(x + 15, y + hgt / 2 + 2, label, fs, lit and RWBLUE or WHITE, k, 4, false, lit and '\\bord0\\shad0' or RW_SH)
+  end
+end
+local function draw_controls_rw(k)
+  local m = meta_for(mp.get_property('path'))
+  local pl = playlist_info()
+  local pos, dur = S.scrub or S.pos, S.dur
+  local frac = (dur > 0) and clamp(pos / dur, 0, 1) or 0
+  gradient(H - 420, H, 0, 0.75, k)
+  gradient(0, 260, 0.45, 0, k)
+  text(MARGIN, 64, S.paused and 'PAUSE ‖' or 'PLAY ▶', 76, WHITE, k, 7)
+  text(W - MARGIN, 64, hms(pos), 68, WHITE, k, 9)
+  local ty = 150
+  local chs = mp.get_property_number('chapters', 0) or 0
+  local ch = mp.get_property_number('chapter')
+  if ch and chs > 1 then text(W - MARGIN, ty, string.format('CH %02d', ch + 1), 40, WHITE, k, 9); ty = ty + 56 end
+  for _, b in ipairs(badge_list()) do
+    text(W - MARGIN, ty, b.name .. (b.note and ('  ' .. b.note) or ''), 26, b.warn and bgr('FFD27A') or WHITE, k, 9); ty = ty + 40
+  end
+  -- STOP, under PLAY (Back does the same)
+  local _, d = rw_choice(MARGIN - 15, 160, 'STOP ■', 34, 'back', quit_player); d(k)
+  -- the title (and the episode)
+  local ep = ((m.sub and m.sub ~= '') and (m.sub .. '  ') or '') .. (m.name or '')
+  local line = (m.title or '') .. ((ep ~= '') and ('   ' .. ep) or '')
+  text(MARGIN, H - 330, trunc(line, math.floor((W - 2 * MARGIN) / 33)), 44, WHITE, k, 1)
+  -- BEGIN ▼ END
+  local bx0, bx1, by, bh = MARGIN, W - MARGIN, H - 262, 34
+  local bw = bx1 - bx0
+  local bar_focus = S.kbnav and S.focus == 'bar'
+  local function frame(x, y, w, h, t, c, op) shape(rect(x, y, w, t), c, op); shape(rect(x, y + h - t, w, t), c, op); shape(rect(x, y, t, h), c, op); shape(rect(x + w - t, y, t, h), c, op) end
+  frame(bx0, by, bw, bh, 5, WHITE, k)
+  if frac > 0 then shape(rect(bx0, by, bw * frac, bh), WHITE, k) end
+  for i = 1, 5 do shape(rect(bx0 + bw * i / 6 - 2, by + bh - 14, 4, 14), (frac >= i / 6) and RWBLUE or WHITE, k) end
+  text(clamp(bx0 + bw * frac, bx0 + 14, bx1 - 14), by - 6, '▼', 30, WHITE, k, 2)
+  if bar_focus then frame(bx0 - 12, by - 12, bw + 24, bh + 24, 4, WHITE, k * 0.9); text(W / 2, by + bh + 12, '◀ ▶  10 SEC', 26, WHITE, k, 8) end
+  text(bx0, by + bh + 12, 'BEGIN', 26, WHITE, k, 7)
+  text(bx1, by + bh + 12, 'END', 26, WHITE, k, 9)
+  hit(bx0 - 10, by - 30, bw + 20, bh + 60, {
+    is_bar = true,
+    ondrag = function(mx)
+      S.scrub = clamp((mx - bx0) / bw, 0, 1) * dur
+      mp.commandv('seek', string.format('%.2f', S.scrub), 'absolute+keyframes')
+    end,
+    onrelease = function()
+      if S.scrub then mp.commandv('seek', string.format('%.2f', S.scrub), 'absolute+exact') end
+      S.scrub = nil
+    end,
+  })
+  -- the choices along the bottom, centred
+  local items = {
+    { 'mute', S.mute and 'SOUND ON' or 'MUTE', toggle_mute },
+    { 'rew', '◀◀ 10', function() seek_by(-SKIP) end },
+    { 'play', S.paused and 'PLAY ▶' or 'PAUSE ‖', toggle_pause },
+    { 'fwd', '10 ▶▶', function() seek_by(SKIP) end },
+  }
+  if pl.next then items[#items + 1] = { 'next', 'NEXT ▶▶', play_next } end
+  items[#items + 1] = { 'subs', 'AUDIO/SUBS', function() if S.menu then close_menu() else open_menu() end end }
+  if o.tv ~= 'yes' then items[#items + 1] = { 'full', 'FULL', toggle_fullscreen } end
+  local fs, gap = 34, 26
+  local total = -gap
+  for _, it in ipairs(items) do total = total + text_w(it[2], fs) + 30 + gap end
+  local x = W / 2 - total / 2
+  for _, it in ipairs(items) do
+    local w, draw = rw_choice(x, H - 120, it[2], fs, it[1], it[3])
+    draw(k)
+    x = x + w + gap
+  end
+  if S.menu then draw_menu(k) end
+end
+
+-- the volume, as a row of blocks, for a couple of seconds after it changes
+local function draw_volume_rw()
+  local t = now()
+  if not S.vol_t or t - S.vol_t > 2.2 then return end
+  local k = clamp((S.vol_t + 2.2 - t) / 0.3, 0, 1)
+  local n, on = 25, S.mute and 0 or math.floor(clamp(S.vol / 100, 0, 1) * 25 + 0.5)
+  local x0, y = W - MARGIN - n * 24, 330
+  text(x0, y - 20, S.mute and 'VOLUME  MUTE' or 'VOLUME', 40, WHITE, k, 1)
+  for i = 0, n - 1 do
+    if i < on then shape(rect(x0 + i * 24, y, 16, 44), WHITE, k, '\\shad4\\4c&H000000&\\4a&H30&')
+    else shape(rect(x0 + i * 24, y + 38, 16, 6), WHITE, k) end
+  end
+end
+
 local function draw_pause_overlay(k)
   local m = meta_for(mp.get_property('path'))
   shape(rect(0, 0, W, H), INK, 0.70 * k)
@@ -675,6 +794,12 @@ local function draw_toast()
   local t = now()
   if not S.toast or t > S.toast_until then return end
   local k = clamp((S.toast_until - t) / 0.3, 0, 1)
+  if RW then
+    local w = text_w(S.toast, 30) + 60
+    shape(rect(W / 2 - w / 2, 120, w, 70), RWGREY, k)
+    text(W / 2, 157, S.toast, 30, RWBLUE, k, 5, false, '\\bord0\\shad0')
+    return
+  end
   local w = 60 + #S.toast * 17
   shape(rrect(W / 2 - w / 2, 120, w, 64, 32), INK, 0.94 * k)
   text(W / 2, 152, S.toast, 30, CREAM, k, 5, true, '\\bord0\\shad0')
@@ -775,8 +900,9 @@ local function render()
   end
 
   lines, hits = {}, {}
-  if S.pfade > 0 then draw_pause_overlay(S.pfade) end
-  if S.fade > 0 then draw_controls(S.fade) end
+  if S.pfade > 0 and not RW then draw_pause_overlay(S.pfade) end
+  if S.fade > 0 then (RW and draw_controls_rw or draw_controls)(S.fade) end
+  if RW then draw_volume_rw() end
   if S.loaded and not S.menu then draw_next_card() end
   draw_power()
   draw_toast()
@@ -987,8 +1113,8 @@ for _, k in ipairs({ 'i', 'I', '`', 'F8', 'F9', 'Ctrl+p', 'TAB' }) do mp.add_for
 for _, b in ipairs({ { '+', 5 }, { '=', 5 }, { '-', -5 }, { 'VOLUME_UP', 5 }, { 'VOLUME_DOWN', -5 } }) do
   mp.add_forced_key_binding(b[1], 'nf_vol_' .. b[1], function()
     if b[2] > 0 then mp.set_property_native('mute', false) end
-    mp.commandv('add', 'volume', b[2]); S.last_act = now()
-    toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%')
+    mp.commandv('add', 'volume', b[2])
+    if RW then S.vol_t = now() else S.last_act = now(); toast('Volume ' .. math.floor(mp.get_property_number('volume', 0) + 0.5) .. '%') end
   end, { repeatable = true })
 end
 
@@ -1011,8 +1137,15 @@ mp.observe_property('pause', 'bool', function(_, v)
   S.pause_t = S.paused and now() or nil
   S.last_act = now()
 end)
-mp.observe_property('volume', 'number', function(_, v) if v then S.vol = v end end)
-mp.observe_property('mute', 'bool', function(_, v) S.mute = v and true or false end)
+mp.observe_property('volume', 'number', function(_, v)
+  if v and RW and S.loaded and math.abs(v - S.vol) > 0.5 then S.vol_t = now() end
+  if v then S.vol = v end
+end)
+mp.observe_property('mute', 'bool', function(_, v)
+  local m = v and true or false
+  if RW and S.loaded and m ~= S.mute then S.vol_t = now() end
+  S.mute = m
+end)
 mp.observe_property('fullscreen', 'bool', function(_, v) S.fs = v and true or false end)
 
 local function track_matches(t, pref, kind)

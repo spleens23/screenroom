@@ -353,8 +353,8 @@ function battery() {
   } catch { return null; }
 }
 
-// The look: '2020s' (Matinee in Screenroom, Encore in Parlor) is the one theme.
-const THEMES = ['2020s'];
+// The look: '2020s' (Matinee in Screenroom, Encore in Parlor), or 'rewind' (the Linux box's VCR theme, for the films).
+const THEMES = ['2020s', 'rewind'];
 const defaultTheme = () => '2020s';
 // The look: each profile picks its own theme, unless "same theme for every profile" is ticked.
 function themeNow() {

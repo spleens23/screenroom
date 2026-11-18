@@ -26,6 +26,10 @@
   if (document.body) applyAccent(); else document.addEventListener('DOMContentLoaded', () => applyAccent());
   let mode = EDITION === 'music' ? 'parlor' : 'movies'; // 'movies' | 'parlor' (music)
   let parlorUI = null;
+  let RW = null; // the Rewind theme's screens (rewind.js), on the Linux box
+  // Rewind (the VCR theme) is on for the films: the Linux box's theme choice, not in Parlor
+  const rwTheme = () => !!RW && EDITION === 'all' && !!S && S.theme === 'rewind';
+  const rwOn = () => rwTheme() && mode !== 'parlor';
   // Parlor light or dark: following the phone's or computer's own setting unless one's been picked here
   const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   const getAppearance = () => { try { return localStorage.getItem('parlor-appearance') || 'auto'; } catch { return 'auto'; } };
@@ -758,6 +762,8 @@
   function applyTheme() {
     // Matinee: the standard look (stored as '2020s')
     document.body.classList.add('mat');
+    document.body.classList.toggle('rw', rwTheme());
+    if (RW) RW.decorate();
     document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
   }
   function render() {
@@ -772,6 +778,7 @@
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
     if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }
+    if (rwOn()) { if (!S.library.length) return renderEmpty(); return RW.render(); }
     $('#nav').classList.toggle('solid', view !== 'home' || !!query);
     if (!S.library.length) return renderEmpty();
     if (query) return renderGrid(`Results for “${query}”`, catalogOf(matches));
@@ -798,7 +805,7 @@
     renderModal();
     $('#modal').hidden = false;
     $('#modal').scrollTop = 0;
-    const first = $('#modal .btn.primary'); first && first.focus();
+    const first = $('#modal .rw-first') || $('#modal .btn.primary'); first && first.focus();
   }
   // On a touch screen a film's page (and an album's) closes when pulled down from the top, as well as with ✕ /
   // Back; either way it slides away rather than vanishing.
@@ -865,7 +872,7 @@
       const row = [...document.querySelectorAll('section.row')].find((r) => (r.querySelector('h2') || {}).textContent === o.returnRow);
       el = row && row.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"]`);
     }
-    if (!el) el = o.returnKey && document.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"]`);
+    if (!el) el = o.returnKey && document.querySelector(`.card[data-key="${CSS.escape(o.returnKey)}"], .rw-row[data-key="${CSS.escape(o.returnKey)}"], .rw-res[data-key="${CSS.escape(o.returnKey)}"]`);
     if (!el) return;
     el.focus({ preventScroll: true });
     // whatever happens, the highlighted poster is on screen
@@ -877,7 +884,7 @@
     if (!open) return;
     const e = fullEntry(open.key);
     if (!e) return closeModal();
-    $('#modal-body').replaceChildren(...(e.kind === 'series' ? seriesDetail(e) : movieDetail(e)));
+    $('#modal-body').replaceChildren(...(rwOn() ? [RW.detail(e, open)] : e.kind === 'series' ? seriesDetail(e) : movieDetail(e)));
   }
 
   function heroBlock(e, extraBtns) {
@@ -1171,7 +1178,7 @@
   const SAVER_COLORS = ['#f0a73a', '#2f80ed', '#27ae60', '#f2c94c', '#9b51e0', '#f2994a', '#56ccf2', '#ff6fb5'];
   function showSaver() {
     if (saver) return;
-    const logo = h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'Parlor' : 'Screenroom');
+    const logo = rwOn() ? RW.saverLogo() : h('div', { class: 'saver-logo' }, EDITION === 'music' ? 'Parlor' : 'Screenroom');
     const el = h('div', { id: 'saver' }, logo);
     document.body.append(el);
     let x = Math.random() * (innerWidth - 400), y = Math.random() * (innerHeight - 120);
@@ -2072,7 +2079,25 @@
   // ---- settings ----------------------------------------------------------------
   // Settings → the look: the accent colour (kept on this device)
   function themeBlock() {
+    const box = EDITION === 'all' && S.platform === 'linux';
+    const rwSet = (label, hint, key, choices, cur) => h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
+      h('select', { class: 'dev-select', 'data-key': key, onchange: async (e) => {
+        const v = e.target.value;
+        S = await api.setConfig({ [key]: v === 'true' ? true : v === 'false' ? false : v });
+        render();
+      } }, choices.map(([v, l]) => h('option', { value: v, selected: String(cur) === v }, l))));
+    const rw = box && S.theme === 'rewind';
+    const c = S.config || {};
     return h('div', {},
+      box ? h('label', { class: 'row-set' }, h('span', {}, 'Theme', h('small', {}, 'Matinee is the standard look. Rewind is an old VCR’s blue screen, for the films (Parlor keeps its own look).')),
+        h('select', { class: 'dev-select', 'data-key': 'theme', onchange: async (e) => {
+          S = await api.setTheme({ theme: e.target.value });
+          render(); renderSettings();
+        } }, [['2020s', 'Matinee'], ['rewind', 'Rewind']].map(([v, l]) => h('option', { value: v, selected: (S.theme || '2020s') === v }, l)))) : null,
+      rw ? rwSet('Snow', 'Blocky snow drifting behind the menus.', 'rwSnow', [['dec', 'In December'], ['on', 'Always'], ['off', 'Never']], c.rwSnow || 'dec') : null,
+      rw ? rwSet('Scanlines', 'The faint lines and darker corners of an old TV.', 'rwScan', [['true', 'On'], ['false', 'Off']], c.rwScan !== false) : null,
+      rw ? rwSet('Menu sounds', 'A short beep as you move about the menus.', 'rwSounds', [['true', 'On'], ['false', 'Off']], c.rwSounds !== false) : null,
+      rw ? rwSet('Clock', 'The clock in the top corner.', 'rwClock', [['12', '12 hour'], ['24', '24 hour']], c.rwClock === '24' ? '24' : '12') : null,
       h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent colour', h('small', {}, `${EDITION === 'music' ? 'The colour of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The colour of the buttons and highlights' : 'The colour of the buttons, highlights and the playing song, for films and music'}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
           style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))),
@@ -2327,6 +2352,7 @@
   }
   function focusEl(el) {
     const behavior = scrollMode();
+    if (RW && document.body.classList.contains('navmode')) RW.blip('move');
     navFocus = true; // moving onto a text box with the remote doesn't pop up the keyboard (OK does)
     el.focus({ preventScroll: true });
     navFocus = false;
@@ -2345,7 +2371,7 @@
     if (!el.closest('#nav, #npbar, #npfull, .poverlay')) el.scrollIntoView({ block: 'center', inline: 'center', behavior });
   }
   function defaultFocus(els) {
-    return els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card')) || els[0];
+    return els.find((e) => e.matches('.rw-first, .rw-row.cur')) || els.find((e) => e.matches('.btn.primary')) || els.find((e) => e.matches('.card, .rw-row')) || els[0];
   }
 
   // Spatial navigation: jump to the nearest focusable thing in the direction pressed.
@@ -2362,6 +2388,7 @@
     if (!els.length) return;
     const cur = els.includes(document.activeElement) ? document.activeElement : null;
     if (!cur) { const d = defaultFocus(els); d && focusEl(d); return; }
+    if (rwOn()) { const t = RW.nav(cur, dir); if (t && t !== cur) { focusEl(t); return; } }
     const rects = new Map();
     const R = (e) => { let r = rects.get(e); if (!r) { r = e.getBoundingClientRect(); rects.set(e, r); } return r; };
     const a = R(cur);
@@ -2452,6 +2479,7 @@
   }
   function activate() {
     const el = document.activeElement;
+    if (RW) RW.blip('ok');
     if (el && el.tagName === 'SELECT') { openSelect(el); return; }
     if (isTextInput(el) && oskAllowed()) { openOsk(el); return; }
     if (el && el !== document.body && scopeEls().includes(el)) el.click();
@@ -2467,9 +2495,10 @@
     if (!$('#settings').hidden) closeSettings();
     if (mode === 'parlor') toggleMode();
     query = ''; $('#search').value = '';
+    if (RW) RW.reset();
     setView('home');
     window.scrollTo(0, 0);
-    const f = main.querySelector('.hero .btn.primary, .card');
+    const f = main.querySelector('.hero .btn.primary, .card, .rw-row.cur');
     if (f) { document.body.classList.add('navmode'); focusEl(f); }
   }
   // Returns true if it did something (so a TV remote's Back can leave the app when there's nothing left to close).
@@ -2482,6 +2511,7 @@
     if (parlorUI && parlorUI.scope()) { parlorUI.back(); return true; }
     if (!$('#modal').hidden) { closeModal(); return true; }
     if (!$('#settings').hidden) { closeSettings(); return true; }
+    if (rwOn() && RW.back()) return true; // the VCR search screen: back to the title menu
     if (document.activeElement === $('#search')) $('#search').blur();
     // Scrolled down a page: Back first jumps to the top bar (menu, Now Playing, search, settings).
     const inNav = document.activeElement && document.activeElement.closest && document.activeElement.closest('#nav');
@@ -2828,10 +2858,13 @@
   function renderKeepFocus() {
     const a = document.activeElement;
     const key = a && a.dataset && a.dataset.key;
+    // (the VCR screens: a search key, or a button along the top)
+    const rwk = a && a.dataset && (a.dataset.k ? `.rw-k[data-k="${CSS.escape(a.dataset.k)}"]` : a.dataset.rw ? `.rw-key[data-rw="${CSS.escape(a.dataset.rw)}"]` : a.dataset.cat ? `.rw-cat[data-cat="${CSS.escape(a.dataset.cat)}"]` : '');
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
-    if (key) { const el = document.querySelector(`.card[data-key="${CSS.escape(key)}"]`); if (el) el.focus({ preventScroll: true }); }
+    if (key) { const el = document.querySelector(`.card[data-key="${CSS.escape(key)}"], .rw-row[data-key="${CSS.escape(key)}"], .rw-res[data-key="${CSS.escape(key)}"]`); if (el) el.focus({ preventScroll: true }); }
+    else if (rwk) { const el = document.querySelector(rwk); if (el) el.focus({ preventScroll: true }); }
   }
 
   // New files found by a background rescan
@@ -2907,6 +2940,18 @@
     document.querySelectorAll('#pnav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); parlorUI.go(a.dataset.pview); }));
   }
 
+  if (window.createRewind && EDITION === 'all') {
+    RW = window.createRewind({
+      h, state: () => S, main: () => main, catalogOf, fullEntry, prog, isDone, nextUp, continueList, holidayRows, resOf,
+      matches: (e) => (e.items || [e.item]).some((i) => matches(i)),
+      query: () => query, setQuery: (q) => { query = q; $('#search').value = q; },
+      render, renderModal, openEntry, start, playEntry, focus: (el) => focusEl(el),
+      setWatched: async (ids, v) => { S = await api.setWatched(ids, v); renderModal(); render(); const f = $('#modal .rw-first'); f && f.focus(); },
+      openSettings, toggleMode, hasMusic: () => !!parlorUI,
+      switchProfile: async () => { S = await api.showProfilePicker(); render(); },
+      active: () => rwOn(),
+    });
+  }
   document.body.classList.toggle('ed-films', EDITION === 'films');
   document.title = EDITION === 'music' ? 'Parlor' : 'Screenroom';
   // TV: start with the pointer hidden (it appears only once the mouse really moves)
