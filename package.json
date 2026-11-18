@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.screenroom.app",
     "productName": "Screenroom",
-    "copyright": "Copyright © 2026 the Screenroom authors",
+    "copyright": "Copyright \u00a9 2026 the Screenroom authors",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -83,7 +83,17 @@
           "Name": "Screenroom",
           "Comment": "Browse and play your local library"
         }
-      }
+      },
+      "extraResources": [
+        {
+          "from": "voice",
+          "to": "voice",
+          "filter": [
+            "**/*",
+            "!.done-*"
+          ]
+        }
+      ]
     },
     "deb": {
       "depends": [

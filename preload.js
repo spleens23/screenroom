@@ -93,5 +93,13 @@ contextBridge.exposeInMainWorld('api', {
   sonosRooms: () => ipcRenderer.invoke('sonos-rooms'),
   sonosUse: (id) => ipcRenderer.invoke('sonos-use', id || ''),
   onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
+  // voice control (the Linux box)
+  voiceStatus: () => ipcRenderer.invoke('voice-status'),
+  voiceSet: (patch) => ipcRenderer.invoke('voice-set', patch),
+  voiceLevels: (on) => ipcRenderer.invoke('voice-levels', !!on),
+  voiceRooms: () => ipcRenderer.invoke('voice-rooms'),
+  voiceTry: (text) => ipcRenderer.invoke('voice-try', text),
+  onVoice: (cb) => ipcRenderer.on('voice', (_e, m) => cb(m)),
+  onVoiceMusic: (cb) => ipcRenderer.on('voice-music', () => cb()),
   onParlorUpdated: (cb) => ipcRenderer.on('parlor-updated', () => cb()),
 });

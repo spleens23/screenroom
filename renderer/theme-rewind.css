@@ -203,3 +203,7 @@ body.rw:not(.parlor) .rw-stage :focus, body.rw:not(.parlor) .rw-stage :focus-vis
 .rw-left > .rw-pickset { padding-left: 16px; flex: none; }
 .rw-left > .rw-eps { flex: 1; min-height: 0; }
 .rw-left .rw-opt { height: 46px; font-size: 26px; }
+
+/* voice control, VCR style: a grey on-screen box, square, in capitals */
+body.rw #voice-pill { left: auto; right: 5vw; top: 1vh; padding: 8px 18px; font-size: 17px; bottom: auto; transform: none; animation: none; max-width: 60vw; border-radius: 0; background: rgba(40, 40, 48, 0.92); border: 2px solid #c8c8c8; font-family: 'Rewind Pixel', monospace; text-transform: uppercase; letter-spacing: .06em; box-shadow: none; }
+body.rw #voice-pill .vp-dot { border-radius: 0; }

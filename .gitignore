@@ -4,3 +4,4 @@ dist/
 vendor/
 dist-win/
 deploy/wifi-debs/
+voice/

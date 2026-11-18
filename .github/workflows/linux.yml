@@ -34,6 +34,10 @@ jobs:
           ls -la deploy/wifi-debs
           for p in wpasupplicant wireless-regdb iw libnl-genl-3-200 libpcsclite1; do ls deploy/wifi-debs/${p}_*.deb >/dev/null || { echo "::error::$p missing"; exit 1; }; done
 
+      # voice control ("Hey Screenroom"): the speech engine and its models, packed into the app (checked downloads)
+      - name: Voice control files
+        run: deploy/get-voice.sh
+
       - name: Build the Linux app (.deb)
         run: |
           npm ci
@@ -213,6 +217,8 @@ jobs:
           sleep 45
           { echo "=== refresh after update"; $SSH "sudo tail -n 40 /var/log/screenroom-refresh.log"; } >> screens-diag.txt 2>&1 || true
           check "update refreshes the box setup"       "$SSH grep -q 'box refresh done' /var/log/screenroom-refresh.log"
+          # voice control: the speech engine and its models load on the box (it has no microphone, so it then says so)
+          check "voice control engine loads"           "$SSH \"sudo -u tv env ELECTRON_RUN_AS_NODE=1 SCREENROOM_VOICE_DIR=/opt/Screenroom/resources/voice timeout 45 /opt/Screenroom/screenroom /opt/Screenroom/resources/app.asar/lib/voice-listener.js 2>&1 | head -c 2000\" | tee -a screens-diag.txt | grep -q '\"type\":\"ready\"'"
           check "Wi-Fi helper installed"               "$SSH test -x /usr/sbin/wpa_supplicant"
           # (a box that only updates from a USB stick: the helper comes from the copy inside the app, no internet)
           check "Wi-Fi helper reinstalls from Screenroom's own copy" "$SSH 'sudo apt-get remove -y wpasupplicant >/dev/null 2>&1; ! test -x /usr/sbin/wpa_supplicant && sudo SCREENROOM_WIFI_FORCE=1 /usr/local/sbin/screenroom-wifi --boot >/dev/null 2>&1; test -x /usr/sbin/wpa_supplicant'"

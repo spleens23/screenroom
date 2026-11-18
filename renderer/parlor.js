@@ -1542,6 +1542,8 @@ window.createParlor = function createParlor(ctx) {
     noteIcon,
     state: () => P,
     settingsBlock,
+    /** (a song started by voice: show what's playing, unless something else is open on top) */
+    showNowPlaying() { if (!fullOpen && !$('#poverlay')) openFull(); },
   };
 
   // Settings → Parlor: this profile's music folders.

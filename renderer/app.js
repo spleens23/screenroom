@@ -1743,6 +1743,58 @@
     if (t) { document.body.classList.add('navmode'); focusEl(t); }
   }
 
+  // Settings → Voice control: is the microphone there and hearing you, where music goes, what was heard last.
+  function voiceBlock() {
+    const box = h('div', { class: 'am-card voice-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    const meter = h('div', { class: 'voice-meter' }, h('i'));
+    let rooms = [];
+    const draw = async (st) => {
+      st = st || await api.voiceStatus();
+      if (!st) { box.replaceChildren(h('p', { class: 'am-hint' }, 'Voice control isn’t available here.')); return; }
+      const keep = document.activeElement && box.contains(document.activeElement) ? document.activeElement.getAttribute('data-key') : null;
+      box.replaceChildren();
+      box.append(h('label', { class: 'row-set' }, h('span', {}, 'Voice control', h('small', {}, 'Say “Hey Screenroom”, then what you’d like. Everything is worked out here on the box; nothing you say leaves it.')),
+        h('select', { class: 'dev-select', 'data-key': 'v-on', onchange: async (e) => draw(await api.voiceSet({ on: e.target.value === '1' })) },
+          h('option', { value: '1', selected: st.on }, 'On'), h('option', { value: '0', selected: !st.on }, 'Off'))));
+      if (st.on) {
+        box.append(h('p', { class: st.mic ? '' : 'am-hint' }, st.mic ? `🎙 Listening with ${st.name || 'the microphone'}.` : (st.error || 'Starting…')));
+        if (st.mic) box.append(meter, h('p', { class: 'am-hint' }, 'The bar moves when the microphone hears sound; it turns green when it hears talking.'));
+        const cards = st.cards || [];
+        if (cards.length > 1 || st.device) {
+          box.append(h('label', { class: 'row-set' }, h('span', {}, 'Microphone'),
+            h('select', { class: 'dev-select', 'data-key': 'v-dev', onchange: async (e) => draw(await api.voiceSet({ device: e.target.value })) },
+              h('option', { value: '' }, 'Automatic (a USB microphone)'),
+              ...cards.map((c) => h('option', { value: c.device, selected: st.device && c.device === st.device }, c.name)))));
+        }
+        box.append(h('label', { class: 'row-set' }, h('span', {}, 'Music plays on', h('small', {}, 'When you don’t say where (“…in the kitchen”). Music already playing stays where it is.')),
+          h('select', { class: 'dev-select', 'data-key': 'v-room', onchange: async (e) => draw(await api.voiceSet({ room: e.target.value })) },
+            h('option', { value: '', selected: !st.room }, 'The Sonos room music last played in'),
+            ...rooms.map((r) => h('option', { value: r.id, selected: st.room === r.id }, r.name)),
+            h('option', { value: 'tv', selected: st.room === 'tv' }, 'The TV'))));
+        if (st.last) box.append(h('p', { class: 'am-hint' }, `Last heard: “${st.last.said || '…'}” — ${st.last.msg || (st.last.ok ? 'done' : 'didn’t catch that')}`));
+        box.append(h('details', { class: 'voice-help' }, h('summary', {}, 'Things to say'), h('ul', {},
+          ['Hey Screenroom, play Night Drive in the living room', 'Hey Screenroom, play songs by Fleetwood Mac in the kitchen', 'Hey Screenroom, play the movie Heat',
+            'Hey Screenroom, play the next episode of Bluey', 'Hey Screenroom, pause · next song · turn it up · set the volume to 30', 'Hey Screenroom, move the music to the den', 'Hey Screenroom, what’s playing?']
+            .map((x) => h('li', {}, x)))));
+        const tryIn = h('input', { type: 'text', placeholder: 'Or type a request to try it', 'data-key': 'v-try', onkeydown: (e) => { if (e.key === 'Enter') go(); } });
+        const go = async () => { const t = tryIn.value.trim(); if (!t) return; const r = await api.voiceTry(t); flash(r ? r.msg || (r.ok ? 'Done' : 'Didn’t understand') : 'Voice control is off'); draw(); };
+        box.append(h('div', { class: 'btns voice-try' }, tryIn, h('button', { class: 'btn secondary', onclick: go }, 'Try')));
+      }
+      if (keep) { const el = box.querySelector(`[data-key="${keep}"]`); el && el.focus({ preventScroll: true }); }
+    };
+    const onMsg = (m) => {
+      if (!document.body.contains(box)) { voiceListeners.delete(onMsg); api.voiceLevels(false); return; }
+      if (m.type === 'level') { const i = meter.firstChild; i.style.width = Math.round(m.v * 100) + '%'; meter.classList.toggle('speech', !!m.speech); }
+      else if (m.type === 'status' && !box.contains(document.activeElement)) draw(m.status);
+    };
+    voiceListeners.add(onMsg);
+    api.voiceLevels(true);
+    // (stops the level updates once Settings closes)
+    const gone = setInterval(() => { if (!document.body.contains(box) || $('#settings').hidden) { clearInterval(gone); voiceListeners.delete(onMsg); api.voiceLevels(false); } }, 2000);
+    api.voiceRooms().then((r) => { rooms = r || []; draw(); }).catch(() => draw());
+    return box;
+  }
+
   function wifiBlock() {
     const box = h('div', { class: 'am-card' }, h('p', { class: 'am-hint' }, 'Checking…'));
     let want = null;
@@ -2289,6 +2341,8 @@
       S.appliance && api.wifiStatus ? wifiBlock() : null,
       S.appliance && api.btStatus ? h('h3', {}, 'Bluetooth') : null,
       S.appliance && api.btStatus ? bluetoothBlock() : null,
+      S.platform === 'linux' && box && api.voiceStatus ? h('h3', { id: 'set-voice' }, 'Voice control') : null,
+      S.platform === 'linux' && box && api.voiceStatus ? voiceBlock() : null,
       isAndroid ? h('h3', {}, 'This box') : null,
       isAndroid ? h('div', { class: 'btns' },
         h('button', { class: 'btn secondary', onclick: () => api.openSystemSettings('main') }, 'System settings'),
@@ -2318,7 +2372,7 @@
   // ---- About: Screenroom is free software; the open-source parts it's built from, with their licenses -------
   const SOURCE_URL = 'https://github.com/spleens23/screenroom';
   function aboutBlock(plat) {
-    const list = (window.SR_LICENSES || []).filter((x) => x.platforms === 'all' || x.platforms === plat);
+    const list = (window.SR_LICENSES || []).filter((x) => x.platforms === 'all' || x.platforms === plat || (x.platforms === 'linux-box' && plat === 'desktop' && S.platform === 'linux' && EDITION === 'all'));
     const link = 'github.com/spleens23/screenroom';
     return h('div', { class: 'about' },
       h('p', {}, EDITION === 'music'
@@ -2852,6 +2906,33 @@
       render();
     }
   });
+
+  // Voice control (the Linux box): "Hey Screenroom …". A small pill at the bottom of the screen shows it listening,
+  // what it heard and what it did; a film or show asked for starts here, like pressing Play on its page.
+  let voicePill = null, voiceHide = null;
+  function voiceShow(kind, text) {
+    if (!voicePill) { voicePill = h('div', { id: 'voice-pill', role: 'status', 'aria-live': 'polite' }); document.body.append(voicePill); }
+    clearTimeout(voiceHide);
+    voicePill.className = 'vp-' + kind;
+    voicePill.replaceChildren(h('span', { class: 'vp-dot' }), h('span', { class: 'vp-text' }, text));
+    voicePill.hidden = false;
+    if (kind === 'done' || kind === 'fail') voiceHide = setTimeout(() => { voicePill.hidden = true; }, kind === 'fail' ? 5000 : 3500);
+    if (kind === 'listening') voiceHide = setTimeout(() => { voicePill.hidden = true; }, 15000);
+  }
+  if (api.onVoice) api.onVoice((m) => {
+    if (m.type === 'listening') { hideSaver(); voiceShow('listening', 'Listening…'); }
+    else if (m.type === 'heard') voiceShow('heard', `“${m.said}”`);
+    else if (m.type === 'done') { if (!m.said && !m.msg) { if (voicePill) voicePill.hidden = true; return; } voiceShow(m.ok ? 'done' : 'fail', m.msg || (m.ok ? 'OK' : 'Didn’t catch that')); }
+    else if (m.type === 'play-entry') {
+      if (!$('#settings').hidden) closeSettings();
+      if (!$('#modal').hidden) closeModal();
+      if (mode === 'parlor') toggleMode();
+      const e = fullEntry(m.key);
+      if (e) playEntry(e);
+    } else if (m.type === 'status' || m.type === 'level') voiceListeners.forEach((f) => f(m));
+  });
+  const voiceListeners = new Set();
+  if (api.onVoiceMusic) api.onVoiceMusic(() => { if (mode === 'parlor' && parlorUI && $('#settings').hidden && $('#modal').hidden) parlorUI.showNowPlaying(); });
 
   // Focus rings show while navigating with remote/keyboard/gamepad, and hide again when the mouse is used.
   window.addEventListener('mousedown', () => document.body.classList.remove('navmode'));

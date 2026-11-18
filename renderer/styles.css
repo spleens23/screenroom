@@ -1018,3 +1018,25 @@ html:has(> body.tv), body.tv, body.tv #modal, body.tv #settings { overflow-x: hi
 .holiday-pick { flex-wrap: nowrap; min-width: 0; max-width: 100%; }
 html body .holiday-pick select.hol-select { font-size: 13px; padding: 4px 8px; width: auto; max-width: 180px; min-width: 0; border-radius: 8px; }
 html body.big .holiday-pick select.hol-select { font-size: 15px; padding: 6px 10px; max-width: 220px; }
+
+/* ---- voice control: the pill at the bottom of the screen, and Settings → Voice control ---- */
+#voice-pill { position: fixed; left: 50%; bottom: 17vh; transform: translateX(-50%); z-index: 2000; display: flex; align-items: center; gap: 12px;
+  max-width: min(80vw, 900px); padding: 12px 22px; border-radius: 999px; background: rgba(18, 18, 22, 0.92); color: #fff; font-size: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); pointer-events: none; animation: vp-in .18s ease-out; }
+#voice-pill[hidden] { display: none; }
+#voice-pill .vp-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#voice-pill .vp-dot { width: 12px; height: 12px; border-radius: 50%; background: #9aa; flex: none; }
+#voice-pill.vp-listening .vp-dot { background: #ff4d5e; animation: vp-pulse 1s ease-in-out infinite; }
+#voice-pill.vp-heard .vp-dot { background: #ffc24d; }
+#voice-pill.vp-done .vp-dot { background: #3ddc84; }
+#voice-pill.vp-fail .vp-dot { background: #ff8a3d; }
+@keyframes vp-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: .6; } }
+@keyframes vp-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+html body.big #voice-pill { font-size: 26px; padding: 16px 30px; }
+.voice-meter { height: 8px; border-radius: 4px; background: rgba(127, 127, 127, 0.25); overflow: hidden; margin: 6px 0 4px; max-width: 420px; }
+.voice-meter i { display: block; height: 100%; width: 0; background: #9aa; transition: width .1s linear; }
+.voice-meter.speech i { background: #3ddc84; }
+.voice-card .voice-help summary { cursor: pointer; margin: 6px 0; }
+.voice-card .voice-help ul { margin: 4px 0 8px 18px; padding: 0; line-height: 1.6; }
+.voice-card .voice-try { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.voice-card .voice-try input { flex: 1 1 260px; min-width: 0; }

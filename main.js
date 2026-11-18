@@ -12,6 +12,7 @@ const system = require('./lib/system');
 const audio = require('./lib/audio');
 const cleanup = require('./lib/cleanup');
 const { setupParlor } = require('./lib/parlor-ipc');
+const { setupVoice } = require('./lib/voice');
 const { Profiles } = require('./lib/profiles');
 const { Ratings } = require('./lib/ratings');
 const { Recommendations } = require('./lib/social');
@@ -399,6 +400,7 @@ function watchedBy() {
   }
   return out;
 }
+let voice = null;
 let parlorApi = null;
 let mediaRoot = null;
 
@@ -673,7 +675,26 @@ app.whenReady().then(async () => {
     currentProfile, profilesList: () => profiles.list(), isMoviePlaying: () => playing,
     soundDevice: async () => (await soundFor()).audioDevice || '', sound: async () => ({ ...(await soundFor()), truehdPassthrough: config.truehdPassthrough, dtsPassthrough: config.dtsPassthrough }), mediaRoot: () => mediaRoot, drives: () => drives,
     exclusiveAudio: isAppliance,
+    onRoom: (room) => { if ((config.lastSonosRoom || {}).id !== room.id) { config.lastSonosRoom = room; writeJson(cfgFile(), config); } },
   });
+  // Voice control (the Linux box, with a USB microphone): see lib/voice.js
+  if (process.platform === 'linux' && EDITION === 'all') {
+    const waitFor = (test, ms) => new Promise((resolve) => { const t0 = Date.now(); const iv = setInterval(() => { if (test() || Date.now() - t0 > ms) { clearInterval(iv); resolve(test()); } }, 100); });
+    voice = setupVoice({
+      dir: app.isPackaged ? path.join(process.resourcesPath, 'voice') : path.join(__dirname, 'voice'),
+      getConfig: () => config,
+      setConfig: (patch) => { Object.assign(config, patch); writeJson(cfgFile(), config); },
+      send: sendWin, parlor: parlorApi.voice, films: remoteLibrary, isFilmPlaying: () => playing, control,
+      playEntry: async (key) => { sendWin('voice', { type: 'play-entry', key }); await waitFor(() => playing, 8000); },
+      stopFilm: async () => { control(['quit']); await waitFor(() => !playing, 6000); await new Promise((r) => setTimeout(r, 600)); },
+    });
+    app.on('will-quit', () => voice && voice.quit());
+  }
+  ipcMain.handle('voice-status', () => (voice ? voice.status() : null));
+  ipcMain.handle('voice-set', (_e, patch) => (voice ? voice.set(patch || {}) : null));
+  ipcMain.handle('voice-levels', (_e, on) => { if (voice) voice.levels(on); });
+  ipcMain.handle('voice-rooms', async () => (voice ? voice.rooms() : []));
+  ipcMain.handle('voice-try', async (_e, text) => (voice ? voice.simulate(String(text || '')) : null));
   // Parlor on its own (Windows): start with the Music folder, if there is one.
   if (firstRun && EDITION === 'music') parlorApi.addFolder(path.join(os.homedir(), 'Music'));
   win.webContents.once('did-finish-load', () => setTimeout(() => { backgroundScan(); parlorApi.rescan().catch(() => {}); }, 1500));
