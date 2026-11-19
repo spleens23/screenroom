@@ -1632,7 +1632,7 @@ window.createParlor = function createParlor(ctx) {
           const before = P.albums.length;
           P = await api.parlorRescan(); draw(); render(); drawBar(true);
           let mc = '';
-          try { if (api.parlorMotionReport) { const rep = await api.parlorMotionReport(); mc = `, ${rep.length === 1 ? '1 moving cover' : rep.length + ' moving covers'}`; } } catch (err) { mc = ', moving covers not checked'; }
+          try { if (api.parlorMotionReport) { const rep = await api.parlorMotionReport(); const n = rep.filter((r) => r.status !== 'notused').length; mc = `, ${n === 1 ? '1 moving cover' : n + ' moving covers'}`; } } catch (err) { mc = ', moving covers not checked'; }
           ctx.flash(`Rescanned: ${plural(P.albums.length, 'album')}${P.albums.length !== before ? ` (${P.albums.length > before ? '+' : ''}${P.albums.length - before})` : ''}${mc}`);
         } }, 'Rescan music') : null));
       // what the last scan found, so it's clear whether it saw a new file (and why a file was left out)
@@ -1662,9 +1662,15 @@ window.createParlor = function createParlor(ctx) {
         const rep = await api.parlorMotionReport();
         const here = window.S_IOS ? 'the phone' : 'this computer';
         const say = { plays: 'plays', fixed: `plays (Parlor made a copy ${here} can play)`, unplayable: `can't be played on ${here}`,
-          unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover' };
+          unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover', notused: 'isn\'t used:' };
         const win = { playing: ' · played on screen ✓', error: ' · the screen couldn\'t play it', hidden: ' · not shown' };
-        box.append(h('p', { class: 'am-hint' }, rep.length ? 'Moving covers found in the last scan:' : 'No moving covers found in the last scan. Put a video called cover.mp4 in an album\'s folder, next to its songs, then tap Rescan music.'));
+        const used = rep.filter((r) => r.status !== 'notused');
+        box.append(h('p', { class: 'am-hint' }, used.length ? `Moving covers found in the last scan (${used.length}):` : 'No moving covers found in the last scan. Put a video called cover.mp4 in an album\'s folder, next to its songs, then tap Rescan music.'));
+        if (api.parlorFolderReport) {
+          const sr = await api.parlorFolderReport().catch(() => null);
+          if (sr) box.append(h('details', { class: 'scan-folders' }, h('summary', {}, `Music folders scanned: ${sr.albums} albums, ${sr.videos} video files in album folders`),
+            h('ul', { class: 'motion-report' }, sr.dirs.map((d) => h('li', {}, h('b', {}, d.dir), ` · ${d.exists ? `${plural(d.songs, 'song')}, ${plural(d.videos, 'video')}` : 'not found'}`)))));
+        }
         if (rep.length) box.append(h('ul', { class: 'motion-report' }, rep.map((r) =>
           h('li', {}, h('b', {}, `${r.album} / ${r.file}`), ` ${say[r.status] || r.status}`, r.window ? `${win[r.window] || ''}` : '', r.detail ? h('span', { class: 'mr-d' }, ` · ${r.detail}`) : null,
             r.windowDetail ? h('span', { class: 'mr-d' }, ` · ${r.windowDetail}`) : null))));

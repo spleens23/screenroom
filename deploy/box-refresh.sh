@@ -74,12 +74,42 @@ EOF
 # Older Screenroom versions switched sleep off completely.
 systemctl unmask sleep.target suspend.target >/dev/null 2>&1 || true
 systemctl mask hibernate.target hybrid-sleep.target suspend-then-hibernate.target >/dev/null 2>&1 || true
+IS_LAPTOP=0
+ls /sys/class/power_supply/ 2>/dev/null | grep -qi '^BAT' && IS_LAPTOP=1
+if [ "$IS_LAPTOP" = 1 ]; then
+  # Laptops: a real sleep with the lid closed. Only the lid, the power button and the laptop's own keyboard wake it
+  # (USB devices waking it in a bag drain the battery), and "deep" sleep (S3), which uses next to no power, where
+  # the laptop has it, rather than the lighter "s2idle".
+  cat > /etc/udev/rules.d/90-screenroom-wake.rules <<'WAKE'
+ACTION=="add", SUBSYSTEM=="usb", TEST=="power/wakeup", ATTR{power/wakeup}="disabled"
+WAKE
+  if grep -qw deep /sys/power/mem_sleep 2>/dev/null; then
+    cat > /etc/tmpfiles.d/screenroom-sleep.conf <<'SLP'
+w- /sys/power/mem_sleep - - - - deep
+SLP
+    in_chroot || echo deep > /sys/power/mem_sleep 2>/dev/null || true
+  fi
+  if ! in_chroot; then
+    for w in /sys/bus/usb/devices/*/power/wakeup; do [ -e "$w" ] && echo disabled > "$w" 2>/dev/null; done
+  fi
+  # Wi-Fi and Bluetooth off while asleep, back on when it wakes (some cards otherwise keep a laptop half awake)
+  mkdir -p /usr/lib/systemd/system-sleep
+  cat > /usr/lib/systemd/system-sleep/screenroom <<'HOOK'
+#!/bin/sh
+case "$1" in
+  pre) rfkill block wlan bluetooth 2>/dev/null || true ;;
+  post) rfkill unblock wlan bluetooth 2>/dev/null || true ;;
+esac
+HOOK
+  chmod 0755 /usr/lib/systemd/system-sleep/screenroom
+else
 # Wake up from a USB keyboard / 2.4 GHz remote too (the BIOS may also need "wake from USB" allowed).
 cat > /etc/udev/rules.d/90-screenroom-wake.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{bDeviceClass}=="09", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
 ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", DRIVER=="usbhid", ATTR{bInterfaceProtocol}=="01", RUN+="/bin/sh -c 'echo enabled > /sys%p/../power/wakeup'"
 ACTION=="add", SUBSYSTEM=="pci", ATTR{class}=="0x0c0330", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
 EOF
+fi
 # Laptops: the brightness keys (Screenroom sets the screen's brightness itself; no desktop does it for us).
 cat > /etc/udev/rules.d/90-screenroom-backlight.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"

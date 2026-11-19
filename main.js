@@ -654,6 +654,23 @@ app.whenReady().then(async () => {
   // Going to sleep (power button or Settings): pause the film so it's where you left it when the box wakes.
   powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
   powerMonitor.on('resume', () => { lastResume = Date.now(); });
+  // Laptops: the lid closed, on battery, with nothing playing for two minutes → sleep. (The system sleeps on the lid
+  // by itself; this is for when it didn't: a TV still plugged in counts as "docked", or something kept it awake.)
+  if (process.platform === 'linux' && isAppliance()) {
+    let closedSince = 0;
+    setInterval(() => {
+      let lid = '';
+      try { const d = '/proc/acpi/button/lid'; for (const n of fs.readdirSync(d)) lid += fs.readFileSync(path.join(d, n, 'state'), 'utf8'); } catch { return; }
+      const b = battery();
+      let music = false; try { music = !!(parlorApi && parlorApi.voice && parlorApi.voice.playing()); } catch {}
+      if (!/closed/i.test(lid) || !b || b.charging || playing || music) { closedSince = 0; return; }
+      if (!closedSince) { closedSince = Date.now(); return; }
+      if (Date.now() - closedSince >= 120000 && Date.now() - (lastResume || 0) > 120000) {
+        closedSince = 0;
+        execFile('systemctl', ['suspend'], () => {});
+      }
+    }, 30000).unref();
+  }
   if (isAppliance()) startKeys();
   const firstRun = !fs.existsSync(cfgFile());
   config = { ...defaults, ...readJson(cfgFile(), {}) };

@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('api', {
   sonosRooms: () => ipcRenderer.invoke('sonos-rooms'),
   sonosUse: (id) => ipcRenderer.invoke('sonos-use', id || ''),
   parlorMotionReport: () => ipcRenderer.invoke('parlor-motion-report'),
+  parlorFolderReport: () => ipcRenderer.invoke('parlor-folder-report'),
   parlorMotionSeen: (key, status, detail) => ipcRenderer.invoke('parlor-motion-seen', key, status, detail),
   onParlorMotionProbe: (cb) => ipcRenderer.on('parlor-motion-probe', (_e, list) => cb(list)),
   onMusicState: (cb) => ipcRenderer.on('music-state', (_e, s) => cb(s)),
