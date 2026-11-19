@@ -25,6 +25,10 @@
     padding: 11px 20px; display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; outline: none; transition: background .15s, transform .15s, color .15s; }
   button svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
   button.focus { background: #fff; color: #0d0e13; transform: scale(1.04); }
+  .volbar { display: none; width: 220px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.16); overflow: hidden; align-self: center; }
+  .volbar i { display: block; height: 100%; width: 0; background: #fff; transition: width .15s; }
+  body.peek .volbar { display: block; }
+  body.peek .where { color: #fff; }
   .hint { margin-left: auto; align-self: center; font-size: 14px; color: rgba(255,255,255,.45); white-space: nowrap; }
   .hint b { font-weight: 600; color: rgba(255,255,255,.7); }
 </style>
@@ -33,7 +37,7 @@
 <div class="wrap">
   <div class="poster none" id="poster"></div>
   <div class="main">
-    <div class="top"><h1 id="title">DVD</h1><span class="where" id="where"></span></div>
+    <div class="top"><h1 id="title">DVD</h1><span class="where" id="where"></span><span class="volbar"><i id="vol"></i></span></div>
     <div class="bar"><span id="at">0:00</span><div class="track"><div class="fill" id="fill"></div></div><span id="len"></span></div>
     <div class="btns" id="btns"></div>
   </div>

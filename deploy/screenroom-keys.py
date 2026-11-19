@@ -43,11 +43,12 @@ for name, codes in {
     "ffwd": ["KEY_FASTFORWARD", "KEY_FORWARD"], "rew": ["KEY_REWIND"],
     "audio": ["KEY_LANGUAGE", "KEY_AUDIO"], "subtitle": ["KEY_SUBTITLE"],
     "eject": ["KEY_EJECTCD", "KEY_EJECTCLOSECD"],
+    "volup": ["KEY_VOLUMEUP"], "voldown": ["KEY_VOLUMEDOWN"],
 }.items():
     for c in codes:
         if hasattr(e, c):
             NAV[getattr(e, c)] = name
-NAV_REPEATS = {"up", "down", "left", "right", "ffwd", "rew"}
+NAV_REPEATS = {"up", "down", "left", "right", "ffwd", "rew", "volup", "voldown"}
 nav_on = False
 
 
