@@ -821,3 +821,28 @@ html body:not(#_) #npfull .npf-volin:focus-visible { outline: 2px solid rgba(255
 html body:not(#_) #npfull.on-speaker .npf-ctrl .npb.vol, html body:not(#_) #npfull.on-speaker .npf-ctrl .npf-vol { display: none; }
 /* the "Stereo · Downmixed" label */
 html body:not(#_) #npfull .npf-q.downmix { color: rgba(255,255,255,.8); }
+
+/* -- a TV or computer: Now Playing with a moving cover looks like the iPad on its side. The cover fills the left of
+      the screen at full brightness, its edges fade away, and its right edge melts into the controls -- */
+@media (min-width: 601px) and (orientation: landscape) and (not (pointer: coarse)) {
+  html body:not(#_) #npfull { --mv: min(100vh, 52vw); }
+  html body:not(#_) #npfull.has-motion:not(.big) .npf { grid-template-columns: calc(var(--mv) * .9) minmax(0, 540px); justify-content: start; padding-left: 0; gap: 4vw; }
+  html body:not(#_) #npfull.has-motion:not(.big) .npf-stage { visibility: hidden; }
+  html body:not(#_) #npfull.has-motion .npf-side { position: relative; z-index: 3; text-shadow: 0 1px 12px rgba(0,0,0,.35); }
+  html body:not(#_) #npfull.has-motion .npf-bg { filter: blur(60px) saturate(1.7) brightness(.74); }
+  html body:not(#_) #npfull:not(.big) .npf-motion { inset: 50% auto auto 0; width: var(--mv); height: var(--mv); transform: translateY(-50%); object-fit: cover; filter: none;
+    -webkit-mask-image: linear-gradient(to right, #000 82%, rgba(0,0,0,.5) 92%, transparent), linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to right, #000 82%, rgba(0,0,0,.5) 92%, transparent), linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+    mask-composite: intersect; }
+  html body:not(#_) #npfull .npf-melt { position: absolute; z-index: 1; top: 0; bottom: 0; left: calc(var(--mv) * .84); width: calc(var(--mv) * .3); pointer-events: none; display: none;
+    backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 50%, transparent); mask-image: linear-gradient(to right, transparent, #000 50%, transparent); }
+  html body:not(#_) #npfull.has-motion:not(.queue-open):not(.big) .npf-melt { display: block; }
+  /* the queue in the cover's place: the cover dims behind it */
+  html body:not(#_) #npfull.has-motion.queue-open .npf-motion.on { opacity: .18; }
+  /* the queue's top and bottom fade out as it scrolls, as on the phone */
+  html body:not(#_) #npfull .npf-queue {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 32px), transparent); }
+}
