@@ -758,66 +758,46 @@
     return out;
   }
 
-  // ---- a DVD in the drive: it takes the big picture's place at the top of the home screen ------------------------
+  // ---- a DVD in the drive: a spinning disc beside the other buttons at the top; press it to play or eject ----
   let dvd = null;
-  function dvdHero() {
-    if (!dvd || EDITION !== 'all') return null;
-    const d = dvd;
-    const busy = d.probing;
-    const bits = [d.year, d.rating, d.runtime, d.genre].filter(Boolean);
-    const playBtn = h('button', { class: 'btn primary dvd-play', disabled: busy || d.playing ? true : null, onclick: () => dvdPlay(false) },
-      h('span', { class: 'ico-play', 'aria-hidden': 'true' }), busy ? 'Reading the disc…' : d.playing ? 'Playing' : 'Play Disc');
-    return h('section', { class: 'dvd-hero' + (d.poster ? '' : ' no-art') },
-      d.poster ? h('div', { class: 'dvd-bg', style: bg(d.poster) }) : h('div', { class: 'dvd-bg plain' }),
-      h('div', { class: 'dvd-case' }, d.poster ? h('img', { src: fileUrl(d.poster), alt: '' }) : h('div', { class: 'dvd-blank' }, h('span', {}, d.title)), h('i', { class: 'dvd-shine' })),
-      h('div', { class: 'dvd-info' },
-        h('div', { class: 'dvd-kicker' }, h('span', { class: 'dvd-logo' }, 'DVD'), 'In the disc drive'),
-        h('h1', {}, d.title),
-        bits.length ? h('div', { class: 'meta' }, bits.map((b) => h('span', {}, b))) : null,
-        d.overview ? h('p', { class: 'dvd-desc' }, d.overview) : null,
-        d.problem ? h('p', { class: 'dvd-note warn' }, d.problem) : null,
-        d.setup && d.setup.state !== 'done' ? h('p', { class: 'dvd-note' }, d.setup.message) : null,
-        h('div', { class: 'btns' },
-          playBtn,
-          d.resume && !busy ? h('button', { class: 'btn secondary', onclick: () => dvdPlay(true) }, `Resume from ${d.resume.at}`) : null,
-          h('button', { class: 'btn secondary', onclick: async () => { flash('Ejecting…'); await api.dvdEject(); } }, 'Eject'))));
+  function drawDvdBtn() {
+    const b = $('#dvd-btn');
+    if (!b) return;
+    const show = !!dvd && EDITION === 'all' && mode !== 'parlor';
+    const wasHidden = b.hidden;
+    b.hidden = !show;
+    b.classList.toggle('reading', !!(dvd && dvd.probing));
+    b.title = dvd ? (dvd.probing ? 'Reading the DVD…' : `DVD: ${dvd.title}`) : 'DVD';
+    if (show && wasHidden) { b.classList.remove('arrive'); void b.offsetWidth; b.classList.add('arrive'); }
+  }
+  async function dvdMenu() {
+    if (!dvd) return;
+    if (dvd.probing) { flash('Reading the disc…'); return; }
+    const choices = [{ label: 'Play Disc', value: 'play' }];
+    if (dvd.resume) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
+    choices.push({ label: 'Eject', value: 'eject' });
+    const notes = [dvd.problem, dvd.setup && dvd.setup.state !== 'done' ? dvd.setup.message : ''].filter(Boolean).join(' ');
+    const v = await askChoice(dvd.title === 'DVD' ? 'DVD' : `DVD: ${dvd.title}`, choices, undefined, notes || null);
+    if (v === 'play' || v === 'resume') dvdPlay(v === 'resume');
+    else if (v === 'eject') { flash('Ejecting…'); await api.dvdEject(); }
   }
   async function dvdPlay(resume) {
     const r = await api.dvdPlay({ resume });
     if (r && !r.ok) showNotice('Can\'t play the DVD', r.error || 'Something went wrong.');
   }
   if (api.onDvdState) {
-    api.dvdState().then((d) => {
-      dvd = d;
-      if (dvd && view === 'home' && mode !== 'parlor' && $('#modal').hidden) {
-        render();
-        const go = () => { const b = document.querySelector('.dvd-play'); const a = document.activeElement; if (b && (!a || a === document.body)) focusEl(b); };
-        go(); setTimeout(go, 800); setTimeout(go, 2500);
-      }
-    }).catch(() => {});
+    const btn = $('#dvd-btn');
+    if (btn) btn.onclick = dvdMenu;
+    api.dvdState().then((d) => { dvd = d; drawDvdBtn(); }).catch(() => {});
     api.onDvdState((d) => {
       const was = dvd;
       dvd = d;
-      const onHome = view === 'home' && !query && mode !== 'parlor' && $('#modal').hidden && $('#settings').hidden && !S.pickProfile;
-      const hero = document.querySelector('.dvd-hero');
-      if (!onHome) return;
-      // a disc just went in: the home screen shows it, with Play Disc ready to press
-      if (d && !was) {
-        render(); window.scrollTo(0, 0);
-        const b = document.querySelector('.dvd-play'); if (b) focusEl(b);
-        return;
-      }
-      if (!d && was) { renderKeepFocus(); return; }
-      if (hero && d) {
-        const focused = document.activeElement && hero.contains(document.activeElement) ? [...hero.querySelectorAll('button')].indexOf(document.activeElement) : -1;
-        hero.replaceWith(dvdHero());
-        if (focused >= 0) { const bs = document.querySelectorAll('.dvd-hero button'); const b = bs[Math.min(focused, bs.length - 1)]; if (b && !b.disabled) b.focus({ preventScroll: true }); else { const p = document.querySelector('.dvd-play'); if (p) p.focus({ preventScroll: true }); } }
-      }
+      drawDvdBtn();
+      if (d && !was) flash('DVD inserted');
     });
     api.onDvdEnded && api.onDvdEnded((problem) => {
       lastInput = Date.now(); hidePointer(2000);
       if (problem) showNotice('The DVD stopped', problem);
-      else { const b = document.querySelector('.dvd-play'); if (b) b.focus({ preventScroll: true }); }
     });
   }
 
@@ -825,9 +805,7 @@
     const rows = rowsFor();
     const hero = pickHero(rows);
     const frag = [];
-    const disc = dvdHero();
-    if (disc) frag.push(disc);
-    else if (hero) {
+    if (hero) {
       frag.push(h('section', { class: 'hero', style: bg(hero.backdrop) },
         h('div', { class: 'hero-info' },
           h('h1', {}, hero.name),
@@ -870,14 +848,15 @@
     document.body.classList.toggle('big', !!S.tv || !!(S.config && S.config.bigUi));
     drawProfileButton();
     drawBattery(S.battery);
+    drawDvdBtn();
     const vb = $('#vote-btn');
     if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = isIOS() || mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; } // (no movie-night vote on iPhone / iPad: it's for the TV)
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
     if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }
-    if (rwOn()) { if (!S.library.length) { renderEmpty(); } else RW.render(); if (view === 'home' && !query) { const dh = dvdHero(); if (dh) main.prepend(dh); } return; }
+    if (rwOn()) { if (!S.library.length) return renderEmpty(); return RW.render(); }
     $('#nav').classList.toggle('solid', view !== 'home' || !!query);
-    if (!S.library.length) { renderEmpty(); if (view === 'home' && !query) { const dh = dvdHero(); if (dh) main.prepend(dh); } return; }
+    if (!S.library.length) return renderEmpty();
     if (query) return renderGrid(`Results for “${query}”`, catalogOf(matches));
     if (view === 'all') return renderGrid('Library', catalogOf());
     if (VIEWS[view]) return renderGrid(VIEWS[view][0], catalogOf(VIEWS[view][1]));
