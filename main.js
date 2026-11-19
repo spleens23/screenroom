@@ -13,6 +13,7 @@ const audio = require('./lib/audio');
 const cleanup = require('./lib/cleanup');
 const { setupParlor } = require('./lib/parlor-ipc');
 const { setupVoice } = require('./lib/voice');
+const dvdPlayer = require('./lib/dvd');
 const { Profiles } = require('./lib/profiles');
 const { Ratings } = require('./lib/ratings');
 const { Recommendations } = require('./lib/social');
@@ -277,12 +278,54 @@ function onPowerButton() {
   if (playing) control(['script-message', 'nf-power']);
   else { if (win && !win.isDestroyed()) win.focus(); sendWin('power-menu'); }
 }
+// ---- the DVD controls: a panel along the bottom of the screen, over the film (renderer/dvd-overlay.html) ----
+let dvdWin = null;
+function dvdOverlay(what, payload) {
+  if (what === 'close') {
+    if (dvdWin && !dvdWin.isDestroyed()) dvdWin.hide();
+    return;
+  }
+  if (what === 'state') { if (dvdWin && !dvdWin.isDestroyed()) dvdWin.webContents.send('dvd-overlay-state', payload); return; }
+  if (what === 'key') { if (dvdWin && !dvdWin.isDestroyed()) dvdWin.webContents.send('dvd-overlay-key', payload); return; }
+  // open
+  const d = screen.getDisplayMatching((win && !win.isDestroyed()) ? win.getBounds() : screen.getPrimaryDisplay().bounds) || screen.getPrimaryDisplay();
+  const b = d.bounds;
+  const height = Math.round(Math.max(220, Math.min(320, b.height * 0.26)));
+  const show = () => {
+    dvdWin.setBounds({ x: b.x, y: b.y + b.height - height, width: b.width, height });
+    dvdWin.webContents.send('dvd-overlay-open', payload);
+    dvdWin.setAlwaysOnTop(true, 'screen-saver');
+    // (focused, so the window manager lets it above the full-screen film; the remote's keys come through Screenroom)
+    dvdWin.show(); dvdWin.focus();
+  };
+  if (dvdWin && !dvdWin.isDestroyed()) { show(); return; }
+  dvdWin = new BrowserWindow({
+    x: b.x, y: b.y + b.height - height, width: b.width, height, show: false, frame: false, resizable: false, movable: false,
+    skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#0d0e13', title: 'DVD',
+    webPreferences: { preload: path.join(__dirname, 'lib', 'dvd-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  dvdWin.setMenuBarVisibility(false);
+  dvdWin.on('closed', () => { dvdWin = null; });
+  dvdWin.loadFile(path.join(__dirname, 'renderer', 'dvd-overlay.html'));
+  dvdWin.webContents.once('did-finish-load', show);
+}
+
+// The remote's buttons while a DVD plays (the DVD player window has the screen; see lib/dvd.js)
+let keysChild = null, keysNav = false;
+function setKeysNav(on) {
+  keysNav = !!on;
+  if (keysChild) try { keysChild.stdin.write(on ? 'nav on\n' : 'nav off\n'); } catch {}
+  return !!keysChild || !!process.env.SCREENROOM_DVD_TEST;
+}
 function startKeys() {
   const script = ['/usr/local/bin/screenroom-keys', path.join(process.resourcesPath || '', 'deploy', 'screenroom-keys.py'), path.join(__dirname, 'deploy', 'screenroom-keys.py')]
     .find((f) => { try { return fs.statSync(f).isFile(); } catch { return false; } });
   if (!script) return;
   let child;
-  try { child = spawn('python3', [script], { stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return; }
+  try { child = spawn('python3', [script], { stdio: ['pipe', 'pipe', 'ignore'] }); } catch { return; }
+  keysChild = child;
+  child.stdin.on('error', () => {});
+  if (keysNav) try { child.stdin.write('nav on\n'); } catch {}
   let buf = '';
   child.stdout.on('data', (d) => {
     buf += d;
@@ -291,11 +334,12 @@ function startKeys() {
       const w = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
       if (w === 'power') onPowerButton();
       else if (w === 'brightness_up' || w === 'brightness_down') stepBrightness(w === 'brightness_up');
+      else if (w.startsWith('key ') && dvd) dvd.key(w.slice(4), 'remote');
     }
   });
   child.on('error', () => {});
   // stopped (python3-evdev missing, crashed): try again in a while
-  child.on('exit', () => setTimeout(startKeys, 30000));
+  child.on('exit', () => { if (keysChild === child) keysChild = null; setTimeout(startKeys, 30000); });
   app.on('will-quit', () => { try { child.kill(); } catch {} });
 }
 
@@ -403,6 +447,7 @@ function watchedBy() {
 }
 let voice = null;
 let parlorApi = null;
+let dvd = null; // DVDs (the TV box): lib/dvd.js
 let mediaRoot = null;
 
 async function ensureMediaDir() {
@@ -576,10 +621,12 @@ const remoteHandlers = {
     return it ? (it.art || it.backdrop) : null;
   },
   key: (k) => {
+    if (dvd && dvd.active()) { dvd.key(k); return; }
     if (playing) { const c = PLAYER_KEYS[k]; if (c) control(c); return; }
     tell({ type: 'key', key: k });
   },
   player: (cmd) => {
+    if (dvd && dvd.active()) { dvd.cmd({ pause: 'playpause', stop: 'stop', next: 'next', seekfwd: 'ffwd', seekback: 'rew', volup: 'volup', voldown: 'voldown', audio: 'audio', subs: 'subtitle' }[cmd] || cmd); return; }
     // No film playing: the phone's play/pause, skip and volume buttons work the Parlor's music instead.
     if (!playing && parlorApi) {
       const m = { pause: 'toggle', next: 'next', seekfwd: 'next', seekback: 'prev', volup: 'volup', voldown: 'voldown', stop: 'toggle' }[cmd];
@@ -690,11 +737,24 @@ app.whenReady().then(async () => {
   // Parlor: each profile's music (see lib/parlor-ipc.js)
   parlorApi = setupParlor({
     ipcMain, dialog, getWin: () => win, dataDir, toolPaths, findMpv: () => findBinary('mpv', config.mpvPath),
-    currentProfile, profilesList: () => profiles.list(), isMoviePlaying: () => playing,
+    currentProfile, profilesList: () => profiles.list(), isMoviePlaying: () => playing || !!(dvd && dvd.active()),
     soundDevice: async () => (await soundFor()).audioDevice || '', sound: async () => ({ ...(await soundFor()), truehdPassthrough: config.truehdPassthrough, dtsPassthrough: config.dtsPassthrough }), mediaRoot: () => mediaRoot, drives: () => drives,
     exclusiveAudio: isAppliance,
     onRoom: (room) => { if ((config.lastSonosRoom || {}).id !== room.id) { config.lastSonosRoom = room; writeJson(cfgFile(), config); } },
   });
+  // DVDs: a disc in the drive shows on the home screen and plays in VLC with its own menus (lib/dvd.js)
+  if (process.platform === 'linux' && EDITION === 'all') {
+    dvd = dvdPlayer({
+      dataDir, send: sendWin, sound: soundFor, keysNav: setKeysNav,
+      lang: () => { const p = currentProfile() || {}; return { audio: p.preferredLang || config.preferredLang || '', sub: p.subLang || config.subLang || '' }; },
+      overlay: dvdOverlay,
+      onStart: () => { if (parlorApi) parlorApi.pause(); },
+      onEnd: (problem) => { sendWin('dvd-ended', problem || ''); if (win && !win.isDestroyed()) win.focus(); },
+    });
+    dvd.start();
+    // (the automated check: the remote's buttons, as if pressed)
+    if (process.env.SCREENROOM_DVD_TEST) ipcMain.handle('dvd-test-key', (_e, k) => dvd.key(k));
+  }
   // Voice control (the Linux box, with a USB microphone): see lib/voice.js
   if (process.platform === 'linux' && EDITION === 'all') {
     const waitFor = (test, ms) => new Promise((resolve) => { const t0 = Date.now(); const iv = setInterval(() => { if (test() || Date.now() - t0 > ms) { clearInterval(iv); resolve(test()); } }, 100); });
@@ -1111,8 +1171,16 @@ app.whenReady().then(async () => {
     execFile('systemctl', [action], (err) => resolve(err ? { ok: false, error: err.message } : { ok: true }));
   }));
 
-  ipcMain.handle('play', async (_e, { id, audioTrack, fromStart, accent }) => {
+  ipcMain.handle('dvd-state', () => (dvd ? dvd.state() : null));
+  ipcMain.handle('dvd-play', async (_e, o) => {
+    if (!dvd) return { ok: false, error: 'DVDs play on the TV box.' };
     if (playing) return { ok: false, error: 'Something is already playing.' };
+    return dvd.play(o || {});
+  });
+  ipcMain.handle('dvd-eject', async () => (dvd ? dvd.eject() : { ok: false }));
+  ipcMain.handle('dvd-cmd', (_e, c) => (dvd ? dvd.cmd(String(c || '')) : false));
+  ipcMain.handle('play', async (_e, { id, audioTrack, fromStart, accent }) => {
+    if (playing || (dvd && dvd.active())) return { ok: false, error: 'Something is already playing.' };
     if (parlorApi) parlorApi.pause(); // music stops for the film
     const item = library.find((i) => i.id === id);
     if (!item) return { ok: false, error: 'Item not found' };

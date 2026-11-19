@@ -1,0 +1,46 @@
+#!/bin/bash
+# Screenroom: get the box ready to play DVDs, store-bought ones included. Safe to run again and again.
+#   - VLC (the DVD player, with the discs' own menus) and lsdvd (reads what's on a disc)
+#   - libdvdcss, which store-bought (CSS copy-protected) discs need. Debian doesn't ship it ready-made: its
+#     libdvd-pkg package downloads the source from VideoLAN and builds it on the box, so this needs internet once.
+# Started by box-refresh after each update, and by the app (screenroom-dvd-setup.service) when a disc goes in
+# before it's ready. Writes how it's going to /var/lib/screenroom/dvd-setup.json for the app.
+set -u
+export DEBIAN_FRONTEND=noninteractive
+STATUS=/var/lib/screenroom/dvd-setup.json
+mkdir -p /var/lib/screenroom
+status() { printf '{"state":"%s","message":"%s","at":%s}\n' "$1" "$2" "$(date +%s)" > "$STATUS.tmp" && mv -f "$STATUS.tmp" "$STATUS"; chmod 0644 "$STATUS" 2>/dev/null; echo "dvd setup: $1 $2"; }
+APT=(apt-get -o DPkg::Lock::Timeout=900 -y --no-install-recommends)
+have_css() { ls /usr/lib/*/libdvdcss.so.2 /usr/lib/libdvdcss.so.2 >/dev/null 2>&1; }
+online() { getent hosts deb.debian.org >/dev/null 2>&1 && getent hosts download.videolan.org >/dev/null 2>&1; }
+
+want=()
+for p in vlc-bin vlc-plugin-base vlc-plugin-video-output libdvdnav4 libdvdread8t64 lsdvd eject; do
+  apt-cache show "$p" >/dev/null 2>&1 || continue
+  dpkg -s "$p" >/dev/null 2>&1 || want+=("$p")
+done
+# (older Debian: libdvdread8 without the t64 suffix)
+dpkg -s libdvdread8t64 >/dev/null 2>&1 || dpkg -s libdvdread8 >/dev/null 2>&1 || { apt-cache show libdvdread8 >/dev/null 2>&1 && want+=(libdvdread8); }
+if [ "${#want[@]}" -gt 0 ]; then
+  status working "Installing the DVD player…"
+  "${APT[@]}" install "${want[@]}" || { apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true; "${APT[@]}" install "${want[@]}" || true; }
+fi
+
+if have_css; then status done "Ready for DVDs."; exit 0; fi
+# (setting up a new box from the installer: the rest is done on the box itself, online, after setup)
+if [ "${SCREENROOM_DVD_PLAYER_ONLY:-0}" = 1 ]; then status pending "Getting ready for store-bought DVDs once the box is online."; exit 0; fi
+if ! online; then status offline "Connect the box to the internet once to finish getting ready for store-bought DVDs."; exit 0; fi
+
+status working "Getting ready for store-bought DVDs (one time, a few minutes)…"
+# libdvd-pkg: answer its questions up front (build now, and rebuild by itself when Debian updates it)
+echo "libdvd-pkg libdvd-pkg/first-install note" | debconf-set-selections
+echo "libdvd-pkg libdvd-pkg/post-invoke_hook-install boolean true" | debconf-set-selections
+echo "libdvd-pkg libdvd-pkg/build boolean true" | debconf-set-selections
+if ! dpkg -s libdvd-pkg >/dev/null 2>&1; then
+  "${APT[@]}" install libdvd-pkg || { apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true; "${APT[@]}" install libdvd-pkg || true; }
+fi
+if dpkg -s libdvd-pkg >/dev/null 2>&1 && ! have_css; then
+  dpkg-reconfigure -f noninteractive libdvd-pkg || true
+fi
+if have_css; then status done "Ready for DVDs."; else status error "Couldn't finish getting ready for store-bought DVDs. It tries again after the next update, or when a disc goes in."; fi
+exit 0

@@ -222,4 +222,36 @@ if ! in_chroot; then
   /usr/local/bin/screenroom-audio-setup
   alsactl store >/dev/null 2>&1 || true
 fi
+# ---- DVDs: VLC (plays discs with their own menus), libdvdcss for store-bought discs (screenroom-dvd-setup) ------
+if [ -f "$HERE/screenroom-dvd-setup" ]; then
+  install -m 0755 "$HERE/screenroom-dvd-setup" /usr/local/sbin/screenroom-dvd-setup
+  cat > /etc/systemd/system/screenroom-dvd-setup.service <<'EOF'
+[Unit]
+Description=Screenroom: get ready to play DVDs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/screenroom-dvd-setup
+EOF
+  TVU2="$(sed -n 's/.*subject.user == "\([^"]*\)".*/\1/p' /etc/polkit-1/rules.d/50-screenroom.rules 2>/dev/null | head -1)"
+  TVU2="${TVU2:-tv}"
+  cat > /etc/polkit-1/rules.d/52-screenroom-dvd.rules <<EOF
+polkit.addRule(function(action, subject) {
+  if (subject.user == "$TVU2" && action.id == "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("unit") == "screenroom-dvd-setup.service" && action.lookup("verb") == "start") {
+    return polkit.Result.YES;
+  }
+});
+EOF
+  # the disc drive: reading discs and ejecting them
+  getent group cdrom >/dev/null && id "$TVU2" >/dev/null 2>&1 && usermod -aG cdrom "$TVU2" || true
+  if in_chroot; then
+    SCREENROOM_DVD_PLAYER_ONLY=1 /usr/local/sbin/screenroom-dvd-setup || true
+  else
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl start --no-block screenroom-dvd-setup.service >/dev/null 2>&1 || true
+  fi
+fi
 echo "Screenroom box refresh done"

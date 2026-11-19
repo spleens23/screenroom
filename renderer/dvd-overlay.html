@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="fonts/matinee/matinee.css">
+<title>DVD</title>
+<style>
+  :root { --accent: #e9c46a; }
+  html, body { margin: 0; height: 100%; background: #0d0e13; color: #fff; overflow: hidden; cursor: none;
+    font-family: "DM Sans", "Noto Sans", sans-serif; -webkit-font-smoothing: antialiased; user-select: none; }
+  body { background: linear-gradient(180deg, #16171f 0%, #0d0e13 100%); border-top: 1px solid rgba(255,255,255,.08); }
+  .wrap { height: 100%; box-sizing: border-box; display: flex; gap: 32px; align-items: center; padding: 26px 4.5vw 28px; }
+  .poster { flex: 0 0 auto; height: 100%; aspect-ratio: 2 / 2.85; border-radius: 4px 7px 7px 4px; background: #1d1f2b center / cover; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .poster.none { display: none; }
+  .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; align-items: baseline; gap: 16px; }
+  h1 { margin: 0; font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 34px; letter-spacing: -.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .where { font-size: 17px; color: rgba(255,255,255,.65); white-space: nowrap; }
+  .bar { display: flex; align-items: center; gap: 14px; font-size: 15px; font-variant-numeric: tabular-nums; color: rgba(255,255,255,.75); }
+  .track { position: relative; flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.16); overflow: hidden; }
+  .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: #fff; border-radius: 3px; transition: width .4s linear; }
+  .btns { display: flex; gap: 10px; flex-wrap: nowrap; margin-top: 4px; }
+  button { font: inherit; font-size: 17px; font-weight: 500; color: #fff; background: rgba(255,255,255,.09); border: 0; border-radius: 999px;
+    padding: 11px 20px; display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; outline: none; transition: background .15s, transform .15s, color .15s; }
+  button svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
+  button.focus { background: #fff; color: #0d0e13; transform: scale(1.04); }
+  .hint { margin-left: auto; align-self: center; font-size: 14px; color: rgba(255,255,255,.45); white-space: nowrap; }
+  .hint b { font-weight: 600; color: rgba(255,255,255,.7); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="poster none" id="poster"></div>
+  <div class="main">
+    <div class="top"><h1 id="title">DVD</h1><span class="where" id="where"></span></div>
+    <div class="bar"><span id="at">0:00</span><div class="track"><div class="fill" id="fill"></div></div><span id="len"></span></div>
+    <div class="btns" id="btns"></div>
+  </div>
+</div>
+<script src="dvd-overlay.js"></script>
+</body>
+</html>

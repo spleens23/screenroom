@@ -72,6 +72,13 @@ contextBridge.exposeInMainWorld('api', {
   onPowerMenu: (cb) => ipcRenderer.on('power-menu', () => cb()),
   onBrightness: (cb) => ipcRenderer.on('brightness', (_e, p) => cb(p)),
   // Parlor (music)
+  // DVDs (the TV box)
+  dvdState: () => ipcRenderer.invoke('dvd-state'),
+  dvdPlay: (o) => ipcRenderer.invoke('dvd-play', o || {}),
+  dvdEject: () => ipcRenderer.invoke('dvd-eject'),
+  dvdTestKey: (k) => ipcRenderer.invoke('dvd-test-key', k), // (only answered during the automated check)
+  onDvdState: (cb) => ipcRenderer.on('dvd-state', (_e, s) => cb(s)),
+  onDvdEnded: (cb) => ipcRenderer.on('dvd-ended', (_e, p) => cb(p)),
   parlorState: () => ipcRenderer.invoke('parlor-state'),
   parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),
   parlorPin: (key, on) => ipcRenderer.invoke('parlor-pin', key, on),
