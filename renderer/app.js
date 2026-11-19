@@ -767,17 +767,17 @@
     const wasHidden = b.hidden;
     b.hidden = !show;
     b.classList.toggle('reading', !!(dvd && dvd.probing));
-    b.title = dvd ? (dvd.probing ? 'Reading the DVD…' : `DVD: ${dvd.title}`) : 'DVD';
+    b.title = dvd && dvd.probing ? 'Reading the DVD…' : 'DVD';
     if (show && wasHidden) { b.classList.remove('arrive'); void b.offsetWidth; b.classList.add('arrive'); }
   }
   async function dvdMenu() {
     if (!dvd) return;
     if (dvd.probing) { flash('Reading the disc…'); return; }
-    const choices = [{ label: 'Play Disc', value: 'play' }];
+    const choices = [{ label: 'Play DVD', value: 'play' }];
     if (dvd.resume) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
     choices.push({ label: 'Eject', value: 'eject' });
     const notes = [dvd.problem, dvd.setup && dvd.setup.state !== 'done' ? dvd.setup.message : ''].filter(Boolean).join(' ');
-    const v = await askChoice(dvd.title === 'DVD' ? 'DVD' : `DVD: ${dvd.title}`, choices, undefined, notes || null);
+    const v = await askChoice('DVD', choices, undefined, notes || null);
     if (v === 'play' || v === 'resume') dvdPlay(v === 'resume');
     else if (v === 'eject') { flash('Ejecting…'); await api.dvdEject(); }
   }

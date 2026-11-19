@@ -30,7 +30,7 @@
   ];
   function draw() {
     const s = state || {};
-    $('title').textContent = s.title || 'DVD';
+    $('title').textContent = 'DVD';
     const p = $('poster');
     if (s.poster) { p.classList.remove('none'); p.style.backgroundImage = `url("file://${encodeURI(s.poster)}")`; } else p.classList.add('none');
     const l = s.live || {};
