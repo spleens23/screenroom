@@ -1632,7 +1632,7 @@ window.createParlor = function createParlor(ctx) {
           const before = P.albums.length;
           P = await api.parlorRescan(); draw(); render(); drawBar(true);
           let mc = '';
-          try { if (api.parlorMotionReport) { const rep = await api.parlorMotionReport(); const n = rep.filter((r) => r.status !== 'notused').length; mc = `, ${n === 1 ? '1 moving cover' : n + ' moving covers'}`; } } catch (err) { mc = ', moving covers not checked'; }
+          try { if (api.parlorMotionReport) { const rep = await api.parlorMotionReport(); const n = rep.filter((r) => r.status !== 'notused').length; const left = rep.filter((r) => r.status === 'pending').length; mc = `, ${n === 1 ? '1 moving cover' : n + ' moving covers'}${left ? ` (${left} still being prepared, a minute or so each)` : ''}`; } } catch (err) { mc = ', moving covers not checked'; }
           ctx.flash(`Rescanned: ${plural(P.albums.length, 'album')}${P.albums.length !== before ? ` (${P.albums.length > before ? '+' : ''}${P.albums.length - before})` : ''}${mc}`);
         } }, 'Rescan music') : null));
       // what the last scan found, so it's clear whether it saw a new file (and why a file was left out)
@@ -1662,7 +1662,7 @@ window.createParlor = function createParlor(ctx) {
         const rep = await api.parlorMotionReport();
         const here = window.S_IOS ? 'the phone' : 'this computer';
         const say = { plays: 'plays', fixed: `plays (Parlor made a copy ${here} can play)`, unplayable: `can't be played on ${here}`,
-          unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover', notused: 'isn\'t used:' };
+          unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover', notused: 'isn\'t used:', pending: 'is being made into a copy the screen can play (it starts moving when that\'s done)' };
         const win = { playing: ' · played on screen ✓', error: ' · the screen couldn\'t play it', hidden: ' · not shown' };
         const used = rep.filter((r) => r.status !== 'notused');
         box.append(h('p', { class: 'am-hint' }, used.length ? `Moving covers found in the last scan (${used.length}):` : 'No moving covers found in the last scan. Put a video called cover.mp4 in an album\'s folder, next to its songs, then tap Rescan music.'));

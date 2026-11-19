@@ -2993,7 +2993,7 @@
     if (!$('#settings').hidden && !document.querySelector('#settings .prof-edit-head')) renderSettings();
     if ($('#who') && !$('#who').hidden) renderPicker();
   });
-  api.onScanProgress((p) => { if (p.total) setScanning(true, p.music ? `Scanning music ${p.done}/${p.total}…` : `Scanning ${p.done}/${p.total}…`); });
+  api.onScanProgress((p) => { if (p.total) setScanning(true, p.albums ? `Putting albums together ${p.done}/${p.total}…` : p.music ? `Scanning music ${p.done}/${p.total}…` : `Scanning ${p.done}/${p.total}…`); });
   if (api.onParlorUpdated) api.onParlorUpdated(() => setScanning(false));
 
   // Re-draw without losing your place (used when something changes in the background).
