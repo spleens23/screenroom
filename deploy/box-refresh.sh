@@ -152,6 +152,31 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable screenroom-wifi.service >/dev/null 2>&1 || true
 in_chroot || /usr/local/sbin/screenroom-wifi || true
 
+# ---- the graphics chip: firmware and an early driver for whichever one the box has (Intel or AMD) ----------
+# AMD's Radeon graphics need firmware files to get past a basic picture (full resolution, HDMI sound, video
+# decoding by the graphics chip); the processor's own fixes (microcode) for Intel and AMD alike.
+GPU_VENDORS="$(for d in /sys/bus/pci/devices/*; do case "$(cat "$d/class" 2>/dev/null)" in 0x03*) cat "$d/vendor";; esac; done 2>/dev/null | sort -u | tr '\n' ' ')"
+CPU_VENDOR="$(awk -F': ' '/^vendor_id/{print $2; exit}' /proc/cpuinfo 2>/dev/null)"
+gfx_pkgs=()
+case "$GPU_VENDORS" in *0x1002*) gfx_pkgs+=(firmware-amd-graphics);; esac
+case "$CPU_VENDOR" in AuthenticAMD) gfx_pkgs+=(amd64-microcode);; GenuineIntel) gfx_pkgs+=(intel-microcode);; esac
+want_gfx=()
+for p in "${gfx_pkgs[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || { apt-cache show "$p" >/dev/null 2>&1 && want_gfx+=("$p"); }; done
+gfx_changed=0
+if [ "${#want_gfx[@]}" -gt 0 ]; then
+  apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends "${want_gfx[@]}" >/dev/null 2>&1 && gfx_changed=1 || \
+    for p in "${want_gfx[@]}"; do apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends "$p" >/dev/null 2>&1 && gfx_changed=1; done
+fi
+# the driver loaded early, so the startup screen is at full resolution
+if [ -d /etc/initramfs-tools ]; then
+  touch /etc/initramfs-tools/modules
+  case "$GPU_VENDORS" in *0x1002*) grep -qx amdgpu /etc/initramfs-tools/modules || { echo amdgpu >> /etc/initramfs-tools/modules; gfx_changed=1; };; esac
+  case "$GPU_VENDORS" in *0x8086*) grep -qx i915 /etc/initramfs-tools/modules || { echo i915 >> /etc/initramfs-tools/modules; gfx_changed=1; };; esac
+  # (an Intel-only line from older installers on an AMD machine: harmless, but no use)
+  case "$GPU_VENDORS" in *0x8086*) ;; *) [ -n "$GPU_VENDORS" ] && grep -qx i915 /etc/initramfs-tools/modules && { sed -i '/^i915$/d' /etc/initramfs-tools/modules; gfx_changed=1; };; esac
+fi
+[ "$gfx_changed" = 1 ] && command -v update-initramfs >/dev/null && update-initramfs -u >/dev/null 2>&1 || true
+
 # ---- sound outputs switched on ------------------------------------------------------------------------
 install -m 0755 "$HERE/screenroom-audio-setup" /usr/local/bin/screenroom-audio-setup
 install -m 0755 "$HERE/screenroom-session" /usr/local/bin/screenroom-session

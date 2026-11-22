@@ -109,7 +109,7 @@ optional() {
 }
 optional fonts-inter fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core gvfs gvfs-backends cec-utils python3-evdev unclutter-xfixes tesseract-ocr tesseract-ocr-eng python3-av python3-numpy python3-pil libva-drm2
 if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-  optional intel-media-va-driver i965-va-driver firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-mediatek firmware-brcm80211 firmware-intel-misc firmware-intel-sound alsa-ucm-conf
+  optional intel-media-va-driver i965-va-driver firmware-amd-graphics amd64-microcode intel-microcode firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros firmware-mediatek firmware-brcm80211 firmware-intel-misc firmware-intel-sound alsa-ucm-conf
 fi
 
 say "Installing Screenroom"
@@ -270,8 +270,15 @@ if [ -d "$HERE/splash" ]; then
       /usr/share/plymouth/themes/screenroom/screenroom.plymouth 200 >/dev/null 2>&1 || true
     update-alternatives --set default.plymouth /usr/share/plymouth/themes/screenroom/screenroom.plymouth >/dev/null 2>&1 || true
   fi
-  # Load the Intel graphics driver early so the splash shows at full resolution.
-  grep -qx i915 /etc/initramfs-tools/modules 2>/dev/null || echo i915 >> /etc/initramfs-tools/modules
+  # Load the graphics driver early so the splash shows at full resolution (Intel or AMD, whichever this has;
+  # box-refresh keeps this right if the drive moves to another machine).
+  for d in /sys/bus/pci/devices/*; do
+    case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue;; esac
+    case "$(cat "$d/vendor" 2>/dev/null)" in
+      0x8086) grep -qx i915 /etc/initramfs-tools/modules 2>/dev/null || echo i915 >> /etc/initramfs-tools/modules ;;
+      0x1002) grep -qx amdgpu /etc/initramfs-tools/modules 2>/dev/null || echo amdgpu >> /etc/initramfs-tools/modules ;;
+    esac
+  done
 fi
 if [ -f /etc/default/grub ]; then
   setv() { if grep -q "^$1=" /etc/default/grub; then sed -i "s|^$1=.*|$1=$2|" /etc/default/grub; else echo "$1=$2" >> /etc/default/grub; fi; }
