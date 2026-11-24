@@ -716,7 +716,8 @@ app.whenReady().then(async () => {
   powerMonitor.on('suspend', () => { if (playing) control(['set', 'pause', 'yes']); });
   powerMonitor.on('resume', () => { lastResume = Date.now(); });
   // Laptops: the lid closed, on battery, with nothing playing for two minutes → sleep. (The system sleeps on the lid
-  // by itself; this is for when it didn't: a TV still plugged in counts as "docked", or something kept it awake.)
+  // by itself; this is for when something kept it awake. With a TV plugged in it stays on: that's the laptop being
+  // used as the box, lid shut, and the screensaver comes up on the TV instead.)
   if (process.platform === 'linux' && isAppliance()) {
     let closedSince = 0;
     setInterval(() => {
@@ -724,7 +725,9 @@ app.whenReady().then(async () => {
       try { const d = '/proc/acpi/button/lid'; for (const n of fs.readdirSync(d)) lid += fs.readFileSync(path.join(d, n, 'state'), 'utf8'); } catch { return; }
       const b = battery();
       let music = false; try { music = !!(parlorApi && parlorApi.voice && parlorApi.voice.playing()); } catch {}
-      if (!/closed/i.test(lid) || !b || b.charging || playing || music) { closedSince = 0; return; }
+      // never while it's showing on a TV (a laptop used as the box, lid shut): the screensaver takes over there
+      const onTv = device.kind() === 'laptop' && !device.onOwnScreen();
+      if (!/closed/i.test(lid) || !b || b.charging || playing || music || onTv || (dvd && dvd.active())) { closedSince = 0; return; }
       if (!closedSince) { closedSince = Date.now(); return; }
       if (Date.now() - closedSince >= 120000 && Date.now() - (lastResume || 0) > 120000) {
         closedSince = 0;
@@ -763,6 +766,7 @@ app.whenReady().then(async () => {
       lang: () => { const p = currentProfile() || {}; return { audio: p.preferredLang || config.preferredLang || '', sub: p.subLang || config.subLang || '' }; },
       overlay: dvdOverlay,
       laptop: () => laptopUi(),
+      blurayMenus: () => !config.blurayNoMenus,
       // where to look for a Blu-ray keys file: USB drives, then the box's media folder (its shared folder)
       keySources: async () => [...(await transfer.listDrives().catch(() => [])).map((d) => d.mount), config.mediaDir || transfer.defaultMediaDir()],
       onStart: () => { if (parlorApi) parlorApi.pause(); },
@@ -1197,6 +1201,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('dvd-eject', async () => (dvd ? dvd.eject() : { ok: false }));
   ipcMain.handle('dvd-cmd', (_e, c) => (dvd ? dvd.cmd(String(c || '')) : false));
   ipcMain.handle('bluray-status', () => (dvd ? dvd.bluray() : null));
+  ipcMain.handle('disc-log', () => (dvd ? dvd.log() : ''));
   ipcMain.handle('bluray-add-keys', async () => (dvd ? dvd.addBlurayKeys() : { ok: false, error: 'Blu-ray discs play on the TV box.' }));
   ipcMain.handle('play', async (_e, { id, audioTrack, fromStart, accent }) => {
     if (playing || (dvd && dvd.active())) return { ok: false, error: 'Something is already playing.' };

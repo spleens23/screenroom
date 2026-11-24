@@ -780,6 +780,9 @@
             draw(await api.blurayStatus());
             const again = box.querySelector('[data-key="bd-keys"]'); again && again.focus({ preventScroll: true });
           } }, b.keys ? 'Add keys again' : 'Add keys')),
+        h('details', { class: 'disc-log', ontoggle: async (e) => { if (e.target.open) { const t = await api.discLog(); e.target.querySelector('pre').textContent = t || 'Nothing yet: no disc has been played.'; } } },
+          h('summary', {}, 'The disc player\'s messages from the last disc'), h('pre', {}, '')),
+        toggle('Go straight to the film', 'Blu-rays skip their menus and start the film, which is quicker (a minute or two less the first time). Off = the disc\'s own menus.', 'blurayNoMenus'),
         !b.player ? h('p', { class: 'am-hint' }, 'The Blu-ray player is still being set up (it needs the internet once).') : !b.menus ? h('p', { class: 'am-hint' }, 'Disc menus aren\'t set up yet, so a Blu-ray goes straight to the film for now.') : null);
     };
     api.blurayStatus().then(draw).catch(() => draw(null));
@@ -797,6 +800,27 @@
     b.title = dvd && dvd.probing ? 'Reading the disc…' : dvd && dvd.kind === 'bluray' ? 'Blu-ray' : 'DVD';
     if (show && wasHidden) { b.classList.remove('arrive'); void b.offsetWidth; b.classList.add('arrive'); }
     if (show !== !wasHidden) fitNav();
+    drawDiscStarting();
+  }
+  // While a disc is starting (a Blu-ray with its menus can take a minute or two the first time), a note on screen
+  // says so, so it doesn't look like nothing is happening; Blu-rays can skip their menus and go straight to the film.
+  function drawDiscStarting() {
+    let el = $('#disc-starting');
+    const on = !!(dvd && dvd.playing && dvd.starting);
+    if (!on) { if (el) el.remove(); return; }
+    const bd = dvd.kind === 'bluray';
+    if (el && el.dataset.menus === String(!!dvd.menusOn)) return;
+    if (el) el.remove();
+    el = h('div', { id: 'disc-starting', 'data-menus': String(!!dvd.menusOn) },
+      h('div', { class: 'ds-card' },
+        h('div', { class: 'ds-disc' }, h('i')),
+        h('h2', {}, bd ? 'Starting the Blu-ray…' : 'Starting the DVD…'),
+        h('p', {}, bd ? (dvd.menusOn ? 'Blu-rays take a minute or two to start, while the drive reads the disc and its menus load.' : 'Going straight to the film. This takes a moment.') : 'This takes a few seconds.'),
+        h('div', { class: 'btns' },
+          bd && dvd.menusOn ? h('button', { class: 'btn primary', onclick: () => { api.dvdCmd('skipmenus'); } }, 'Skip the menus') : null,
+          h('button', { class: 'btn secondary', onclick: () => api.dvdCmd('stop') }, 'Cancel'))));
+    document.body.append(el);
+    const b = el.querySelector('button'); if (b) focusEl(b);
   }
   async function dvdMenu() {
     if (!dvd) return;

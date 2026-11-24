@@ -1076,3 +1076,17 @@ body.nav-t3 #search { flex: 0 0 40px !important; width: 40px !important; min-wid
 body.nav-t3 #search::placeholder { color: transparent; }
 body.nav-t3 #search:focus, body.nav-t3 #search.has-text { flex: 0 0 200px !important; width: 200px !important; padding: 9px 16px !important; color: inherit; background-image: none; }
 body.nav-t3 #search:focus::placeholder { color: var(--m-dim, #888); }
+
+/* ---- a disc starting: a note in the middle of the screen until the picture comes up ---- */
+#disc-starting { position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; background: rgba(10,8,6,.82); }
+#disc-starting .ds-card { text-align: center; max-width: 560px; padding: 40px 44px 34px; border-radius: 22px; background: var(--m-panel, #231c16); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+#disc-starting h2 { margin: 18px 0 10px; font-size: 28px; }
+body.mat #disc-starting h2 { font-family: var(--m-serif); font-weight: 600; }
+#disc-starting p { margin: 0 0 24px; color: var(--m-muted, #bbb); font-size: 17px; line-height: 1.45; }
+#disc-starting .btns { justify-content: center; }
+.ds-disc { width: 76px; height: 76px; margin: 0 auto; border-radius: 50%; animation: dvd-spin 1.6s linear infinite;
+  background: conic-gradient(from 0deg, #8a8fa6, #e9e3f5, #9fd3e0, #f3d9a6, #b9a6e8, #8a8fa6); position: relative; box-shadow: 0 0 0 2px rgba(255,255,255,.12) inset; }
+.ds-disc i { position: absolute; inset: 31px; border-radius: 50%; background: var(--m-panel, #231c16); box-shadow: 0 0 0 5px rgba(255,255,255,.25); }
+.disc-log { margin: 6px 0 14px; color: var(--m-muted, #bbb); }
+.disc-log summary { cursor: pointer; font-size: 15px; padding: 6px 0; }
+.disc-log pre { white-space: pre-wrap; font-size: 13px; line-height: 1.4; max-height: 320px; overflow: auto; background: rgba(0,0,0,.25); padding: 12px 14px; border-radius: 10px; }
