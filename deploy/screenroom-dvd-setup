@@ -15,14 +15,15 @@ have_css() { ls /usr/lib/*/libdvdcss.so.2 /usr/lib/libdvdcss.so.2 >/dev/null 2>&
 online() { getent hosts deb.debian.org >/dev/null 2>&1 && getent hosts download.videolan.org >/dev/null 2>&1; }
 
 want=()
-for p in vlc-bin vlc-plugin-base vlc-plugin-video-output libdvdnav4 libdvdread8t64 lsdvd eject; do
+# (Blu-ray: libbluray, libaacs and libbdplus read the discs; libbluray-bdj and Java run their menus)
+for p in vlc-bin vlc-plugin-base vlc-plugin-video-output libdvdnav4 libdvdread8t64 lsdvd eject libbluray2 libaacs0 libbdplus0 libbluray-bdj default-jre-headless; do
   apt-cache show "$p" >/dev/null 2>&1 || continue
   dpkg -s "$p" >/dev/null 2>&1 || want+=("$p")
 done
 # (older Debian: libdvdread8 without the t64 suffix)
 dpkg -s libdvdread8t64 >/dev/null 2>&1 || dpkg -s libdvdread8 >/dev/null 2>&1 || { apt-cache show libdvdread8 >/dev/null 2>&1 && want+=(libdvdread8); }
 if [ "${#want[@]}" -gt 0 ]; then
-  status working "Installing the DVD player…"
+  status working "Installing the disc player…"
   "${APT[@]}" install "${want[@]}" || { apt-get -o DPkg::Lock::Timeout=900 update >/dev/null 2>&1 || true; "${APT[@]}" install "${want[@]}" || true; }
 fi
 

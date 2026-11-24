@@ -758,6 +758,33 @@
     return out;
   }
 
+  // Settings → Discs: DVDs set themselves up; Blu-ray discs need the person's own keys file (KEYDB.cfg)
+  function discsBlock() {
+    const box = h('div', { class: 'discs-set' }, h('p', { class: 'am-hint' }, 'Checking…'));
+    const draw = (b) => {
+      if (!b) { box.replaceChildren(); return; }
+      const when = b.keysAt ? new Date(b.keysAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      const st = b.setup || {};
+      box.replaceChildren(
+        h('p', { class: 'am-hint' }, 'DVDs: ', st.state === 'working' ? st.message : 'they play with their own menus, nothing to set up.'),
+        h('p', { class: 'am-hint' }, 'Blu-ray discs are encrypted, and the box needs a keys file to play them. Put a file named ', h('b', {}, 'KEYDB.cfg'),
+          ' at the top of a USB drive (or in the box\'s shared folder), plug it in, and press Add keys. Some discs also need BD+ files: a folder named ', h('b', {}, 'vm0'), ' next to it is added too.'),
+        h('label', { class: 'row-set' }, h('span', {}, 'Blu-ray keys', h('small', {}, b.keys
+          ? `Added${when ? ` ${when}` : ''}${b.keyCount ? `, about ${b.keyCount.toLocaleString()} discs` : ''}${b.bdplus ? ', with BD+ files' : ''}. Add a newer file the same way for newer discs.`
+          : 'Not added yet.')),
+          h('button', { class: 'btn secondary', style: 'white-space:nowrap', 'data-key': 'bd-keys', onclick: async (e) => {
+            e.target.disabled = true; e.target.textContent = 'Looking…';
+            const r = await api.blurayAddKeys();
+            if (r.ok) flash(r.keyCount ? `Blu-ray keys added (${r.keyCount.toLocaleString()} discs)` : 'Blu-ray keys added');
+            else showNotice('Blu-ray keys', r.error);
+            draw(await api.blurayStatus());
+            const again = box.querySelector('[data-key="bd-keys"]'); again && again.focus({ preventScroll: true });
+          } }, b.keys ? 'Add keys again' : 'Add keys')),
+        !b.player ? h('p', { class: 'am-hint' }, 'The Blu-ray player is still being set up (it needs the internet once).') : !b.menus ? h('p', { class: 'am-hint' }, 'Disc menus aren\'t set up yet, so a Blu-ray goes straight to the film for now.') : null);
+    };
+    api.blurayStatus().then(draw).catch(() => draw(null));
+    return box;
+  }
   // ---- a DVD in the drive: a spinning disc beside the other buttons at the top; press it to play or eject ----
   let dvd = null;
   function drawDvdBtn() {
@@ -767,24 +794,28 @@
     const wasHidden = b.hidden;
     b.hidden = !show;
     b.classList.toggle('reading', !!(dvd && dvd.probing));
-    b.title = dvd && dvd.probing ? 'Reading the DVD…' : 'DVD';
+    b.title = dvd && dvd.probing ? 'Reading the disc…' : dvd && dvd.kind === 'bluray' ? 'Blu-ray' : 'DVD';
     if (show && wasHidden) { b.classList.remove('arrive'); void b.offsetWidth; b.classList.add('arrive'); }
     if (show !== !wasHidden) fitNav();
   }
   async function dvdMenu() {
     if (!dvd) return;
     if (dvd.probing) { flash('Reading the disc…'); return; }
-    const choices = [{ label: 'Play DVD', value: 'play' }];
-    if (dvd.resume) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
+    const bd = dvd.kind === 'bluray';
+    const needKeys = bd && dvd.bluray && !dvd.bluray.keys;
+    const choices = needKeys ? [{ label: 'Add Blu-ray keys from a USB drive', value: 'keys' }] : [{ label: bd ? 'Play Blu-ray' : 'Play DVD', value: 'play' }];
+    if (dvd.resume && !needKeys) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
     choices.push({ label: 'Eject', value: 'eject' });
-    const notes = [dvd.problem, dvd.setup && dvd.setup.state !== 'done' ? dvd.setup.message : ''].filter(Boolean).join(' ');
-    const v = await askChoice('DVD', choices, undefined, notes || null);
+    const notes = [needKeys ? 'Blu-ray discs need a keys file (KEYDB.cfg) before they play. Put it at the top of a USB drive, plug it in, then choose Add keys.' : '',
+      dvd.problem, dvd.setup && dvd.setup.state !== 'done' ? dvd.setup.message : ''].filter(Boolean).join(' ');
+    const v = await askChoice(bd ? 'Blu-ray' : 'DVD', choices, undefined, notes || null);
+    if (v === 'keys') { flash('Looking for the keys file…'); const r = await api.blurayAddKeys(); if (r.ok) { flash(r.keyCount ? `Blu-ray keys added (${r.keyCount.toLocaleString()} discs)` : 'Blu-ray keys added'); dvd = await api.dvdState(); dvdMenu(); } else showNotice('Blu-ray keys', r.error); return; }
     if (v === 'play' || v === 'resume') dvdPlay(v === 'resume');
     else if (v === 'eject') { flash('Ejecting…'); await api.dvdEject(); }
   }
   async function dvdPlay(resume) {
     const r = await api.dvdPlay({ resume });
-    if (r && !r.ok) showNotice('Can\'t play the DVD', r.error || 'Something went wrong.');
+    if (r && !r.ok) showNotice(dvd && dvd.kind === 'bluray' ? 'Can\'t play the Blu-ray' : 'Can\'t play the DVD', r.error || 'Something went wrong.');
   }
   if (api.onDvdState) {
     const btn = $('#dvd-btn');
@@ -794,11 +825,11 @@
       const was = dvd;
       dvd = d;
       drawDvdBtn();
-      if (d && !was) flash('DVD inserted');
+      if (d && !was) flash(d.kind === 'bluray' ? 'Blu-ray inserted' : 'DVD inserted');
     });
     api.onDvdEnded && api.onDvdEnded((problem) => {
       lastInput = Date.now(); hidePointer(2000);
-      if (problem) showNotice('The DVD stopped', problem);
+      if (problem) showNotice('The disc stopped', problem);
     });
   }
 
@@ -2428,6 +2459,18 @@
       isAndroid && api.kioskStatus ? kioskBlock() : null,
       S.appliance && api.applianceInfo ? h('h3', {}, 'System') : null,
       S.appliance && api.applianceInfo ? systemBlock() : null,
+      S.appliance && api.blurayStatus ? h('h3', {}, 'Discs') : null,
+      S.appliance && api.blurayStatus ? discsBlock() : null,
+      S.appliance && S.device ? (() => {
+        const d = S.device;
+        const opt = (v, t) => h('option', { value: v, selected: d.choice === v ? true : null }, t);
+        return h('label', { class: 'row-set' },
+          h('span', {}, 'Laptop or desktop', h('small', {}, `On a laptop's own screen, Screenroom has computer-sized buttons and the touchpad does more: it picks things in a DVD's menu and brings up the controls. Plugged into a TV, a laptop works like the box, with the remote. Found: ${d.detected === 'laptop' ? 'a laptop' : 'a desktop'}.`)),
+          h('select', { class: 'dev-select', 'data-key': 'device-kind', onchange: async (e) => {
+            S = await api.setConfig({ deviceKind: e.target.value === 'auto' ? '' : e.target.value });
+            render(); renderSettings(); const again = $('#settings select[data-key="device-kind"]'); again && again.focus({ preventScroll: true });
+          } }, opt('auto', `Automatic (${d.detected})`), opt('laptop', 'Laptop'), opt('desktop', 'Desktop')));
+      })() : null,
       mobile ? null : h('h3', {}, 'Power'),
       S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
       mobile ? null : h('div', { class: 'btns' },

@@ -35,7 +35,7 @@
   ];
   function draw() {
     const s = state || {};
-    $('title').textContent = 'DVD';
+    $('title').textContent = s.kind === 'bluray' ? 'Blu-ray' : 'DVD';
     const p = $('poster');
     if (s.poster) { p.classList.remove('none'); p.style.backgroundImage = `url("file://${encodeURI(s.poster)}")`; } else p.classList.add('none');
     const l = s.live || {};

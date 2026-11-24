@@ -763,6 +763,8 @@ app.whenReady().then(async () => {
       lang: () => { const p = currentProfile() || {}; return { audio: p.preferredLang || config.preferredLang || '', sub: p.subLang || config.subLang || '' }; },
       overlay: dvdOverlay,
       laptop: () => laptopUi(),
+      // where to look for a Blu-ray keys file: USB drives, then the box's media folder (its shared folder)
+      keySources: async () => [...(await transfer.listDrives().catch(() => [])).map((d) => d.mount), config.mediaDir || transfer.defaultMediaDir()],
       onStart: () => { if (parlorApi) parlorApi.pause(); },
       onEnd: (problem) => { sendWin('dvd-ended', problem || ''); if (win && !win.isDestroyed()) win.focus(); },
     });
@@ -1194,6 +1196,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('dvd-eject', async () => (dvd ? dvd.eject() : { ok: false }));
   ipcMain.handle('dvd-cmd', (_e, c) => (dvd ? dvd.cmd(String(c || '')) : false));
+  ipcMain.handle('bluray-status', () => (dvd ? dvd.bluray() : null));
+  ipcMain.handle('bluray-add-keys', async () => (dvd ? dvd.addBlurayKeys() : { ok: false, error: 'Blu-ray discs play on the TV box.' }));
   ipcMain.handle('play', async (_e, { id, audioTrack, fromStart, accent }) => {
     if (playing || (dvd && dvd.active())) return { ok: false, error: 'Something is already playing.' };
     if (parlorApi) parlorApi.pause(); // music stops for the film
