@@ -14,6 +14,7 @@ const cleanup = require('./lib/cleanup');
 const { setupParlor } = require('./lib/parlor-ipc');
 const { setupVoice } = require('./lib/voice');
 const dvdPlayer = require('./lib/dvd');
+const device = require('./lib/device');
 const { Profiles } = require('./lib/profiles');
 const { Ratings } = require('./lib/ratings');
 const { Recommendations } = require('./lib/social');
@@ -80,6 +81,11 @@ let remoteServer = null;
 const isTv = () => TV_FLAG || !!config.tvMode;
 // Full screen for the whole app (Settings → Full screen, F11, or the window's green button on a Mac); TV mode always is.
 const wantFull = () => isTv() || !!config.appFullscreen;
+// Laptop or desktop (Settings → System can say otherwise); a laptop on its own screen gets the mouse-friendly,
+// computer-sized Screenroom, a laptop on a TV the remote-friendly one, like the box (lib/device.js)
+const deviceKind = () => (config.deviceKind === 'laptop' || config.deviceKind === 'desktop' ? config.deviceKind : device.kind());
+const laptopUi = () => process.platform === 'linux' && deviceKind() === 'laptop' && (device.kind() !== 'laptop' || device.onOwnScreen());
+const deviceInfo = () => ({ kind: deviceKind(), detected: device.kind(), choice: config.deviceKind || 'auto', laptopUi: laptopUi() });
 
 // The Linux TV box (set up by the Screenroom installer) uses plain ALSA: pick the speaker/TV/headphone jack ourselves.
 const isAppliance = () => process.platform === 'linux' && fs.existsSync('/etc/screenroom/appliance');
@@ -150,6 +156,13 @@ function refit(_e, _display, changed) {
   }, 700);
 }
 function watchDisplay() {
+  // a TV plugged into a laptop or taken out: the remote-friendly or the mouse-friendly Screenroom
+  let lastUi = laptopUi();
+  const recheck = () => setTimeout(() => device.checkScreen().then(() => { const u = laptopUi(); if (u !== lastUi) { lastUi = u; sendWin('device', deviceInfo()); } }), 1500);
+  device.checkScreen().then(() => { lastUi = laptopUi(); sendWin('device', deviceInfo()); });
+  screen.on('display-metrics-changed', recheck);
+  screen.on('display-added', recheck);
+  screen.on('display-removed', recheck);
   screen.on('display-metrics-changed', refit);
   screen.on('display-added', (...a) => { refitTries = 0; refit(...a); });
   screen.on('display-removed', (...a) => { refitTries = 0; refit(...a); });
@@ -378,6 +391,7 @@ function noteStutter(statsFile, logFile) {
 
 // Laptop battery (Linux): { percent, charging } or null on a computer without one.
 function battery() {
+  if (process.env.SCREENROOM_TEST_LAPTOP) return { percent: 64, charging: false }; // (the automated check)
   if (process.platform !== 'linux') return null;
   try {
     const dir = '/sys/class/power_supply';
@@ -416,7 +430,7 @@ function publicConfig() {
 function snapshot() {
   return {
     // Each profile only receives what it's allowed to see (kids profiles: by rating).
-    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config: publicConfig(), tv: isTv(), appliance: isAppliance(), ratings: ratings ? ratings.all() : {}, recs: recs ? recs.all() : [], watchedBy: watchedBy(), duplicates: (library.dups || []).length,
+    library: library.filter((it) => core.allowedFor(it, currentProfile())), progress, config: publicConfig(), tv: isTv(), appliance: isAppliance(), device: deviceInfo(), ratings: ratings ? ratings.all() : {}, recs: recs ? recs.all() : [], watchedBy: watchedBy(), duplicates: (library.dups || []).length,
     profile: currentProfile(), profiles: profiles ? profiles.list() : [], pickProfile: needPick,
     drives, mediaDir: mediaRoot,
     platform: process.platform,
@@ -748,6 +762,7 @@ app.whenReady().then(async () => {
       dataDir, send: sendWin, sound: soundFor, keysNav: setKeysNav,
       lang: () => { const p = currentProfile() || {}; return { audio: p.preferredLang || config.preferredLang || '', sub: p.subLang || config.subLang || '' }; },
       overlay: dvdOverlay,
+      laptop: () => laptopUi(),
       onStart: () => { if (parlorApi) parlorApi.pause(); },
       onEnd: (problem) => { sendWin('dvd-ended', problem || ''); if (win && !win.isDestroyed()) win.focus(); },
     });
@@ -1199,7 +1214,7 @@ app.whenReady().then(async () => {
     try {
       playing = true;
       const sound = await soundFor();
-      await play(entries, { ...config, ...sound, tv: isTv(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath(), theme: themeNow().theme, accent: /^#?[0-9a-fA-F]{6}$/.test(accent || '') ? accent.replace('#', '').toUpperCase() : '' }, {
+      await play(entries, { ...config, ...sound, tv: isTv() && !laptopUi(), fullscreen: !!config.fullscreen || wantFull(), appFullscreen: wantFull(), preferredLang: prof.preferredLang || config.preferredLang, subLang: prof.subLang || config.subLang, audioTrack, start, scriptPath: scriptPath(), theme: themeNow().theme, accent: /^#?[0-9a-fA-F]{6}$/.test(accent || '') ? accent.replace('#', '').toUpperCase() : '' }, {
         onProgress: (pid, pos, dur) => {
           if (pos <= 5) return; // don't clobber an existing resume point with the first few seconds
           progress[pid] = { pos, dur, updated: Date.now() };

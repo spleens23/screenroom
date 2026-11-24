@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('api', {
   dvdEject: () => ipcRenderer.invoke('dvd-eject'),
   dvdTestKey: (k) => ipcRenderer.invoke('dvd-test-key', k), // (only answered during the automated check)
   onDvdState: (cb) => ipcRenderer.on('dvd-state', (_e, s) => cb(s)),
+  onDevice: (cb) => ipcRenderer.on('device', (_e, d) => cb(d)),
   onDvdEnded: (cb) => ipcRenderer.on('dvd-ended', (_e, p) => cb(p)),
   parlorState: () => ipcRenderer.invoke('parlor-state'),
   parlorRescan: () => ipcRenderer.invoke('parlor-rescan'),

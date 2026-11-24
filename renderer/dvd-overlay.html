@@ -7,7 +7,7 @@
 <title>DVD</title>
 <style>
   :root { --accent: #e9c46a; }
-  html, body { margin: 0; height: 100%; background: #0d0e13; color: #fff; overflow: hidden; cursor: none;
+  html, body { margin: 0; height: 100%; background: #0d0e13; color: #fff; overflow: hidden; cursor: default;
     font-family: "DM Sans", "Noto Sans", sans-serif; -webkit-font-smoothing: antialiased; user-select: none; }
   body { background: linear-gradient(180deg, #16171f 0%, #0d0e13 100%); border-top: 1px solid rgba(255,255,255,.08); }
   .wrap { height: 100%; box-sizing: border-box; display: flex; gap: 32px; align-items: center; padding: 26px 4.5vw 28px; }
@@ -25,6 +25,25 @@
     padding: 11px 20px; display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; outline: none; transition: background .15s, transform .15s, color .15s; }
   button svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
   button.focus { background: #fff; color: #0d0e13; transform: scale(1.04); }
+  button:not(.focus):hover { background: rgba(255,255,255,.2); }
+  /* a laptop's screen: everything a little smaller, then the less-needed words go, so it all fits on one line */
+  @media (max-width: 1750px) { .hint { display: none; } }
+  @media (max-width: 1500px) {
+    .wrap { gap: 22px; padding: 20px 3vw 22px; }
+    h1 { font-size: 28px; }
+    .btns { gap: 7px; }
+    button { font-size: 15px; padding: 10px 14px; gap: 7px; }
+    button svg { width: 18px; height: 18px; }
+  }
+  @media (max-width: 1250px) {
+    button { padding: 10px 12px; }
+    button.ic span { display: none; }
+  }
+  @media (max-width: 980px) {
+    .btns { gap: 5px; }
+    button { padding: 9px 10px; font-size: 14px; }
+    button.ic2 span { display: none; }
+  }
   .volbar { display: none; width: 220px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.16); overflow: hidden; align-self: center; }
   .volbar i { display: block; height: 100%; width: 0; background: #fff; transition: width .15s; }
   body.peek .volbar { display: block; }

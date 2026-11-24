@@ -769,6 +769,7 @@
     b.classList.toggle('reading', !!(dvd && dvd.probing));
     b.title = dvd && dvd.probing ? 'Reading the DVD…' : 'DVD';
     if (show && wasHidden) { b.classList.remove('arrive'); void b.offsetWidth; b.classList.add('arrive'); }
+    if (show !== !wasHidden) fitNav();
   }
   async function dvdMenu() {
     if (!dvd) return;
@@ -841,16 +842,22 @@
     if (RW) RW.decorate();
     document.body.classList.toggle('touch', !!(window.matchMedia && matchMedia('(pointer: coarse)').matches));
   }
+  // A laptop on its own screen (the Linux box's OS on a laptop): the touchpad and keyboard are right there, so the
+  // computer-sized, mouse-friendly Screenroom; plugged into a TV, the remote-friendly one, like the box.
+  const laptopUi = () => !!(S && S.device && S.device.laptopUi);
+  const remoteUi = () => !!(S && S.tv) && !laptopUi();
   function render() {
     applyTheme();
     document.body.classList.toggle('tv', !!S.tv);
-    // big buttons and text: always on the TV, optional on a computer (Settings → Big buttons)
-    document.body.classList.toggle('big', !!S.tv || !!(S.config && S.config.bigUi));
+    document.body.classList.toggle('laptop', laptopUi());
+    // big buttons and text: always on the TV, optional on a computer or a laptop's own screen (Settings → Big buttons)
+    document.body.classList.toggle('big', remoteUi() || !!(S.config && S.config.bigUi));
     drawProfileButton();
     drawBattery(S.battery);
     drawDvdBtn();
     const vb = $('#vote-btn');
     if (vb) { if (!vb.innerHTML) { vb.innerHTML = POPCORN; vb.onclick = openMovieNight; } vb.hidden = isIOS() || mode === 'parlor' || (S.profiles || []).length < 2 || voteMovies().length < 2; } // (no movie-night vote on iPhone / iPad: it's for the TV)
+    requestAnimationFrame(fitNav);
     if (S.pickProfile && api.selectProfile) { main.replaceChildren(); renderPicker(); return; }
     hidePicker();
     if (mode === 'parlor' && parlorUI) { $('#nav').classList.add('solid'); parlorUI.render(); return; }
@@ -1237,6 +1244,20 @@
   }
 
   // ---- laptop battery (top bar) ----------------------------------------------------------------------
+  // The top bar keeps everything on one line: when the buttons on the right (battery, disc, movie night, music…)
+  // don't leave room for every section, it tightens in steps (smaller gaps and no battery percentage, a shorter
+  // search box, then just a search button) rather than cutting a section off.
+  function fitNav() {
+    const nav = $('#nav'); if (!nav) return;
+    const b = document.body, steps = ['nav-t1', 'nav-t2', 'nav-t3'];
+    b.classList.remove(...steps);
+    const links = nav.querySelector('nav:not(#pnav)');
+    const right = nav.querySelector('.nav-right');
+    const over = () => nav.scrollWidth > nav.clientWidth + 1 || (links && links.offsetParent && links.scrollWidth > links.clientWidth + 1)
+      || (right && right.scrollWidth > right.clientWidth + 1);
+    for (const c of steps) { if (!over()) break; b.classList.add(c); }
+  }
+  window.addEventListener('resize', () => requestAnimationFrame(fitNav));
   function drawBattery(b) {
     const el = $('#battery');
     if (!el) return;
@@ -1249,7 +1270,8 @@
       + `<rect x="26" y="5.5" width="2.6" height="5" rx="1" fill="currentColor"/><rect x="3.2" y="3.7" width="${(19.6 * b.percent / 100).toFixed(1)}" height="8.6" rx="1.5" fill="currentColor"/>`
       + (b.charging ? '<path d="M14.5 2.5 9.5 9h4l-1.5 4.8L17.5 7h-4z" fill="#000" stroke="#fff" stroke-width=".8"/>' : '') + `</svg><span>${b.percent}%</span>`;
   }
-  if (api.onBattery) api.onBattery((b) => { S.battery = b; drawBattery(b); });
+  if (api.onBattery) api.onBattery((b) => { S.battery = b; drawBattery(b); fitNav(); });
+  if (api.onDevice) api.onDevice((d) => { if (!S) return; const was = laptopUi(); S.device = d; if (laptopUi() !== was) renderKeepFocus(); });
 
   // ---- screensaver: the Screenroom name bouncing around, changing colour at every edge (like the old DVD logo) ----
   let lastInput = Date.now(), saver = null;
@@ -2260,7 +2282,7 @@
     return h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
       h('input', { type: 'checkbox', checked: !!S.config[key], onchange: async (e) => {
         S = await api.setConfig({ [key]: e.target.checked });
-        document.body.classList.toggle('big', !!S.tv || !!S.config.bigUi);
+        document.body.classList.toggle('big', remoteUi() || !!S.config.bigUi);
         renderSettings(); const again = $(`#settings input[data-key="${key}"]`); again && again.focus({ preventScroll: true });
       }, 'data-key': key }));
   }
@@ -2351,7 +2373,7 @@
       mobile || !films || !S.config.passthrough ? null : toggle('DTS untouched', 'On: DTS and DTS-HD go to your receiver as they are. Off: Screenroom decodes DTS itself and sends lossless 7.1 / 5.1 surround (or Dolby Digital 5.1 if your TV only passes stereo) — for soundbars and receivers that don’t play DTS.', 'dtsPassthrough'),
       mobile || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
       mobile || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
-      mobile || S.tv ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
+      mobile || remoteUi() ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       mobile || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
       mobile || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),
       isIOS() ? h('p', { class: 'am-hint' }, EDITION === 'music'
@@ -2468,7 +2490,7 @@
     render(); window.scrollTo(0, 0);
   }
   document.querySelectorAll('#nav nav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setView(a.dataset.view); }));
-  $('#search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
+  $('#search').addEventListener('input', (e) => { query = e.target.value.trim(); e.target.classList.toggle('has-text', !!e.target.value); render(); });
   const openSettings = () => { renderSettingsNow(); $('#settings').hidden = false; $('#settings').scrollTop = 0; const f = $('#settings input, #settings button'); f && f.focus(); };
   const closeSettings = () => { $('#settings').hidden = true; $('#settings-btn').focus(); };
   const toggleSettings = () => { if ($('#settings').hidden) openSettings(); else closeSettings(); };
@@ -2702,7 +2724,7 @@
   const kbInUse = () => Date.now() - kbTypedAt < 5 * 60 * 1000;
   let navFocus = false;
   const isTextInput = (el) => !!el && el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type);
-  const oskAllowed = () => !!(S && S.tv) && S.platform !== 'android';
+  const oskAllowed = () => remoteUi() && S.platform !== 'android';
   const OSK_ROWS = {
     abc: ['1234567890', 'qwertyuiop', "asdfghjkl'", 'zxcvbnm,.-'],
     sym: ['1234567890', '!@#$%&*()_', '+=/\\?:;"<>', '[]{}~`^|€£'],
@@ -2811,7 +2833,7 @@
     // ⌘/Ctrl+F search, ⌘/Ctrl+, settings, ⌘/Ctrl+[ back; in the Parlor, Space plays / pauses, ⌘/Ctrl+→/← next /
     // previous song, ⌘/Ctrl+↑/↓ volume; the menu key or Shift+F10 on a song or album opens its menu.
     const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
-    if (mod && !S.tv) {
+    if (mod && !remoteUi()) {
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === 'f') { e.preventDefault(); const sb = $('#search'); sb.focus(); sb.select(); return; }
       if (k === ',') { e.preventDefault(); toggleSettings(); return; }
@@ -2822,11 +2844,11 @@
       }
     }
     // (Space plays / pauses wherever the highlight is, as in other music apps; Return opens / plays the highlighted thing)
-    if (mode === 'parlor' && api.musicCmd && !S.tv && e.key === ' ' && !mod && !/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && !dlg && !osk && !pinState
+    if (mode === 'parlor' && api.musicCmd && !remoteUi() && e.key === ' ' && !mod && !/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && !dlg && !osk && !pinState
       && !(t.closest && t.closest('#settings, #poverlay, #sheet, #pinpad, #who'))) {
       e.preventDefault(); if (!e.repeat) api.musicCmd('toggle'); return;
     }
-    if (mode === 'parlor' && parlorUI && parlorUI.menuFor && !S.tv && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && t.closest && t.closest('tr.srow, .pcard[data-key], .ptile[data-key]')) {
+    if (mode === 'parlor' && parlorUI && parlorUI.menuFor && !remoteUi() && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && t.closest && t.closest('tr.srow, .pcard[data-key], .ptile[data-key]')) {
       if (parlorUI.menuFor(t.closest('tr.srow, .pcard[data-key], .ptile[data-key]'))) { e.preventDefault(); return; }
     }
     if (pinState && /^[0-9]$/.test(e.key)) { e.preventDefault(); pinState.add(e.key); return; }
@@ -2844,7 +2866,7 @@
       // Backspace deletes; it only means "back" in an empty box, and only on the TV box with its remote (holding
       // it down on a keyboard, or the iPad's keyboard, never throws away the screen you were typing in).
       if (e.key === 'Backspace') {
-        if (t.value || kbInUse() || e.repeat || !S.tv || isIOS()) return;
+        if (t.value || kbInUse() || e.repeat || !remoteUi() || isIOS()) return;
         e.preventDefault(); goBack(); return;
       }
       // Left/right move the cursor inside the text; at either end they move on to the next thing.
@@ -2860,7 +2882,7 @@
     if (dir) {
       // with a mouse/keyboard a focused dropdown uses up/down itself; on a TV the arrows always move on
       // (OK steps through the choices instead)
-      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !S.tv && !ownSelects()) return;
+      if (t.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !remoteUi() && !ownSelects()) return;
       e.preventDefault(); move(dir); return;
     }
     if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') { e.preventDefault(); goBack(); return; }
@@ -2990,7 +3012,7 @@
   window.addEventListener('mousedown', () => document.body.classList.remove('navmode'));
   window.addEventListener('wheel', () => document.body.classList.remove('navmode'), { passive: true });
   // a mouse's own Back button
-  window.addEventListener('mouseup', (e) => { if (e.button === 3 && !S.tv) { e.preventDefault(); goBack(); } });
+  window.addEventListener('mouseup', (e) => { if (e.button === 3 && !remoteUi()) { e.preventDefault(); goBack(); } });
   window.addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) document.body.classList.remove('navmode'); });
 
   // Hide the mouse pointer after a few seconds in TV mode. It only comes back when the mouse really moves: not

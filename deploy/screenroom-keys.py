@@ -50,6 +50,8 @@ for name, codes in {
             NAV[getattr(e, c)] = name
 NAV_REPEATS = {"up", "down", "left", "right", "ffwd", "rew", "volup", "voldown"}
 nav_on = False
+POINTERS = set()
+last_mouse = 0.0
 
 
 def say(word):
@@ -66,10 +68,14 @@ def scan(open_devs):
             continue
         try:
             d = InputDevice(path)
-            keys = set(d.capabilities().get(e.EV_KEY, []))
+            caps = d.capabilities()
+            keys = set(caps.get(e.EV_KEY, []))
+            # a mouse or a laptop's touchpad (a laptop's DVD controls come up when it's moved)
+            if e.EV_REL in caps or (e.EV_ABS in caps and getattr(e, "BTN_TOUCH", -1) in keys):
+                POINTERS.add(path)
         except OSError:
             continue
-        if keys & (set(WANT) | set(NAV)):
+        if keys & (set(WANT) | set(NAV)) or path in POINTERS:
             open_devs[path] = d
         else:
             d.close()
@@ -80,7 +86,7 @@ def main():
     scan(devs)
     last_scan = time.time()
     parent = os.getppid()
-    global nav_on
+    global nav_on, last_mouse
     stdin_open = True
     while True:
         if os.getppid() != parent:  # the app is gone
@@ -110,6 +116,12 @@ def main():
                 continue
             try:
                 for ev in d.read():
+                    if nav_on and (ev.type == e.EV_REL or ev.type == e.EV_ABS):
+                        now = time.monotonic()
+                        if now - last_mouse > 0.4:
+                            last_mouse = now
+                            say("key mouse")
+                        continue
                     if ev.type != e.EV_KEY:
                         continue
                     if ev.code in WANT:

@@ -25,13 +25,13 @@
     { id: 'rew', icon: 'rew', label: '10 s' },
     { id: 'playpause', icon: state && state.live && state.live.paused ? 'play' : 'pause', label: state && state.live && state.live.paused ? 'Play' : 'Pause' },
     { id: 'ffwd', icon: 'fwd', label: '30 s' },
-    { id: 'discmenu', icon: 'menu', label: 'Disc Menu' },
-    { id: 'prev', icon: 'prev', label: 'Chapter' },
-    { id: 'next', icon: 'next', label: 'Chapter' },
+    { id: 'discmenu', icon: 'menu', label: 'Disc Menu', cls: 'ic2' },
+    { id: 'prev', icon: 'prev', label: 'Chapter', cls: 'ic' },
+    { id: 'next', icon: 'next', label: 'Chapter', cls: 'ic' },
     { id: 'audio', icon: 'audio', label: short(state && state.live && state.live.audio) || 'Audio' },
     { id: 'subtitle', icon: 'subs', label: short(state && state.live && state.live.subs) || 'Subtitles Off' },
-    { id: 'stop', icon: 'stop', label: 'Stop' },
-    { id: 'eject', icon: 'eject', label: 'Eject' },
+    { id: 'stop', icon: 'stop', label: 'Stop', cls: 'ic' },
+    { id: 'eject', icon: 'eject', label: 'Eject', cls: 'ic' },
   ];
   function draw() {
     const s = state || {};
@@ -54,7 +54,8 @@
     focus = Math.max(0, Math.min(focus, list.length - 1));
     $('btns').replaceChildren(...list.map((b, i) => {
       const el = document.createElement('button');
-      el.className = i === focus && !s.peek ? 'focus' : '';
+      el.className = [b.cls || '', i === focus && !s.peek && !pointerOnly ? 'focus' : ''].join(' ').trim();
+      el.title = b.id === 'prev' ? 'Previous chapter' : b.id === 'next' ? 'Next chapter' : b.label;
       el.innerHTML = ICON[b.icon] + `<span>${b.label}</span>`;
       el.onclick = () => { focus = i; press(); };
       return el;
@@ -66,14 +67,19 @@
     if (!b) return;
     window.dvd.cmd(b.id);
   }
-  window.dvd.onOpen((s) => { state = s; focus = PLAY; draw(); });
+  let pointerOnly = false; // (opened by the touchpad: no highlight until a key is pressed)
+  window.dvd.onOpen((s) => { state = s; focus = PLAY; pointerOnly = !!s.pointer; draw(); });
   window.dvd.onState((s) => { state = s; draw(); });
   window.dvd.onKey((k) => {
+    if (pointerOnly) { pointerOnly = false; if (k === 'left' || k === 'right') { draw(); return; } }
     const n = buttons().length;
     if (k === 'left') focus = (focus + n - 1) % n;
     else if (k === 'right') focus = (focus + 1) % n;
     else if (k === 'ok') { press(); return; }
     draw();
   });
+  // the pointer resting on the controls keeps them up
+  let held = 0;
+  window.addEventListener('mousemove', () => { if (Date.now() - held > 500) { held = Date.now(); window.dvd.cmd('hold'); } });
   draw();
 })();
