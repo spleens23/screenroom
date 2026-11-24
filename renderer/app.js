@@ -2387,7 +2387,39 @@
     } }, 'Clear Continue Watching');
     return b;
   }
+  // Settings in sections: a list of them down the left (across the top on a phone), one section shown at a time,
+  // so nothing is a long scroll away. Built from the headings of the one long list, so every option is still there.
+  let settingsTab = '';
+  function sectionizeSettings() {
+    const body = $('#settings-body');
+    const kids = [...body.children];
+    const title = kids[0] && kids[0].tagName === 'H2' ? kids.shift() : null;
+    const groups = [];
+    for (const el of kids) {
+      if (el.tagName === 'H3' || !groups.length) groups.push({ name: el.tagName === 'H3' ? el.textContent.trim() : 'General', head: el.tagName === 'H3' ? el : null, els: [] });
+      if (el.tagName !== 'H3') groups[groups.length - 1].els.push(el);
+    }
+    if (groups.length < 3) return; // (a kids' profile: just a couple of things)
+    if (!groups.some((g) => g.name === settingsTab)) settingsTab = groups[0].name;
+    const panes = groups.map((g) => h('section', { class: 'set-pane', 'data-tab': g.name, hidden: g.name === settingsTab ? null : true }, g.head, ...g.els));
+    const show = (name) => {
+      settingsTab = name;
+      for (const p of panes) p.hidden = p.dataset.tab !== name;
+      for (const b of nav.children) b.classList.toggle('on', b.dataset.tab === name);
+      const card = body.closest('.modal-card'); if (card) card.scrollTop = 0;
+      $('#settings').scrollTop = 0;
+    };
+    const nav = h('nav', { class: 'set-nav' }, groups.map((g) => h('button', { class: 'set-tab' + (g.name === settingsTab ? ' on' : ''), 'data-tab': g.name, 'data-key': `tab-${g.name}`,
+      onclick: () => show(g.name), onfocus: () => { if (settingsTab !== g.name) show(g.name); } }, g.name)));
+    body.replaceChildren(...(title ? [title] : []), h('div', { class: 'set-layout' }, nav, h('div', { class: 'set-panes' }, ...panes)));
+    body.closest('.modal-card') && body.closest('.modal-card').classList.add('sectioned');
+    sectionizeSettings.show = (el) => { const p = el && el.closest && el.closest('.set-pane'); if (p) show(p.dataset.tab); };
+  }
   function renderSettingsNow() {
+    buildSettings();
+    try { sectionizeSettings(); } catch (e) { console.error(e); }
+  }
+  function buildSettings() {
     if (S.profile && S.profile.kids) {
       $('#settings-body').replaceChildren(h('h2', {}, 'Settings'), h('h3', {}, 'Profiles'), profilesBlock(),
         api.setTheme ? h('h3', {}, 'Look') : null, api.setTheme ? themeBlock(true) : null);
@@ -2577,7 +2609,7 @@
   }
   document.querySelectorAll('#nav nav a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setView(a.dataset.view); }));
   $('#search').addEventListener('input', (e) => { query = e.target.value.trim(); e.target.classList.toggle('has-text', !!e.target.value); render(); });
-  const openSettings = () => { renderSettingsNow(); $('#settings').hidden = false; $('#settings').scrollTop = 0; const f = $('#settings input, #settings button'); f && f.focus(); };
+  const openSettings = () => { renderSettingsNow(); $('#settings').hidden = false; $('#settings').scrollTop = 0; const f = $('#settings .set-tab.on') || $('#settings input, #settings button'); f && f.focus(); };
   const closeSettings = () => { $('#settings').hidden = true; $('#settings-btn').focus(); };
   const toggleSettings = () => { if ($('#settings').hidden) openSettings(); else closeSettings(); };
   $('#settings-btn').addEventListener('click', openSettings);
@@ -3202,7 +3234,7 @@
       isOpen: () => mode === 'parlor',
       showModal: () => { $('#modal').hidden = false; $('#modal').scrollTop = 0; },
       closeModal,
-      openSettings: () => { openSettings(); const s = $('#set-parlor'); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
+      openSettings: () => { openSettings(); const s = $('#set-parlor'); if (s && sectionizeSettings.show) sectionizeSettings.show(s); s && s.scrollIntoView({ block: 'start' }); const b = $('#set-parlor') && $('#set-parlor').nextElementSibling; const f = b && b.querySelector('button'); f && f.focus({ preventScroll: true }); },
       wantsKeyboard: () => oskAllowed() && !kbInUse(),
       isTvBox: () => !!S.appliance,
       // Parlor as an app of its own (iPhone, iPad, Android, Mac, Windows), not the music side of the TV box
