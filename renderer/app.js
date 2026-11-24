@@ -2522,8 +2522,6 @@
       isAndroid && api.kioskStatus ? kioskBlock() : null,
       S.appliance && api.applianceInfo ? h('h3', {}, 'System') : null,
       S.appliance && api.applianceInfo ? systemBlock() : null,
-      S.appliance && api.blurayStatus ? h('h3', {}, 'Discs') : null,
-      S.appliance && api.blurayStatus ? discsBlock() : null,
       S.appliance && S.device ? (() => {
         const d = S.device;
         const opt = (v, t) => h('option', { value: v, selected: d.choice === v ? true : null }, t);
@@ -2546,6 +2544,8 @@
           sel('picture', 'TV picture', 'Automatic picks the TV\'s sharpest widescreen picture that plays smoothly. 4:3 is for older, square TVs.',
             [['auto', 'Automatic (widescreen)'], ['2160', '4K'], ['1440', '1440p'], ['1080', '1080p'], ['720', '720p'], ['4:3', '4:3']], cur.picture || 'auto'));
       })() : null,
+      S.appliance && api.blurayStatus ? h('h3', {}, 'Discs') : null,
+      S.appliance && api.blurayStatus ? discsBlock() : null,
       mobile ? null : h('h3', {}, 'Power'),
       S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
       mobile ? null : h('div', { class: 'btns' },
@@ -2620,7 +2620,7 @@
   });
   window.addEventListener('scroll', () => $('#nav').classList.toggle('solid', window.scrollY > 40 || view !== 'home' || !!query));
 
-  const FOCUSABLE = 'a[data-view], a[data-pview], button:not([disabled]), .card, .ep, .track, .srow, input, select';
+  const FOCUSABLE = 'a[data-view], a[data-pview], button:not([disabled]), .card, .ep, .track, .srow, input, select, summary';
   const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function scopeEls() {
     let els;
@@ -2687,6 +2687,32 @@
     const cur = els.includes(document.activeElement) ? document.activeElement : null;
     if (!cur) { const d = defaultFocus(els); d && focusEl(d); return; }
     if (rwOn()) { const t = RW.nav(cur, dir); if (t && t !== cur) { focusEl(t); return; } }
+    // Settings: up / down walk the list of sections; Right goes into the section shown, and inside it the arrows
+    // stay inside it (never jumping to another section on the left by accident); Left from the start of a line
+    // goes back to the list.
+    const setNav = cur.closest && cur.closest('#settings .set-nav');
+    const setPanes = cur.closest && cur.closest('#settings .set-panes');
+    if (setNav) {
+      const tabs = [...setNav.querySelectorAll('.set-tab')];
+      const i = tabs.indexOf(cur);
+      if (dir === 'up' || dir === 'down') { const t = tabs[i + (dir === 'down' ? 1 : -1)]; if (t) focusEl(t); return; }
+      if (dir === 'right') {
+        const pane = document.querySelector('#settings .set-pane:not([hidden])');
+        const inside = els.filter((e) => pane && pane.contains(e));
+        if (inside.length) { const first = inside.slice().sort((x, y) => { const a1 = x.getBoundingClientRect(), b1 = y.getBoundingClientRect(); return (a1.top - b1.top) || (a1.left - b1.left); })[0]; focusEl(first); }
+        return;
+      }
+      return;
+    }
+    if (setPanes) {
+      const inPane = els.filter((e) => setPanes.contains(e));
+      if (dir === 'left') {
+        const a0 = cur.getBoundingClientRect();
+        const leftward = inPane.some((e) => { if (e === cur) return false; const r = e.getBoundingClientRect(); return r.bottom > a0.top + 4 && r.top < a0.bottom - 4 && r.left + r.width / 2 < a0.left + a0.width / 2 - 2; });
+        if (!leftward) { const t = document.querySelector('#settings .set-tab.on'); if (t) { focusEl(t); return; } }
+      }
+      els.length = 0; els.push(...inPane);
+    }
     const rects = new Map();
     const R = (e) => { let r = rects.get(e); if (!r) { r = e.getBoundingClientRect(); rects.set(e, r); } return r; };
     const a = R(cur);
