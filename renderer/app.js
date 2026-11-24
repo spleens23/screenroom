@@ -802,6 +802,13 @@
     if (!dvd) return;
     if (dvd.probing) { flash('Reading the disc…'); return; }
     const bd = dvd.kind === 'bluray';
+    // already playing (the disc's picture went missing, or it's still starting): stop it, or eject
+    if (dvd.playing) {
+      const w = await askChoice(bd ? 'Blu-ray' : 'DVD', [{ label: 'Stop the disc', value: 'stop' }, { label: 'Eject', value: 'eject' }], undefined, 'The disc is playing.');
+      if (w === 'stop') api.dvdCmd ? api.dvdCmd('stop') : null;
+      else if (w === 'eject') { flash('Ejecting…'); await api.dvdEject(); }
+      return;
+    }
     const needKeys = bd && dvd.bluray && !dvd.bluray.keys;
     const choices = needKeys ? [{ label: 'Add Blu-ray keys from a USB drive', value: 'keys' }] : [{ label: bd ? 'Play Blu-ray' : 'Play DVD', value: 'play' }];
     if (dvd.resume && !needKeys) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
