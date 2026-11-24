@@ -206,7 +206,7 @@ async function main(argv) {
   if (!args.apply) {
     if (args.json) { console.log(JSON.stringify(p)); return 0; }
     if (p.tools.length) console.log(`Missing: ${p.tools.join(', ')} (needed to make subtitles).`);
-    if (!p.jobs.length) console.log('Nothing to do: every film on this computer has English subtitles, or no other copy has any.');
+    if (!p.jobs.length) console.log('Nothing to do: every film on this device has English subtitles, or no other copy has any.');
     for (const j of p.jobs) console.log(`${j.title}\n  ${j.target.quality}  ${j.target.path}\n  from the ${j.source.quality} copy${j.source.onDrive ? ' (on a drive)' : ''}: ${j.source.kind === 'text' ? 'text subtitles' : 'DVD subtitles (read from the pictures)'}`);
     if (p.missing.length) console.log(`\nNo copy with English subtitles for: ${p.missing.map((m) => m.title).join(', ')}`);
     if (p.jobs.length) console.log(`\n${p.jobs.length} to make. Nothing was written; run with --apply to make them.`);

@@ -855,7 +855,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('drive-eject', async (_e, mount) => {
     const d = drives.find((x) => x.mount === mount);
     if (!d) return { ok: false, msg: 'Drive not found' };
-    if (d.internal) return { ok: false, msg: 'That drive is built into this computer.' };
+    if (d.internal) return { ok: false, msg: 'That drive is built into this device.' };
     const r = await transfer.eject(d);
     await pollDrives();
     return r;
@@ -1200,6 +1200,15 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('dvd-eject', async () => (dvd ? dvd.eject() : { ok: false }));
   ipcMain.handle('dvd-cmd', (_e, c) => (dvd ? dvd.cmd(String(c || '')) : false));
+  // Settings → Display (a laptop on a TV): which screen, and the TV's picture; screenroom-display applies it
+  ipcMain.handle('display-set', async (_e, o) => {
+    const scr = o && o.screen === 'device' ? 'device' : 'tv';
+    const pic = ['auto', '2160', '1440', '1080', '720', '4:3'].includes(o && o.picture) ? o.picture : 'auto';
+    config.display = { screen: scr, picture: pic }; writeJson(cfgFile(), config);
+    try { fs.writeFileSync(path.join(app.getPath('userData'), 'display.conf'), `SCREEN=${scr}\nPICTURE=${pic}\n`); } catch {}
+    if (fs.existsSync('/usr/local/bin/screenroom-display')) execFile('/usr/local/bin/screenroom-display', ['--once'], { timeout: 20000 }, () => {});
+    return snapshot();
+  });
   ipcMain.handle('bluray-status', () => (dvd ? dvd.bluray() : null));
   ipcMain.handle('disc-log', () => (dvd ? dvd.log() : ''));
   ipcMain.handle('bluray-add-keys', async () => (dvd ? dvd.addBlurayKeys() : { ok: false, error: 'Blu-ray discs play on the TV box.' }));

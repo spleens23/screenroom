@@ -1359,7 +1359,7 @@ window.createParlor = function createParlor(ctx) {
   const ios = /iPad|iPhone/.test(navigator.userAgent);
   // (an iPad tells web pages it's a Mac, so the iPhone / iPad app just says "This device")
   const deviceName = window.S_IOS ? 'This device' : window.S_ANDROID ? 'This phone'
-    : document.body.classList.contains('tv') ? 'The TV' : 'This computer';
+    : document.body.classList.contains('tv') ? 'The TV' : 'This device';
   let outRooms = null;
   async function showOutputs() {
     const using = (P && P.player && P.player.output && P.player.output.id) || '';
@@ -1660,7 +1660,7 @@ window.createParlor = function createParlor(ctx) {
       if (api.parlorMotionReport) try {
         box.append(h('h4', {}, 'Moving covers'));
         const rep = await api.parlorMotionReport();
-        const here = window.S_IOS ? 'the phone' : 'this computer';
+        const here = 'this device';
         const say = { plays: 'plays', fixed: `plays (Parlor made a copy ${here} can play)`, unplayable: `can't be played on ${here}`,
           unreadable: "couldn't be read", nosongs: 'isn\'t in a folder with songs, so it isn\'t used', name: 'isn\'t used: call it cover.mp4 to make it the album\'s moving cover', notused: 'isn\'t used:', pending: 'is being made into a copy the screen can play (it starts moving when that\'s done)' };
         const win = { playing: ' · played on screen ✓', error: ' · the screen couldn\'t play it', hidden: ' · not shown' };

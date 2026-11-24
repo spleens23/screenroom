@@ -721,7 +721,7 @@
       h('p', {}, EDITION === 'all' ? 'Add your MP4 files and Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.' : 'Put your films in Videos, or choose the folders they’re in. Screenroom reads titles, descriptions, genres and cover art straight from each file. TV shows are grouped from Series / Season / S#E# Name.mp4.'),
       !S.ffprobeFound ? h('div', { class: 'warn' }, 'ffprobe was not found. Install ffmpeg (brew install ffmpeg / apt install ffmpeg).') : null,
       addMediaPanel(),
-      h('p', { class: 'am-hint' }, 'Already have the files on this computer or a mounted drive?'),
+      h('p', { class: 'am-hint' }, 'Already have the files on this device or a mounted drive?'),
       h('button', { class: 'btn primary', onclick: async () => { if (await addFilmFolder()) render(); } }, 'Choose folders…')));
   }
 
@@ -1941,7 +1941,7 @@
       box.append(h('p', {}, st.wired ? 'Connected by network cable.' : st.wifiConnected ? `Connected to Wi-Fi: ${st.wifiNetwork}` : 'Not connected.'));
       if (!st.hasWifi) {
         const rep = st.report && st.report.state !== 'ok' ? st.report : null;
-        box.append(h('p', { class: 'am-hint' }, rep ? rep.message : 'Wi-Fi isn\'t available on this computer.'));
+        box.append(h('p', { class: 'am-hint' }, rep ? rep.message : 'Wi-Fi isn\'t available on this device.'));
         return;
       }
       if (st.report && st.report.state !== 'ok' && !st.wifiConnected) box.append(h('p', { class: 'am-hint' }, st.report.message));
@@ -2236,7 +2236,7 @@
     const canPhoto = !!p && S.platform !== 'android';
     async function choosePhoto() {
       let file = null;
-      if (isLinuxApp()) { file = await pickPath({ title: 'Choose a photo', mode: 'image', hint: 'A picture from a USB drive or this computer. OK opens a folder or uses a picture; Back goes up a folder.' }); if (!file) return; }
+      if (isLinuxApp()) { file = await pickPath({ title: 'Choose a photo', mode: 'image', hint: 'A picture from a USB drive or this device. OK opens a folder or uses a picture; Back goes up a folder.' }); if (!file) return; }
       const r = await api.profilePhoto(p.id, authPin, file);
       if (!r.ok) { flash(r.error); return; }
       if (r.profile) { d.photo = r.profile.photo; d.avatar = 'photo'; S = r.state; drawPics(); drawPreview(); drawProfileButton(); }
@@ -2502,6 +2502,18 @@
             render(); renderSettings(); const again = $('#settings select[data-key="device-kind"]'); again && again.focus({ preventScroll: true });
           } }, opt('auto', `Automatic (${d.detected})`), opt('laptop', 'Laptop'), opt('desktop', 'Desktop')));
       })() : null,
+      S.appliance && S.device && S.device.kind === 'laptop' && api.displaySet ? (() => {
+        const cur = (S.config && S.config.display) || {};
+        const sel = (key, label, hint, opts, val) => h('label', { class: 'row-set' }, h('span', {}, label, h('small', {}, hint)),
+          h('select', { class: 'dev-select', 'data-key': `display-${key}`, onchange: async (e) => {
+            S = await api.displaySet({ ...cur, [key]: e.target.value });
+            renderSettings(); const again = $(`#settings select[data-key="display-${key}"]`); again && again.focus({ preventScroll: true });
+          } }, opts.map(([v, t]) => h('option', { value: v, selected: val === v ? true : null }, t))));
+        return h('div', {},
+          sel('screen', 'With a TV plugged in', 'Which screen shows Screenroom when this laptop is connected to a TV.', [['tv', 'Use the TV'], ['device', 'Use this device\'s screen']], cur.screen || 'tv'),
+          sel('picture', 'TV picture', 'Automatic picks the TV\'s sharpest widescreen picture that plays smoothly. 4:3 is for older, square TVs.',
+            [['auto', 'Automatic (widescreen)'], ['2160', '4K'], ['1440', '1440p'], ['1080', '1080p'], ['720', '720p'], ['4:3', '4:3']], cur.picture || 'auto'));
+      })() : null,
       mobile ? null : h('h3', {}, 'Power'),
       S.appliance ? h('p', { class: 'am-hint' }, 'The power button on the box: press it to sleep, hold it 5 seconds to turn off. Press it again (or a key on a USB remote) to wake up.') : null,
       mobile ? null : h('div', { class: 'btns' },
@@ -2510,8 +2522,8 @@
         S.appliance
           ? h('button', { class: 'btn secondary', onclick: () => api.quit() }, 'Restart Screenroom')
           : h('button', { class: 'btn secondary', onclick: () => api.quit() }, `Quit ${APP}`),
-        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Restart this computer?', 'Screenroom will be back in about a minute.', 'Restart', 'Cancel').then((y) => { if (y) api.power('reboot'); }); } }, 'Restart') : null,
-        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Shut down this computer?', 'Turn it on again with its power button.', 'Shut down', 'Cancel', true).then((y) => { if (y) api.power('poweroff'); }); } }, 'Shut down') : null),
+        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Restart this device?', 'Screenroom will be back in about a minute.', 'Restart', 'Cancel').then((y) => { if (y) api.power('reboot'); }); } }, 'Restart') : null,
+        canPower ? h('button', { class: 'btn secondary', onclick: () => { askConfirm('Shut down this device?', 'Turn it on again with its power button.', 'Shut down', 'Cancel', true).then((y) => { if (y) api.power('poweroff'); }); } }, 'Shut down') : null),
       h('h3', {}, 'About'),
       aboutBlock(isIOS() ? 'ios' : isAndroid ? 'android' : 'desktop'),
     ].filter(Boolean));

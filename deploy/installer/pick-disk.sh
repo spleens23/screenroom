@@ -66,7 +66,7 @@ else
   if [ "$(count "$OS")" = "1" ]; then DISK="$OS"; why="it has the computer's current operating system"
   elif [ -z "$OS" ] && [ "$(count "$BLANK")" = "1" ]; then DISK="$BLANK"; why="it's the only blank drive"
   else
-    stop "This computer has more than one internal drive ($CANDS) and it isn't clear which one Screenroom should erase. Turn it off, remove the drive that holds your movies, install, then put it back: Screenroom will use it automatically."
+    stop "This device has more than one internal drive ($CANDS) and it isn't clear which one Screenroom should erase. Turn it off, remove the drive that holds your movies, install, then put it back: Screenroom will use it automatically."
   fi
 fi
 log "installing on $DISK ($why)"

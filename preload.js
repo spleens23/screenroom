@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('api', {
   dvdCmd: (c) => ipcRenderer.invoke('dvd-cmd', c),
   blurayStatus: () => ipcRenderer.invoke('bluray-status'),
   discLog: () => ipcRenderer.invoke('disc-log'),
+  displaySet: (o) => ipcRenderer.invoke('display-set', o),
   blurayAddKeys: () => ipcRenderer.invoke('bluray-add-keys'),
   dvdTestKey: (k) => ipcRenderer.invoke('dvd-test-key', k), // (only answered during the automated check)
   onDvdState: (cb) => ipcRenderer.on('dvd-state', (_e, s) => cb(s)),

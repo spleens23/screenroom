@@ -5,28 +5,39 @@
 # screen is left as it is.
 command -v xrandr >/dev/null || exit 0
 
-# The TV's own favourite mode can be 4K at only 30 Hz (laptop HDMI ports often can't do 4K at 60), which makes
-# films judder and stutter. Then use the sharpest mode that runs at 50-60 Hz instead (usually 1080p at 60 Hz).
-# Prints "WIDTHxHEIGHT RATE", or nothing when the TV's favourite mode is already smooth.
-smooth_mode() {
-  xrandr --query 2>/dev/null | awk -v out="$1" '
+# Settings → Display (the app writes this file): which screen to use with a TV plugged in, and the TV's picture.
+#   SCREEN=tv|device     PICTURE=auto|2160|1440|1080|720|4:3
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/screenroom/display.conf"
+SCREEN=tv; PICTURE=auto
+# shellcheck disable=SC1090
+[ -f "$CONF" ] && . "$CONF" 2>/dev/null
+
+# The TV's mode. Automatic: the sharpest widescreen (16:9) mode that runs at 50-60 Hz. Not just the TV's own
+# favourite: some TVs name a 4:3 or a 30 Hz mode, which stretched the picture or made films judder.
+# A height (1080, 720…) picks that widescreen mode; 4:3 the sharpest 4:3 mode. Prints "WIDTHxHEIGHT RATE".
+pick_mode() {
+  xrandr --query 2>/dev/null | awk -v out="$1" -v want="$2" '
     $1 == out { inside = 1; next }
     inside && !/^ / { inside = 0 }
-    inside {
-      mode = $1; px = 0; split(mode, d, "x"); px = d[1] * d[2]
-      last = ""
+    inside && $1 ~ /^[0-9]+x[0-9]+/ {
+      mode = $1; split(mode, d, /[x_i]/); w = d[1] + 0; h = d[2] + 0; if (!w || !h) next
+      if (mode ~ /i$/) next                                   # (interlaced: never)
+      ar = w / h
       for (i = 2; i <= NF; i++) {
-        r = $i; pref = (r ~ /\+/); gsub(/[*+]/, "", r)
-        if (r == "") { if (pref && last != "") prefRate = last + 0; continue }   # a lone "+" marks the rate before it
-        last = r
-        if (pref) { prefRate = r + 0 }
-        if (r + 0 >= 49 && px > best) { best = px; bestMode = mode; bestRate = r }
+        r = $i; gsub(/[*+]/, "", r); if (r == "") continue; r = r + 0
+        ok = (r >= 49 && r <= 61)
+        wide = (ar > 1.7 && ar < 1.8)
+        four = (ar > 1.3 && ar < 1.37)
+        if (want == "4:3") { if (!four) continue } else if (want != "auto") { if (!wide || h != want + 0) continue } else if (!wide) continue
+        score = w * h * (ok ? 10 : 1) + (r > 59 && r < 61 ? 1 : 0)
+        if (score > best) { best = score; bm = mode; br = $i; gsub(/[*+]/, "", br) }
       }
     }
-    END { if (prefRate != "" && prefRate < 49 && bestMode != "") print bestMode " " bestRate }'
+    END { if (bm != "") print bm " " br }'
 }
 
 apply() {
+  [ -f "$CONF" ] && . "$CONF" 2>/dev/null
   q="$(xrandr --query 2>/dev/null)" || return
   internal="$(echo "$q" | awk '/ connected/ && $1 ~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
   external="$(echo "$q" | awk '/ connected/ && $1 !~ /^(eDP|LVDS|DSI)/ {print $1; exit}')"
@@ -34,8 +45,9 @@ apply() {
   # Every other output is switched off, including one whose TV was just unplugged: left on, it kept the
   # picture TV-sized and the laptop screen showed only its top-left corner, zoomed in.
   others() { echo "$q" | awk -v keep="$1" '/ (connected|disconnected)/ && $1 != keep {printf "--output %s --off ", $1}'; }
-  if [ -n "$external" ]; then
-    mode="$(smooth_mode "$external")"
+  if [ -n "$external" ] && [ "$SCREEN" != "device" ]; then
+    mode="$(pick_mode "$external" "$PICTURE")"
+    [ -n "$mode" ] || mode="$(pick_mode "$external" auto)"
     if [ -n "$mode" ]; then
       # shellcheck disable=SC2046
       xrandr --output "$external" --mode "${mode% *}" --rate "${mode#* }" --primary --pos 0x0 $(others "$external")

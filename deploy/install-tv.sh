@@ -198,7 +198,7 @@ systemctl enable screenroom-disks.service >/dev/null 2>&1 || true
 
 # ---- a friendly name on the network: screenroom.local ------------------------------------------------
 if [ "$(cat /etc/hostname 2>/dev/null)" != "$NEW_HOST" ]; then
-  say "Naming this computer '$NEW_HOST' (reachable as $NEW_HOST.local)"
+  say "Naming this device '$NEW_HOST' (reachable as $NEW_HOST.local)"
   echo "$NEW_HOST" > /etc/hostname
   [ "$IN_CHROOT" = "0" ] && hostnamectl set-hostname "$NEW_HOST" 2>/dev/null || true
   if grep -q '^127.0.1.1' /etc/hosts; then sed -i "s/^127.0.1.1.*/127.0.1.1 $NEW_HOST/" /etc/hosts; else echo "127.0.1.1 $NEW_HOST" >> /etc/hosts; fi

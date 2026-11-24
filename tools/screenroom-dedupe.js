@@ -181,7 +181,7 @@ async function main(argv) {
   try { p = plan({ dataDir: args.data || defaultDataDir() }); } catch (e) { if (args.json) console.log(JSON.stringify({ error: e.message })); else console.error(e.message); return 1; }
   if (!args.apply) {
     if (args.json) { console.log(JSON.stringify(p)); return 0; }
-    if (!p.groups.length) { console.log('No duplicates: every film and episode on this computer is stored once.'); return 0; }
+    if (!p.groups.length) { console.log('No duplicates: every film and episode on this device is stored once.'); return 0; }
     for (const g of p.groups) {
       console.log(`\n${g.title}`);
       console.log(`  keep    ${g.keep.quality}   ${g.keep.path}`);
