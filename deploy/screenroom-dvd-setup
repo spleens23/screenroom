@@ -16,7 +16,7 @@ online() { getent hosts deb.debian.org >/dev/null 2>&1 && getent hosts download.
 
 want=()
 # (Blu-ray: libbluray, libaacs and libbdplus read the discs; libbluray-bdj and Java run their menus)
-for p in vlc-bin vlc-plugin-base vlc-plugin-video-output libdvdnav4 libdvdread8t64 lsdvd eject libbluray2 libaacs0 libbdplus0 libbluray-bdj default-jre-headless; do
+for p in vlc-bin vlc-plugin-base vlc-plugin-video-output libdvdnav4 libdvdread8t64 lsdvd eject libbluray2 libbluray-bin libaacs0 libbdplus0 libbluray-bdj default-jre-headless; do
   apt-cache show "$p" >/dev/null 2>&1 || continue
   dpkg -s "$p" >/dev/null 2>&1 || want+=("$p")
 done

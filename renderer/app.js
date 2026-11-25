@@ -836,11 +836,20 @@
     const needKeys = bd && dvd.bluray && !dvd.bluray.keys;
     const choices = needKeys ? [{ label: 'Add Blu-ray keys from a USB drive', value: 'keys' }] : [{ label: bd ? 'Play Blu-ray' : 'Play DVD', value: 'play' }];
     if (dvd.resume && !needKeys) choices.push({ label: `Resume from ${dvd.resume.at}`, value: 'resume' });
+    // a Blu-ray played without its menus starts the film's title; when it guesses wrong, pick the right one (remembered)
+    if (bd && !needKeys && dvd.bdTitles && dvd.bdTitles.length > 1) choices.push({ label: 'Choose the film\'s title…', value: 'titles' });
     choices.push({ label: 'Eject', value: 'eject' });
     const notes = [needKeys ? 'Blu-ray discs need a keys file (KEYDB.cfg) before they play. Put it at the top of a USB drive, plug it in, then choose Add keys.' : '',
       dvd.problem, dvd.setup && dvd.setup.state !== 'done' ? dvd.setup.message : ''].filter(Boolean).join(' ');
     const v = await askChoice(bd ? 'Blu-ray' : 'DVD', choices, undefined, notes || null);
     if (v === 'keys') { flash('Looking for the keys file…'); const r = await api.blurayAddKeys(); if (r.ok) { flash(r.keyCount ? `Blu-ray keys added (${r.keyCount.toLocaleString()} discs)` : 'Blu-ray keys added'); dvd = await api.dvdState(); dvdMenu(); } else showNotice('Blu-ray keys', r.error); return; }
+    if (v === 'titles') {
+      const list = dvd.bdTitles.map((t) => ({ value: t.n, label: `${t.len}${t.audio ? ` · ${t.audio}` : ''}${t.chapters ? ` · ${t.chapters} chapters` : ''}${t.picked ? '  (your pick)' : t.main ? '  (the best guess)' : ''}` }));
+      const n = await askChoice('Which title is the film?', list, (dvd.bdTitles.find((t) => t.main) || {}).n,
+        'Blu-rays often hold the film more than once (other languages, or copies meant to confuse copying). Pick the one to play: it plays without the disc\'s menus, and this disc starts with it from now on.');
+      if (n != null) { const r = await api.dvdPlay({ title: n }); if (r && !r.ok) showNotice('Can\'t play the Blu-ray', r.error || 'Something went wrong.'); }
+      return;
+    }
     if (v === 'play' || v === 'resume') dvdPlay(v === 'resume');
     else if (v === 'eject') { flash('Ejecting…'); await api.dvdEject(); }
   }
