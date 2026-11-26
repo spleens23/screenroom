@@ -40,6 +40,9 @@
     if (!document.body) return;
     const dark = isDark();
     document.body.classList.toggle('pdark', dark);
+    // Screenroom's own light look (the films side): the same Appearance setting
+    document.body.classList.toggle('mlight', !dark);
+    rememberLook();
     if (EDITION === 'music') document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
     if (parlorUI && parlorUI.statusBar) parlorUI.statusBar();
   };
@@ -906,6 +909,10 @@
     sd: ['SD (480p and below)', isSD],
   };
 
+  // the look, remembered for the next start (renderer/early.js puts it on before anything is drawn)
+  function rememberLook() {
+    try { localStorage.setItem('sr-look', ['rw', 'pdark', 'mlight', 'parlor', 'tv', 'big', 'touch'].filter((c) => document.body.classList.contains(c)).join(' ')); } catch {}
+  }
   function applyTheme() {
     // Matinee: the standard look (stored as '2020s')
     document.body.classList.add('mat');
@@ -2344,7 +2351,7 @@
       h('div', { class: 'row-set accent-set' }, h('span', {}, 'Accent color', h('small', {}, `${EDITION === 'music' ? 'The color of the buttons, the playing song and the + buttons' : EDITION === 'films' ? 'The color of the buttons and highlights' : 'The color of the buttons, highlights and the playing song, for films and music'}.`)),
         h('div', { class: 'swatches accent-swatches', 'data-key': 'accent' }, ACCENTS.map(([v, l, c]) => h('button', { class: 'swatch' + (getAccent() === v ? ' on' : ''), title: l, 'aria-label': l,
           style: `background:${c}`, onclick: () => { try { localStorage.setItem('parlor-accent', v); } catch {} applyAccent(v); renderSettings(); } })))),
-      h('label', { class: 'row-set' }, h('span', {}, 'Appearance', h('small', {}, EDITION === 'music' ? 'Light, dark, or the same as this device.' : 'For the music side: light, dark, or the same as this device.')),
+      h('label', { class: 'row-set' }, h('span', {}, 'Appearance', h('small', {}, EDITION === 'music' ? 'Light, dark, or the same as this device.' : 'Light, dark, or the same as this device.')),
         h('select', { class: 'dev-select', 'data-key': 'appearance', onchange: (e) => { try { localStorage.setItem('parlor-appearance', e.target.value); } catch {} applyAppearance(); } },
           [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: getAppearance() === v }, l)))));
   }
@@ -3256,6 +3263,7 @@
     if (EDITION !== 'all') return; // (the films and the music are separate apps here)
     mode = mode === 'parlor' ? 'movies' : 'parlor';
     document.body.classList.toggle('parlor', mode === 'parlor');
+    rememberLook();
     $('#nav .brand').textContent = mode === 'parlor' ? 'Parlor' : 'Screenroom';
     $('#search').placeholder = mode === 'parlor' ? 'Search music…' : (matchMedia('(max-width: 600px)').matches ? 'Search' : 'Search titles, genres…');
     const b = $('#parlor-btn');
@@ -3323,5 +3331,8 @@
   document.body.classList.toggle('ed-films', EDITION === 'films');
   document.title = EDITION === 'music' ? 'Parlor' : 'Screenroom';
   // TV: start with the pointer hidden (it appears only once the mouse really moves)
-  (async () => { S = await api.state(); render(); if (S.tv) hidePointer(1500); else wake(); })();
+  (async () => {
+    S = await api.state(); render(); if (S.tv) hidePointer(1500); else wake();
+    requestAnimationFrame(() => { document.body.classList.remove('booting'); rememberLook(); });
+  })();
 })();

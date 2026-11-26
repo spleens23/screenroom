@@ -350,3 +350,28 @@ html body.mat:not(.parlor)[data-accent="green"] { --m-amber: #5FC271; --m-amber2
 html body.mat:not(.parlor)[data-accent="graphite"] { --m-amber: #B4AEA6; --m-amber2: #D6D1CA; --m-amber-rgb: 180,174,166; --accent: #B4AEA6; }
 /* the keyboard focus ring follows the accent colour too (Linux's own ring is orange) */
 html body.mat :focus-visible { outline-color: var(--m-amber, #F0A73A); }
+
+/* ======================================================================================================
+   Matinee, light (Settings → Look → Appearance): the same picture house with the lights up. Warm paper
+   instead of ink, brown lettering, the amber a shade deeper so it still reads on the light background.
+   ====================================================================================================== */
+body.mat.mlight:not(.parlor):not(.rw) {
+  --m-ink: #F7F1E8; --m-panel: #EDE4D7; --m-panel2: #E2D6C5; --m-line: #D2C3AF; --m-edge: #B7A38C;
+  --m-cream: #1F1711; --m-text: #2E241C; --m-muted: #5B4A3C; --m-dim: #7A685A;
+  --m-amber: #C0700E; --m-amber2: #9E5A06; --m-on-amber: #FFF8EE; --m-danger: #B4422A;
+  color-scheme: light;
+}
+html:has(> body.mat.mlight:not(.parlor):not(.rw)) { background: #F7F1E8; }
+body.mat.mlight:not(.parlor):not(.rw) .m-hero::after { background: linear-gradient(to top, var(--m-panel), rgba(237,228,215,0) 62%); }
+@media (max-width: 1100px) { body.mat.mlight:not(.parlor):not(.rw) .hero::after { background: linear-gradient(to right, var(--m-panel) 0, var(--m-panel) 50%, rgba(237,228,215,.35) 100%); } }
+
+/* (starting up: nothing drawn until the app has put its look on; see renderer/early.js) */
+body.booting #nav, body.booting #main, body.booting #npbar, body.booting #np-chip { visibility: hidden !important; }
+html:has(> body.booting) { background: #16110D; }
+html:has(> body.booting.mlight:not(.parlor)) { background: #F7F1E8; }
+@media (max-width: 760px) {
+  body.mat.mlight:not(.parlor):not(.rw) .hero::after { background: linear-gradient(to bottom, rgba(237,228,215,0) 0, rgba(237,228,215,0) calc((100vw - 2 * var(--m-gut)) * .36),
+    var(--m-panel) calc((100vw - 2 * var(--m-gut)) * 9 / 16)); }
+}
+body.mat.mlight:not(.parlor):not(.rw) .hero h1, body.mat.mlight:not(.parlor):not(.rw) .m-hero h1,
+body.mat.mlight:not(.parlor):not(.rw) .m-actions .quality { text-shadow: 0 1px 14px rgba(247,241,232,.75); }
