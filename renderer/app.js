@@ -2476,6 +2476,12 @@
       mobile || !films || !S.config.passthrough ? null : toggle('DTS untouched', 'On: DTS and DTS-HD go to your receiver as they are. Off: Screenroom decodes DTS itself and sends lossless 7.1 / 5.1 surround (or Dolby Digital 5.1 if your TV only passes stereo) — for soundbars and receivers that don’t play DTS.', 'dtsPassthrough'),
       mobile || !films ? null : toggle('Even out volume', 'Films play about as loud as music: quiet scenes and dialogue lifted, loud bangs tamed. Not used with passthrough.', 'levelVolume'),
       mobile || !films ? null : toggle('Downmix to stereo', 'Only used when passthrough is off (speakers or headphones).', 'downmix'),
+      S.appliance && films ? (() => {
+        const v = (S.config && S.config.hpSurround) || 'bluetooth';
+        return h('label', { class: 'row-set' }, h('span', {}, 'Surround for headphones', h('small', {}, 'A film\'s surround sound (5.1, 7.1, Atmos) placed around you in headphones and earbuds, like a room of speakers, instead of squeezed into plain stereo. Turn off the headphones\' own spatial or immersive audio while this is on, or the sound is processed twice.')),
+          h('select', { class: 'dev-select', 'data-key': 'hp-surround', onchange: async (e) => { S = await api.setConfig({ hpSurround: e.target.value }); renderSettings(); const again = $('#settings select[data-key="hp-surround"]'); again && again.focus({ preventScroll: true }); } },
+            [['bluetooth', 'Bluetooth headphones'], ['all', 'Bluetooth and the headphone jack'], ['off', 'Off']].map(([k, t]) => h('option', { value: k, selected: v === k ? true : null }, t))));
+      })() : null,
       mobile || remoteUi() ? null : toggle('Big buttons', 'Larger buttons, text and highlights, easy to use with a remote or keyboard arrows from the sofa. Off = standard size for a mouse.', 'bigUi'),
       mobile || S.tv ? null : toggle('Full screen', `${APP} and the player use the whole screen. (Also F11, or the green button on a Mac window.)`, 'appFullscreen'),
       mobile || !films || S.config.appFullscreen ? null : toggle('Start playback fullscreen', '', 'fullscreen'),

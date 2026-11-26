@@ -83,6 +83,8 @@ const isTv = () => TV_FLAG || !!config.tvMode;
 const wantFull = () => isTv() || !!config.appFullscreen;
 // Laptop or desktop (Settings → System can say otherwise); a laptop on its own screen gets the mouse-friendly,
 // computer-sized Screenroom, a laptop on a TV the remote-friendly one, like the box (lib/device.js)
+// how a head and ears hear sound from each direction (MIT's KEMAR recordings, from libmysofa), for headphone surround
+const HRTF = '/usr/share/libmysofa/default.sofa';
 const deviceKind = () => (config.deviceKind === 'laptop' || config.deviceKind === 'desktop' ? config.deviceKind : device.kind());
 const laptopUi = () => process.platform === 'linux' && deviceKind() === 'laptop' && (device.kind() !== 'laptop' || device.onOwnScreen());
 const deviceInfo = () => ({ kind: deviceKind(), detected: device.kind(), choice: config.deviceKind || 'auto', laptopUi: laptopUi() });
@@ -96,7 +98,11 @@ async function soundFor() {
   try {
     if (!mpvIds) mpvIds = new Set((await listAudioDevices(findBinary('mpv', config.mpvPath))).map((d) => d.id));
     const r = await audio.resolve(choice, { passthrough: !!config.passthrough, mpvIds });
-    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false, lightVideo: true,
+    // "Surround for headphones": a film's surround placed around the listener in headphones and earbuds (Bluetooth;
+    // the headphone jack too if chosen), instead of folded into plain stereo
+    const hp = config.hpSurround || 'bluetooth';
+    const hpSurround = !r.passthrough && hp !== 'off' && (r.kind === 'bluetooth' || (hp === 'all' && r.kind === 'analog')) && fs.existsSync(HRTF);
+    return { audioDevice: r.device, passthrough: r.passthrough, downmix: r.stereo || config.downmix || hpSurround, hpSurround, hrtf: HRTF, notice: r.notice || '', soundKind: r.kind || '', passthroughWanted: !!config.passthrough, hdrOut: false, lightVideo: true,
       pcmChannels: r.kind === 'hdmi' || r.kind === 'other' ? audio.hdmiPcmChannels() : null };
   } catch {
     return { audioDevice: choice.startsWith('bt:') ? '' : choice };
